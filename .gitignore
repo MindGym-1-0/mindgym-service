@@ -1,0 +1,8 @@
+CLAUDE.md
+AGENTS.md
+.cursorrules
+docs/
+.env
+.DS_Store
+test_connection.py
+.agents/
