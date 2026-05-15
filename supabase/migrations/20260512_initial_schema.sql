@@ -41,7 +41,7 @@ create table if not exists public.jobs (
     role            text        not null,
 
     -- Current application status; constrained to known lifecycle values
-    status          text        not null check (status in ('applied', 'interview', 'offer', 'rejected')),
+    status          text        not null check (status in ('applied', 'screen', 'hm', 'deep', 'final', 'offer', 'closed')),
 
     -- When the user submitted the application (may be unknown at row creation)
     applied_at      timestamptz,
@@ -71,7 +71,7 @@ create table if not exists public.meditation_sessions (
     title           text        not null,
 
     -- Category of meditation; constrained to known content types
-    type            text        not null check (type in ('daily_calm', 'interview_prep', 'post_rejection_recovery')),
+    type            text        not null check (type in ('phone_screen', 'hm_round', 'final_round', 'negotiation', 'first_day', 'rejection_recovery', 'networking_event', 'cold_outreach')),
 
     -- Length of the audio in seconds
     duration_secs   integer     not null check (duration_secs > 0),
@@ -103,11 +103,11 @@ create table if not exists public.user_sessions (
     -- When the user finished the session; defaults to now
     completed_at    timestamptz not null default now(),
 
-    -- Optional mood rating captured before starting (1 = very low, 5 = very high)
-    mood_before     smallint    check (mood_before between 1 and 5),
+    -- Optional mood rating captured before starting (1 = very low, 10 = very high)
+    mood_before     smallint    check (mood_before between 1 and 10),
 
-    -- Optional mood rating captured after finishing (1 = very low, 5 = very high)
-    mood_after      smallint    check (mood_after between 1 and 5),
+    -- Optional mood rating captured after finishing (1 = very low, 10 = very high)
+    mood_after      smallint    check (mood_after between 1 and 10),
 
     constraint user_sessions_pkey primary key (id)
 );
@@ -149,8 +149,8 @@ create table if not exists public.mood_logs (
     -- User who logged the mood check-in
     user_id         uuid        not null references public.users (id) on delete cascade,
 
-    -- Mood score at time of check-in (1 = very low, 5 = very high)
-    score           smallint    not null check (score between 1 and 5),
+    -- Mood score at time of check-in (1 = very low, 10 = very high)
+    score           smallint    not null check (score between 1 and 10),
 
     -- Optional free-text note accompanying the mood entry
     note            text,

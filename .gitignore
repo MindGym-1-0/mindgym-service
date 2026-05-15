@@ -5,4 +5,4 @@ docs/
 .env
 .DS_Store
 test_connection.py
-.agents/
+.agents/supabase/.temp/
