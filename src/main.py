@@ -11,9 +11,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/")
 def root():
     return {"status": "MindGym API is running"}
+
 
 @app.get("/health")
 def health():
