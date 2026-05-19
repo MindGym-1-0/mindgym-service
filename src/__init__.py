@@ -1,0 +1,1 @@
+"""MindGym service package root."""
