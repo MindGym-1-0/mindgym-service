@@ -21,16 +21,16 @@ router = APIRouter(prefix="/api", tags=["onboarding"])
 async def onboard(request: OnboardingRequest) -> OnboardingResponse:
     """
     Complete the onboarding process for a new user.
-    
+
     This endpoint collects three pieces of information used to personalize the user's daily sessions,
     meditation recommendations, and action suggestions.
-    
+
     Args:
         request: OnboardingRequest containing job_goal, job_search_stage, and anxiety_level
-        
+
     Returns:
         OnboardingResponse with success status and user_id
-        
+
     Raises:
         HTTPException: If onboarding data is invalid or the persistence layer fails
     """
