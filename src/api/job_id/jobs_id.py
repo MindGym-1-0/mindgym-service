@@ -5,8 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, Body, HTTPException
 from pydantic import ValidationError
 
-from src.lib.auth import CurrentUserId
-from src.lib.supabase import get_supabase_service_client
+from src.lib.auth import CurrentUserId, CurrentUserToken
+from src.lib.supabase import get_supabase_user_client
 from src.types.job import DeleteOk, JobResponse, JobUpdate
 
 router = APIRouter()
@@ -17,13 +17,18 @@ def _raise_400(exc: ValidationError) -> None:
 
 
 @router.patch("/{job_id}", response_model=JobResponse)
-def update_job(job_id: UUID, current_user_id: CurrentUserId, body: dict = Body(default_factory=dict)):
+async def update_job(
+    job_id: UUID,
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
+    body: dict = Body(default_factory=dict)
+):
     try:
         patch = JobUpdate.model_validate(body)
     except ValidationError as exc:
         _raise_400(exc)
 
-    sb = get_supabase_service_client()
+    sb = get_supabase_user_client(token)
     updates = patch.model_dump(exclude_unset=True, mode="json")
 
     if "company" in updates and isinstance(updates["company"], str):
@@ -66,8 +71,8 @@ def update_job(job_id: UUID, current_user_id: CurrentUserId, body: dict = Body(d
 
 
 @router.delete("/{job_id}", response_model=DeleteOk)
-def delete_job(job_id: UUID, current_user_id: CurrentUserId):
-    sb = get_supabase_service_client()
+async def delete_job(job_id: UUID, current_user_id: CurrentUserId, token: CurrentUserToken):
+    sb = get_supabase_user_client(token)
     result = (
         sb.table("jobs")
         .delete()

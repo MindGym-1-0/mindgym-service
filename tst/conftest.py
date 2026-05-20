@@ -1,4 +1,4 @@
-"""Pytest configuration: test env defaults and Supabase client cache resets."""
+"""Pytest configuration: test env defaults."""
 
 from __future__ import annotations
 
@@ -15,14 +15,3 @@ def _ensure_test_env() -> None:
 
 
 _ensure_test_env()
-
-import pytest
-
-from src.lib.supabase import clear_supabase_client_cache
-
-
-@pytest.fixture(autouse=True)
-def reset_supabase_cache():
-    clear_supabase_client_cache()
-    yield
-    clear_supabase_client_cache()

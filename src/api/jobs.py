@@ -5,8 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, Body, HTTPException
 from pydantic import ValidationError
 
-from src.lib.auth import CurrentUserId
-from src.lib.supabase import get_supabase_service_client
+from src.lib.auth import CurrentUserId, CurrentUserToken
+from src.lib.supabase import get_supabase_user_client
 from src.types.job import JobCreate, JobResponse, JobStatus
 
 router = APIRouter()
@@ -17,15 +17,19 @@ def _raise_400(exc: ValidationError) -> None:
 
 
 @router.post("", status_code=201, response_model=JobResponse)
-def create_job(current_user_id: CurrentUserId, body: dict = Body(default_factory=dict)):
+async def create_job(
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
+    body: dict = Body(default_factory=dict)
+):
     try:
         payload = JobCreate.model_validate(body)
     except ValidationError as exc:
         _raise_400(exc)
 
-    sb = get_supabase_service_client()
+    sb = get_supabase_user_client(token)
 
-    status_value = JobStatus.applied.value if payload.status is None else payload.status.value
+    status_value = JobStatus.APPLIED.value if payload.status is None else payload.status.value
 
     insert_row: dict[str, object] = {
         "user_id": str(current_user_id),
@@ -41,6 +45,7 @@ def create_job(current_user_id: CurrentUserId, body: dict = Body(default_factory
     result = sb.table("jobs").insert(insert_row).select("*").execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create job")
+        
     row = result.data[0]
     row["user_id"] = UUID(str(row["user_id"]))
     row["id"] = UUID(str(row["id"]))
@@ -48,8 +53,8 @@ def create_job(current_user_id: CurrentUserId, body: dict = Body(default_factory
 
 
 @router.get("", response_model=list[JobResponse])
-def list_jobs(current_user_id: CurrentUserId):
-    sb = get_supabase_service_client()
+async def list_jobs(current_user_id: CurrentUserId, token: CurrentUserToken):
+    sb = get_supabase_user_client(token)
     result = (
         sb.table("jobs")
         .select("*")

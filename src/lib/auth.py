@@ -1,5 +1,3 @@
-"""Resolve the authenticated Supabase user id from JWT (header or cookies)."""
-
 from __future__ import annotations
 
 import logging
@@ -15,14 +13,15 @@ from src.lib.tokens import extract_access_token_from_request
 logger = logging.getLogger(__name__)
 
 
-def fetch_supabase_user_id(access_token: str) -> UUID:
+async def fetch_supabase_user_id(access_token: str) -> UUID:
     base = config.supabase_url()
     url = f"{base.rstrip('/')}/auth/v1/user"
-    api_key = config.auth_api_key()
+    api_key = config.supabase_anon_key()
+    
     if not api_key:
         raise HTTPException(
             status_code=500,
-            detail="Server missing SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY",
+            detail="Server missing SUPABASE_ANON_KEY",
         )
 
     headers = {
@@ -31,7 +30,8 @@ def fetch_supabase_user_id(access_token: str) -> UUID:
     }
 
     try:
-        resp = httpx.get(url, headers=headers, timeout=15.0)
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers, timeout=15.0)
     except httpx.HTTPError:
         logger.exception("Supabase auth request failed.")
         raise HTTPException(status_code=401, detail="Unauthorized") from None
@@ -51,7 +51,7 @@ def fetch_supabase_user_id(access_token: str) -> UUID:
         raise HTTPException(status_code=401, detail="Unauthorized") from None
 
 
-def require_current_user_id(request: Request) -> UUID:
+def require_current_user_token(request: Request) -> str:
     token = extract_access_token_from_request(
         auth_header=request.headers.get("authorization"),
         cookies=dict(request.cookies),
@@ -62,7 +62,12 @@ def require_current_user_id(request: Request) -> UUID:
     if not config.supabase_url():
         raise HTTPException(status_code=500, detail="Server missing SUPABASE_URL")
 
-    return fetch_supabase_user_id(token)
+    return token
+
+
+async def require_current_user_id(token: str = Depends(require_current_user_token)) -> UUID:
+    return await fetch_supabase_user_id(token)
 
 
 CurrentUserId = Annotated[UUID, Depends(require_current_user_id)]
+CurrentUserToken = Annotated[str, Depends(require_current_user_token)]

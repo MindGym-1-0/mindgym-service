@@ -22,8 +22,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.get("/healthz")
-    def healthz():
+    @app.get("/health")
+    def health():
         return {"ok": True}
 
     app.include_router(jobs_router, prefix="/api/jobs", tags=["jobs"])

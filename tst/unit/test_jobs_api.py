@@ -7,9 +7,9 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
-import src.api.jobs as jobs_module
 import src.api.job_id.jobs_id as jobs_id_module
-from src.lib.auth import require_current_user_id
+import src.api.jobs as jobs_module
+from src.lib.auth import require_current_user_id, require_current_user_token
 from src.main import app, create_app
 
 
@@ -37,10 +37,11 @@ def sample_job_row(fake_user_id: UUID):
 def api_client(fake_user_id: UUID, monkeypatch):
     client = TestClient(app)
     monkeypatch.setitem(app.dependency_overrides, require_current_user_id, lambda: fake_user_id)
+    monkeypatch.setitem(app.dependency_overrides, require_current_user_token, lambda: "fake-token")
 
     mock_sb = MagicMock(name="supabase_client")
-    monkeypatch.setattr(jobs_module, "get_supabase_service_client", lambda: mock_sb)
-    monkeypatch.setattr(jobs_id_module, "get_supabase_service_client", lambda: mock_sb)
+    monkeypatch.setattr(jobs_module, "get_supabase_user_client", lambda token: mock_sb)
+    monkeypatch.setattr(jobs_id_module, "get_supabase_user_client", lambda token: mock_sb)
 
     qb = MagicMock(name="query_builder")
     mock_sb.table.return_value = qb
@@ -56,6 +57,7 @@ def api_client(fake_user_id: UUID, monkeypatch):
     yield client, qb, mock_sb
 
     app.dependency_overrides.pop(require_current_user_id, None)
+    app.dependency_overrides.pop(require_current_user_token, None)
 
 
 def test_post_creates_job_201(api_client, sample_job_row: dict[str, object]):
@@ -131,18 +133,18 @@ def test_patch_updates_job(api_client, sample_job_row: dict[str, object]):
     client, qb, _sb = api_client
 
     updated = dict(sample_job_row)
-    updated["status"] = "interview"
+    updated["status"] = "screen"
 
     qb.execute.return_value = SimpleNamespace(data=[updated])
 
     resp = client.patch(
         f"/api/jobs/{sample_job_row['id']}",
-        json={"status": "interview"},
+        json={"status": "screen"},
         headers={"Authorization": "Bearer fake-token"},
     )
 
     assert resp.status_code == 200
-    assert resp.json()["status"] == "interview"
+    assert resp.json()["status"] == "screen"
     qb.update.assert_called_once()
 
 
@@ -166,7 +168,7 @@ def test_patch_not_found_404(api_client, sample_job_row: dict[str, object]):
 
     resp = client.patch(
         f"/api/jobs/{sample_job_row['id']}",
-        json={"status": "interview"},
+        json={"status": "screen"},
         headers={"Authorization": "Bearer fake-token"},
     )
 
