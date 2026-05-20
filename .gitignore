@@ -1,3 +1,11 @@
+# Local context files (not for version control)
+CLAUDE.md
+AGENTS.md
+.cursorrules
+docs/
+test_connection.py
+.agents/supabase/.temp/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -19,7 +27,6 @@ pip-wheel-metadata/
 # Virtual environments
 venv/
 env/
-.env
 .venv
 
 # Environment variables
