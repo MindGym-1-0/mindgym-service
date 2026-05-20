@@ -2,10 +2,8 @@ import logging
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
 
-from app.auth.dependencies import get_current_user
-from app.auth.schemas import AuthResponse, LoginRequest, LogoutResponse, SignupRequest
-from app.core.config import get_settings
-from app.services.auth_service import (
+from src.lib.auth_dependencies import _extract_bearer_token, _extract_cookie_token, get_current_user
+from src.lib.auth_service import (
     AuthRateLimitError,
     AuthenticationError,
     InvalidSignupInputError,
@@ -16,6 +14,8 @@ from app.services.auth_service import (
     login_with_email_password,
     signup_with_email_password,
 )
+from src.lib.config import get_settings
+from src.types.auth import AuthResponse, LoginRequest, LogoutResponse, SignupRequest
 
 router = APIRouter(prefix='/auth', tags=['auth'])
 v1_router = APIRouter(prefix='/auth', tags=['auth'])
@@ -141,19 +141,6 @@ async def login(payload: LoginRequest, response: Response) -> AuthResponse:
     logger.info('User login successful for email=%s', payload.email)
     return _as_auth_response(auth_result, message='Login successful')
 
-
-def _extract_token(authorization: str | None, access_token: str | None) -> str | None:
-    if authorization:
-        parts = authorization.split(' ', 1)
-        if len(parts) == 2 and parts[0].lower() == 'bearer' and parts[1].strip():
-            return parts[1].strip()
-
-    if access_token and access_token.strip():
-        return access_token.strip()
-
-    return None
-
-
 @router.post('/logout', response_model=LogoutResponse)
 async def logout(
     response: Response,
@@ -163,7 +150,7 @@ async def logout(
 ) -> LogoutResponse:
     """Clear cookies and revoke the current Supabase session when possible."""
 
-    token = _extract_token(authorization, access_token)
+    token = _extract_bearer_token(authorization) or _extract_cookie_token(access_token)
     revoked = False
     try:
         revoked = await revoke_auth_session(token, refresh_token)

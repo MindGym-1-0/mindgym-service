@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Any, Optional
 
-from app.core.supabase_client import get_supabase_admin_client, get_supabase_client
+from src.lib.supabase_client import get_supabase_admin_client, get_supabase_client
 
 logger = logging.getLogger(__name__)
 

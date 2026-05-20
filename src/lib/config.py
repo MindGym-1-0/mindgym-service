@@ -7,8 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    _api_env_path = Path(__file__).resolve().parents[2] / '.env'
-    _repo_env_path = Path(__file__).resolve().parents[4] / '.env'
+    _api_env_path = Path(__file__).resolve().parents[1] / 'api' / '.env'
+    _repo_env_path = Path(__file__).resolve().parents[2] / '.env'
 
     model_config = SettingsConfigDict(
         env_file=(_api_env_path, _repo_env_path),

@@ -5,8 +5,8 @@ import jwt
 from fastapi import Cookie, Header, HTTPException, status
 from pydantic import ValidationError
 
-from app.core.config import get_settings
-from app.services.auth_service import fetch_authenticated_user
+from src.lib.auth_service import fetch_authenticated_user
+from src.lib.config import get_settings
 
 logger = logging.getLogger(__name__)
 
