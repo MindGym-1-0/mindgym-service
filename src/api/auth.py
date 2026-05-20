@@ -141,6 +141,7 @@ async def login(payload: LoginRequest, response: Response) -> AuthResponse:
     logger.info('User login successful for email=%s', payload.email)
     return _as_auth_response(auth_result, message='Login successful')
 
+
 @router.post('/logout', response_model=LogoutResponse)
 async def logout(
     response: Response,
