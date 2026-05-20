@@ -4,6 +4,7 @@ from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response,
 
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import AuthResponse, LoginRequest, LogoutResponse, SignupRequest
+from app.core.config import get_settings
 from app.services.auth_service import (
     AuthRateLimitError,
     AuthenticationError,
@@ -21,16 +22,25 @@ v1_router = APIRouter(prefix='/auth', tags=['auth'])
 logger = logging.getLogger(__name__)
 
 
+def _cookie_config() -> dict:
+    settings = get_settings()
+    return {
+        'httponly': True,
+        'secure': settings.resolved_auth_cookie_secure,
+        'samesite': settings.resolved_auth_cookie_samesite,
+        'path': '/',
+        'domain': settings.auth_cookie_domain,
+    }
+
+
 def _set_auth_cookies(response: Response, auth_result: dict) -> None:
+    cookie_cfg = _cookie_config()
     session = auth_result.get('session') or {}
     response.set_cookie(
         key='access_token',
         value=session.get('access_token', ''),
-        httponly=True,
-        secure=False,
-        samesite='lax',
         max_age=session.get('expires_in') or 3600,
-        path='/',
+        **cookie_cfg,
     )
 
     refresh_token = session.get('refresh_token')
@@ -38,21 +48,25 @@ def _set_auth_cookies(response: Response, auth_result: dict) -> None:
         response.set_cookie(
             key='refresh_token',
             value=refresh_token,
-            httponly=True,
-            secure=False,
-            samesite='lax',
             max_age=60 * 60 * 24,
-            path='/',
+            **cookie_cfg,
         )
 
 
 def _clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie(key='access_token', path='/')
-    response.delete_cookie(key='refresh_token', path='/')
+    cookie_cfg = _cookie_config()
+    response.delete_cookie(key='access_token', path='/', domain=cookie_cfg.get('domain'))
+    response.delete_cookie(key='refresh_token', path='/', domain=cookie_cfg.get('domain'))
 
 
-def _as_auth_response(auth_result: dict) -> AuthResponse:
-    return AuthResponse.model_validate(auth_result)
+def _as_auth_response(auth_result: dict, message: str | None = None) -> AuthResponse:
+    return AuthResponse.model_validate(
+        {
+            'authenticated': bool(auth_result.get('authenticated')),
+            'user': auth_result.get('user'),
+            'message': message,
+        }
+    )
 
 
 @router.post('/signup', response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
@@ -97,7 +111,7 @@ async def signup(payload: SignupRequest, response: Response) -> AuthResponse:
         _set_auth_cookies(response, auth_result)
 
     logger.info('User signup successful for email=%s', payload.email)
-    return _as_auth_response(auth_result)
+    return _as_auth_response(auth_result, message='Signup successful')
 
 
 @router.post('/login', response_model=AuthResponse)
@@ -125,7 +139,7 @@ async def login(payload: LoginRequest, response: Response) -> AuthResponse:
 
     _set_auth_cookies(response, auth_result)
     logger.info('User login successful for email=%s', payload.email)
-    return _as_auth_response(auth_result)
+    return _as_auth_response(auth_result, message='Login successful')
 
 
 def _extract_token(authorization: str | None, access_token: str | None) -> str | None:

@@ -175,13 +175,7 @@ async def fetch_authenticated_user(access_token: str) -> Optional[dict[str, Any]
     if user is None:
         return None
 
-    return {
-        'id': str(user.id),
-        'email': user.email,
-        'phone': user.phone,
-        'app_metadata': user.app_metadata,
-        'user_metadata': user.user_metadata,
-    }
+    return _normalize_user(user)
 
 
 async def revoke_auth_session(access_token: str | None, refresh_token: str | None = None) -> bool:

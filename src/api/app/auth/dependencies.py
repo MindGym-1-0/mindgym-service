@@ -1,9 +1,9 @@
+import logging
 from typing import Any, Optional
 
 import jwt
 from fastapi import Cookie, Header, HTTPException, status
 from pydantic import ValidationError
-import logging
 
 from app.core.config import get_settings
 from app.services.auth_service import fetch_authenticated_user
@@ -67,9 +67,7 @@ async def get_current_user(
                 detail='Invalid or expired token',
             ) from exc
     else:
-        logger.warning(
-            'SUPABASE_JWT_SECRET is not configured; relying on Supabase token validation only'
-        )
+        logger.debug('JWT secret not configured; using Supabase token validation fallback')
 
     user = await fetch_authenticated_user(token)
     if not user:
