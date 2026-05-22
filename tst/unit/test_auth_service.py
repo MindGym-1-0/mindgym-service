@@ -49,9 +49,7 @@ async def test_login_unexpected_upstream_error_raises_upstream_error():
 @pytest.mark.asyncio
 async def test_signup_existing_user_raises_user_already_exists_error():
     client = _mock_client_with_auth(
-        sign_up=lambda payload: (_ for _ in ()).throw(
-            Exception("user already exists")
-        )
+        sign_up=lambda payload: (_ for _ in ()).throw(Exception("user already exists"))
     )
 
     with patch("src.lib.auth_service.get_supabase_client", return_value=client):
@@ -63,9 +61,7 @@ async def test_signup_existing_user_raises_user_already_exists_error():
 @pytest.mark.asyncio
 async def test_signup_upstream_error_raises_upstream_error():
     client = _mock_client_with_auth(
-        sign_up=lambda payload: (_ for _ in ()).throw(
-            Exception("connection refused")
-        )
+        sign_up=lambda payload: (_ for _ in ()).throw(Exception("connection refused"))
     )
 
     with patch("src.lib.auth_service.get_supabase_client", return_value=client):

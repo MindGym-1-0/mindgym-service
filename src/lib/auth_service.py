@@ -32,22 +32,22 @@ class AuthRateLimitError(Exception):
 
 
 def _exc_status(exc: Exception) -> int | None:
-    value = getattr(exc, 'status', None)
+    value = getattr(exc, "status", None)
     return value if isinstance(value, int) else None
 
 
 def _exc_code(exc: Exception) -> str:
-    value = getattr(exc, 'code', '')
-    return value.lower() if isinstance(value, str) else ''
+    value = getattr(exc, "code", "")
+    return value.lower() if isinstance(value, str) else ""
 
 
 def _normalize_user(user: Any) -> dict[str, Any]:
     return {
-        'id': str(user.id),
-        'email': user.email,
-        'phone': user.phone,
-        'app_metadata': user.app_metadata,
-        'user_metadata': user.user_metadata,
+        "id": str(user.id),
+        "email": user.email,
+        "phone": user.phone,
+        "app_metadata": user.app_metadata,
+        "user_metadata": user.user_metadata,
     }
 
 
@@ -56,21 +56,21 @@ def _normalize_session(session: Any) -> dict[str, Any] | None:
         return None
 
     return {
-        'access_token': session.access_token,
-        'refresh_token': session.refresh_token,
-        'expires_in': session.expires_in,
-        'token_type': session.token_type,
+        "access_token": session.access_token,
+        "refresh_token": session.refresh_token,
+        "expires_in": session.expires_in,
+        "token_type": session.token_type,
     }
 
 
 def _build_auth_payload(response: Any) -> dict[str, Any]:
-    session = getattr(response, 'session', None)
-    user = getattr(response, 'user', None)
+    session = getattr(response, "session", None)
+    user = getattr(response, "user", None)
 
     return {
-        'authenticated': session is not None,
-        'session': _normalize_session(session),
-        'user': _normalize_user(user) if user is not None else None,
+        "authenticated": session is not None,
+        "session": _normalize_session(session),
+        "user": _normalize_user(user) if user is not None else None,
     }
 
 
@@ -82,22 +82,22 @@ async def login_with_email_password(email: str, password: str) -> dict[str, Any]
     try:
         response = await asyncio.to_thread(
             client.auth.sign_in_with_password,
-            {'email': email, 'password': password},
+            {"email": email, "password": password},
         )
     except Exception as exc:
         message = str(exc).lower()
-        if 'invalid login credentials' in message or 'invalid_credentials' in message:
-            logger.info('Login failed for email=%s due to invalid credentials', email)
-            raise AuthenticationError('Invalid email or password') from exc
+        if "invalid login credentials" in message or "invalid_credentials" in message:
+            logger.info("Login failed for email=%s due to invalid credentials", email)
+            raise AuthenticationError("Invalid email or password") from exc
 
-        logger.exception('Supabase authentication request failed for email=%s', email)
-        raise UpstreamAuthServiceError('Authentication provider unavailable') from exc
+        logger.exception("Supabase authentication request failed for email=%s", email)
+        raise UpstreamAuthServiceError("Authentication provider unavailable") from exc
 
-    session = getattr(response, 'session', None)
-    user = getattr(response, 'user', None)
+    session = getattr(response, "session", None)
+    user = getattr(response, "user", None)
     if session is None or user is None:
-        logger.info('Login failed for email=%s due to missing session/user', email)
-        raise AuthenticationError('Invalid email or password')
+        logger.info("Login failed for email=%s due to missing session/user", email)
+        raise AuthenticationError("Invalid email or password")
 
     return _build_auth_payload(response)
 
@@ -110,52 +110,67 @@ async def signup_with_email_password(email: str, password: str) -> dict[str, Any
     try:
         response = await asyncio.to_thread(
             client.auth.sign_up,
-            {'email': email, 'password': password},
+            {"email": email, "password": password},
         )
     except Exception as exc:
         message = str(exc).lower()
         status = _exc_status(exc)
         code = _exc_code(exc)
 
-        if status == 429 or 'rate limit' in message or 'too many requests' in message:
-            logger.warning('Signup rate-limited for email=%s', email)
-            raise AuthRateLimitError('Too many signup attempts') from exc
-        if 'over_email_send_rate_limit' in code:
-            logger.warning('Signup email send rate-limited for email=%s', email)
-            raise AuthRateLimitError('Too many signup attempts') from exc
-        if 'already registered' in message or 'user already exists' in message or 'already exists' in message:
-            logger.info('Signup failed for email=%s because the user already exists', email)
-            raise UserAlreadyExistsError('User already exists') from exc
-        if status == 409:
-            logger.info('Signup failed for email=%s because user already exists (status=409)', email)
-            raise UserAlreadyExistsError('User already exists') from exc
+        if status == 429 or "rate limit" in message or "too many requests" in message:
+            logger.warning("Signup rate-limited for email=%s", email)
+            raise AuthRateLimitError("Too many signup attempts") from exc
+        if "over_email_send_rate_limit" in code:
+            logger.warning("Signup email send rate-limited for email=%s", email)
+            raise AuthRateLimitError("Too many signup attempts") from exc
         if (
-            'password should be at least' in message
-            or 'invalid email' in message
-            or 'email address is invalid' in message
-            or ('email address' in message and 'is invalid' in message)
-            or 'weak password' in message
-            or 'validation failed' in message
+            "already registered" in message
+            or "user already exists" in message
+            or "already exists" in message
         ):
-            logger.info('Signup rejected by validation rules for email=%s', email)
-            raise InvalidSignupInputError('Invalid signup input') from exc
+            logger.info(
+                "Signup failed for email=%s because the user already exists", email
+            )
+            raise UserAlreadyExistsError("User already exists") from exc
+        if status == 409:
+            logger.info(
+                "Signup failed for email=%s because user already exists (status=409)",
+                email,
+            )
+            raise UserAlreadyExistsError("User already exists") from exc
+        if (
+            "password should be at least" in message
+            or "invalid email" in message
+            or "email address is invalid" in message
+            or ("email address" in message and "is invalid" in message)
+            or "weak password" in message
+            or "validation failed" in message
+        ):
+            logger.info("Signup rejected by validation rules for email=%s", email)
+            raise InvalidSignupInputError("Invalid signup input") from exc
         if status in (400, 422):
-            logger.info('Signup rejected by Supabase validation for email=%s (status=%s)', email, status)
-            raise InvalidSignupInputError('Invalid signup input') from exc
-        if 'signups not allowed' in message or 'signup is disabled' in message:
-            logger.info('Signup rejected because email/password signup is disabled')
-            raise SignupDisabledError('Signup is disabled') from exc
+            logger.info(
+                "Signup rejected by Supabase validation for email=%s (status=%s)",
+                email,
+                status,
+            )
+            raise InvalidSignupInputError("Invalid signup input") from exc
+        if "signups not allowed" in message or "signup is disabled" in message:
+            logger.info("Signup rejected because email/password signup is disabled")
+            raise SignupDisabledError("Signup is disabled") from exc
         if status == 403:
-            logger.info('Signup rejected because email/password signup is forbidden (status=403)')
-            raise SignupDisabledError('Signup is disabled') from exc
+            logger.info(
+                "Signup rejected because email/password signup is forbidden (status=403)"
+            )
+            raise SignupDisabledError("Signup is disabled") from exc
 
-        logger.exception('Supabase signup request failed for email=%s', email)
-        raise UpstreamAuthServiceError('Authentication provider unavailable') from exc
+        logger.exception("Supabase signup request failed for email=%s", email)
+        raise UpstreamAuthServiceError("Authentication provider unavailable") from exc
 
-    user = getattr(response, 'user', None)
+    user = getattr(response, "user", None)
     if user is None:
-        logger.exception('Supabase signup response missing user for email=%s', email)
-        raise UpstreamAuthServiceError('Authentication provider unavailable')
+        logger.exception("Supabase signup response missing user for email=%s", email)
+        raise UpstreamAuthServiceError("Authentication provider unavailable")
 
     return _build_auth_payload(response)
 
@@ -168,17 +183,19 @@ async def fetch_authenticated_user(access_token: str) -> Optional[dict[str, Any]
     try:
         response = await asyncio.to_thread(client.auth.get_user, access_token)
     except Exception:
-        logger.exception('Supabase user fetch failed during token validation')
+        logger.exception("Supabase user fetch failed during token validation")
         return None
 
-    user = getattr(response, 'user', None)
+    user = getattr(response, "user", None)
     if user is None:
         return None
 
     return _normalize_user(user)
 
 
-async def revoke_auth_session(access_token: str | None, refresh_token: str | None = None) -> bool:
+async def revoke_auth_session(
+    access_token: str | None, refresh_token: str | None = None
+) -> bool:
     """Best-effort token revocation for logout; returns True when a revoke call succeeds."""
 
     if not access_token:
@@ -187,18 +204,22 @@ async def revoke_auth_session(access_token: str | None, refresh_token: str | Non
     admin_client = get_supabase_admin_client()
     if admin_client is not None:
         try:
-            await asyncio.to_thread(admin_client.auth.admin.sign_out, access_token, 'global')
+            await asyncio.to_thread(
+                admin_client.auth.admin.sign_out, access_token, "global"
+            )
             return True
         except Exception:
-            logger.exception('Failed admin-level Supabase sign out during logout')
+            logger.exception("Failed admin-level Supabase sign out during logout")
 
     if refresh_token:
         try:
             client = get_supabase_client()
-            await asyncio.to_thread(client.auth.set_session, access_token, refresh_token)
+            await asyncio.to_thread(
+                client.auth.set_session, access_token, refresh_token
+            )
             await asyncio.to_thread(client.auth.sign_out)
             return True
         except Exception:
-            logger.exception('Failed session-level Supabase sign out during logout')
+            logger.exception("Failed session-level Supabase sign out during logout")
 
     return False

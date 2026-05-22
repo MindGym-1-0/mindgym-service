@@ -26,7 +26,6 @@ class JobCreate(BaseModel):
     applied_at: datetime | None = None
     status: JobStatus | None = None
 
-
     @field_validator("company", "role", mode="before")
     @classmethod
     def strip_and_validate_not_empty(cls, value: str) -> str:
@@ -68,11 +67,11 @@ class JobResponse(BaseModel):
     status: JobStatus
     applied_at: datetime | None = None
     notes: str | None = None
-    
+
     # New database-tracking tracking fields added below
     last_moved_at: datetime | None = None
     outcome: str | None = None
-    
+
     created_at: datetime | None = None
 
 

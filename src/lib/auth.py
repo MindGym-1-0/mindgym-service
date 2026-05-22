@@ -17,7 +17,7 @@ async def fetch_supabase_user_id(access_token: str) -> UUID:
     base = config.supabase_url()
     url = f"{base.rstrip('/')}/auth/v1/user"
     api_key = config.supabase_anon_key()
-    
+
     if not api_key:
         raise HTTPException(
             status_code=500,
@@ -65,7 +65,9 @@ def require_current_user_token(request: Request) -> str:
     return token
 
 
-async def require_current_user_id(token: str = Depends(require_current_user_token)) -> UUID:
+async def require_current_user_id(
+    token: str = Depends(require_current_user_token),
+) -> UUID:
     return await fetch_supabase_user_id(token)
 
 

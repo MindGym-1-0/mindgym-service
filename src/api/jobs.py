@@ -16,7 +16,7 @@ router = APIRouter()
 async def create_job(
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
-    body: dict = Body(default_factory=dict)
+    body: dict = Body(default_factory=dict),
 ):
     try:
         payload = JobCreate.model_validate(body)
@@ -24,7 +24,9 @@ async def create_job(
         raise_400(exc)
 
     sb = get_supabase_user_client(token)
-    status_value = JobStatus.APPLIED.value if payload.status is None else payload.status.value
+    status_value = (
+        JobStatus.APPLIED.value if payload.status is None else payload.status.value
+    )
 
     insert_row: dict[str, object] = {
         "user_id": str(current_user_id),
@@ -42,20 +44,19 @@ async def create_job(
         result = sb.table("jobs").insert(insert_row).select("*").execute()
     except Exception as exc:
         raise HTTPException(
-            status_code=500, 
-            detail=f"Database error during job creation: {str(exc)}"
+            status_code=500, detail=f"Database error during job creation: {str(exc)}"
         ) from None
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create job")
-        
+
     return JobResponse.model_validate(cast_row_uuids(result.data[0]))
 
 
 @router.get("", response_model=list[JobResponse])
 async def list_jobs(current_user_id: CurrentUserId, token: CurrentUserToken):
     sb = get_supabase_user_client(token)
-    
+
     try:
         result = (
             sb.table("jobs")
@@ -66,8 +67,7 @@ async def list_jobs(current_user_id: CurrentUserId, token: CurrentUserToken):
         )
     except Exception as exc:
         raise HTTPException(
-            status_code=500, 
-            detail=f"Database error while fetching jobs: {str(exc)}"
+            status_code=500, detail=f"Database error while fetching jobs: {str(exc)}"
         ) from None
 
     rows = result.data or []

@@ -17,33 +17,35 @@ load_dotenv(_ROOT / ".env")
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    _api_env_path = Path(__file__).resolve().parents[1] / 'api' / '.env'
-    _repo_env_path = Path(__file__).resolve().parents[2] / '.env'
+    _api_env_path = Path(__file__).resolve().parents[1] / "api" / ".env"
+    _repo_env_path = Path(__file__).resolve().parents[2] / ".env"
 
     model_config = SettingsConfigDict(
         env_file=(_api_env_path, _repo_env_path),
-        env_file_encoding='utf-8',
-        extra='ignore',
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
-    api_host: str = '0.0.0.0'
+    api_host: str = "0.0.0.0"
     api_port: int = 8000
     debug: bool = False
-    frontend_url: str = 'http://localhost:3000'
-    supabase_onboarding_table: str = 'onboarding'
+    frontend_url: str = "http://localhost:3000"
+    supabase_onboarding_table: str = "onboarding"
 
-    supabase_url: str | None = Field(default=None, alias='SUPABASE_URL')
+    supabase_url: str | None = Field(default=None, alias="SUPABASE_URL")
     supabase_anon_key: str | None = Field(
         default=None,
-        validation_alias=AliasChoices('SUPABASE_ANON_KEY', 'SUPABASE_KEY'),
+        validation_alias=AliasChoices("SUPABASE_ANON_KEY", "SUPABASE_KEY"),
     )
-    supabase_service_role_key: str | None = Field(default=None, alias='SUPABASE_SERVICE_ROLE_KEY')
-    supabase_jwt_secret: str | None = Field(default=None, alias='SUPABASE_JWT_SECRET')
-    legacy_jwt_secret: str | None = Field(default=None, alias='JWT_SECRET')
-    app_env: str = Field(default='development', alias='APP_ENV')
-    auth_cookie_secure: bool | None = Field(default=None, alias='AUTH_COOKIE_SECURE')
-    auth_cookie_samesite: str = Field(default='lax', alias='AUTH_COOKIE_SAMESITE')
-    auth_cookie_domain: str | None = Field(default=None, alias='AUTH_COOKIE_DOMAIN')
+    supabase_service_role_key: str | None = Field(
+        default=None, alias="SUPABASE_SERVICE_ROLE_KEY"
+    )
+    supabase_jwt_secret: str | None = Field(default=None, alias="SUPABASE_JWT_SECRET")
+    legacy_jwt_secret: str | None = Field(default=None, alias="JWT_SECRET")
+    app_env: str = Field(default="development", alias="APP_ENV")
+    auth_cookie_secure: bool | None = Field(default=None, alias="AUTH_COOKIE_SECURE")
+    auth_cookie_samesite: str = Field(default="lax", alias="AUTH_COOKIE_SAMESITE")
+    auth_cookie_domain: str | None = Field(default=None, alias="AUTH_COOKIE_DOMAIN")
 
     @property
     def resolved_supabase_jwt_secret(self) -> str | None:
@@ -58,13 +60,13 @@ class Settings(BaseSettings):
         if self.auth_cookie_secure is not None:
             return self.auth_cookie_secure
 
-        return self.app_env.lower() not in {'local', 'development', 'dev'}
+        return self.app_env.lower() not in {"local", "development", "dev"}
 
     @property
     def resolved_auth_cookie_samesite(self) -> str:
         value = self.auth_cookie_samesite.lower()
-        if value not in {'lax', 'strict', 'none'}:
-            return 'lax'
+        if value not in {"lax", "strict", "none"}:
+            return "lax"
         return value
 
 
@@ -82,6 +84,7 @@ settings = _LazySettings()
 
 
 # --- Legacy Function Wrappers for Feature Modules ---
+
 
 def supabase_url() -> str:
     return os.getenv("SUPABASE_URL", "").strip()

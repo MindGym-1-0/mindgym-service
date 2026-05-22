@@ -1,4 +1,5 @@
 """Supabase integration helpers."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -13,13 +14,15 @@ def get_supabase_user_client(token: str) -> Client:
     """Initialize a Supabase client authenticated with the user's token."""
     url = config.supabase_url()
     anon_key = config.supabase_anon_key()
-    
+
     if not url or not anon_key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_ANON_KEY must be set in the environment.")
-        
+        raise RuntimeError(
+            "SUPABASE_URL and SUPABASE_ANON_KEY must be set in the environment."
+        )
+
     client = create_client(url, anon_key)
     client.postgrest.auth(token)
-    
+
     return client
 
 

@@ -69,9 +69,7 @@ async def update_job(
 
 @router.delete("/{job_id}", response_model=DeleteOk)
 async def delete_job(
-    job_id: UUID, 
-    current_user_id: CurrentUserId, 
-    token: CurrentUserToken
+    job_id: UUID, current_user_id: CurrentUserId, token: CurrentUserToken
 ):
     sb = get_supabase_user_client(token)
     result = (
@@ -84,5 +82,5 @@ async def delete_job(
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Not found")
-        
+
     return DeleteOk(success=True)

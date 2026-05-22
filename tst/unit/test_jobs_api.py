@@ -36,12 +36,18 @@ def sample_job_row(fake_user_id: UUID):
 @pytest.fixture
 def api_client(fake_user_id: UUID, monkeypatch):
     client = TestClient(app)
-    monkeypatch.setitem(app.dependency_overrides, require_current_user_id, lambda: fake_user_id)
-    monkeypatch.setitem(app.dependency_overrides, require_current_user_token, lambda: "fake-token")
+    monkeypatch.setitem(
+        app.dependency_overrides, require_current_user_id, lambda: fake_user_id
+    )
+    monkeypatch.setitem(
+        app.dependency_overrides, require_current_user_token, lambda: "fake-token"
+    )
 
     mock_sb = MagicMock(name="supabase_client")
     monkeypatch.setattr(jobs_module, "get_supabase_user_client", lambda token: mock_sb)
-    monkeypatch.setattr(jobs_id_module, "get_supabase_user_client", lambda token: mock_sb)
+    monkeypatch.setattr(
+        jobs_id_module, "get_supabase_user_client", lambda token: mock_sb
+    )
 
     qb = MagicMock(name="query_builder")
     mock_sb.table.return_value = qb
@@ -84,7 +90,9 @@ def test_get_lists_jobs_ordered(api_client, sample_job_row: dict[str, object]):
 
     qb.execute.return_value = SimpleNamespace(data=[row2, sample_job_row])
 
-    resp = client.get("/api/applications", headers={"Authorization": "Bearer fake-token"})
+    resp = client.get(
+        "/api/applications", headers={"Authorization": "Bearer fake-token"}
+    )
     assert resp.status_code == 200
 
     assert isinstance(resp.json(), list)
@@ -97,7 +105,9 @@ def test_get_empty_returns_array(api_client):
 
     qb.execute.return_value = SimpleNamespace(data=[])
 
-    resp = client.get("/api/applications", headers={"Authorization": "Bearer fake-token"})
+    resp = client.get(
+        "/api/applications", headers={"Authorization": "Bearer fake-token"}
+    )
     assert resp.status_code == 200
     assert resp.json() == []
 

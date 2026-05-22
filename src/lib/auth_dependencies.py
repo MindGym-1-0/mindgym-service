@@ -15,12 +15,12 @@ def _extract_bearer_token(authorization: Optional[str]) -> Optional[str]:
     if not authorization:
         return None
 
-    parts = authorization.split(' ', 1)
+    parts = authorization.split(" ", 1)
     if len(parts) != 2:
         return None
 
     scheme, token = parts
-    if scheme.lower() != 'bearer' or not token:
+    if scheme.lower() != "bearer" or not token:
         return None
 
     return token.strip()
@@ -42,7 +42,7 @@ async def get_current_user(
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Authentication required',
+            detail="Authentication required",
         )
 
     try:
@@ -50,7 +50,7 @@ async def get_current_user(
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail='Server authentication configuration error',
+            detail="Server authentication configuration error",
         ) from exc
 
     if settings.resolved_supabase_jwt_secret:
@@ -58,22 +58,24 @@ async def get_current_user(
             jwt.decode(
                 token,
                 settings.resolved_supabase_jwt_secret,
-                algorithms=['HS256'],
-                options={'verify_aud': False},
+                algorithms=["HS256"],
+                options={"verify_aud": False},
             )
         except jwt.PyJWTError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail='Invalid or expired token',
+                detail="Invalid or expired token",
             ) from exc
     else:
-        logger.debug('JWT secret not configured; using Supabase token validation fallback')
+        logger.debug(
+            "JWT secret not configured; using Supabase token validation fallback"
+        )
 
     user = await fetch_authenticated_user(token)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Unauthorized user',
+            detail="Unauthorized user",
         )
 
     return user

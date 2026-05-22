@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+
 def cast_row_uuids(row: dict) -> dict:
     row_copy = dict(row)
     if "id" in row_copy and row_copy["id"]:

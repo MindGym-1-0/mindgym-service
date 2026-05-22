@@ -1,11 +1,11 @@
 """FastAPI application factory and main entry point"""
+
 from __future__ import annotations
 
 import logging
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import ValidationError
 
 from src.api.auth import router as auth_router
 from src.api.auth import v1_router as auth_v1_router
@@ -31,9 +31,9 @@ def create_app() -> FastAPI:
     # Combine both CORS origins requirements
     cors_origins = config.cors_origin_list()
     allow_origins = ["http://localhost:3000", "http://localhost:3001"]
-    if settings and getattr(settings, 'frontend_url', None):
+    if settings and getattr(settings, "frontend_url", None):
         allow_origins.insert(0, settings.frontend_url)
-    
+
     # Merge both origin lists cleanly removing duplicates
     final_origins = list(dict.fromkeys(allow_origins + cors_origins))
     allow_all = "*" in final_origins
@@ -57,9 +57,9 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def validate_configuration() -> None:
-        if not getattr(settings, 'supabase_service_role_key', None):
+        if not getattr(settings, "supabase_service_role_key", None):
             logger.warning("SUPABASE_SERVICE_ROLE_KEY is not configured")
-        if not getattr(settings, 'resolved_supabase_jwt_secret', None):
+        if not getattr(settings, "resolved_supabase_jwt_secret", None):
             logger.warning("SUPABASE_JWT_SECRET is not configured")
 
     @app.get("/")
@@ -80,9 +80,9 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    host = getattr(settings, 'api_host', '0.0.0.0')
-    port = getattr(settings, 'api_port', 8000)
-    reload = getattr(settings, 'debug', False)
+    host = getattr(settings, "api_host", "0.0.0.0")
+    port = getattr(settings, "api_port", 8000)
+    reload = getattr(settings, "debug", False)
 
     uvicorn.run(
         "src.main:app",

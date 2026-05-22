@@ -34,7 +34,9 @@ def _decode_supabase_cookie_value(raw: str) -> str | None:
     return None
 
 
-def assemble_chunked_sb_cookie(cookie_map: dict[str, str], pattern: re.Pattern[str]) -> str | None:
+def assemble_chunked_sb_cookie(
+    cookie_map: dict[str, str], pattern: re.Pattern[str]
+) -> str | None:
     """Reassemble chunked `sb-<ref>-access-token{.N}` or `sb-<ref>-auth-token{.N}` values."""
     base_to_parts: defaultdict[str, list[tuple[int, str]]] = defaultdict(list)
     single: dict[str, str] = {}
@@ -73,7 +75,9 @@ def bearer_from_authorization(auth_header: str | None) -> str | None:
     return token or None
 
 
-def extract_access_token_from_request(auth_header: str | None, cookies: dict[str, str]) -> str | None:
+def extract_access_token_from_request(
+    auth_header: str | None, cookies: dict[str, str]
+) -> str | None:
     bearer = bearer_from_authorization(auth_header)
     if bearer:
         return bearer
