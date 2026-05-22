@@ -11,26 +11,22 @@ create table if not exists public.ai_sessions (
     -- User who started the session
     user_id             uuid        not null references public.users (id) on delete cascade,
 
-    -- What the user is preparing for; determines Mode 1 vs Mode 2
+    -- What the user is preparing for
     preparation_for     text        not null check (preparation_for in (
                             'interview_tomorrow', 'recruiter_call', 'networking', 'salary_negotiation',
                             'rejection_recovery', 'restarting_search', 'general_reset'
                         )),
 
-    -- Mode 1 only: company and role being prepared for
+    -- Optional: company and role personalise phase3 and phase5 when provided
     company             text,
     role                text,
-
-    -- Mode 1 only: optional interview date and linked job application
-    interview_date      timestamptz,
-    job_id              uuid        references public.jobs (id) on delete set null,
 
     -- How the user feels going in and what they want to feel after
     current_feeling     text        not null,
     desired_feeling     text        not null,
 
-    -- Time the user has available for the session
-    time_available      text        not null,
+    -- Time the user has available for the session; constrained to Figma dropdown values
+    time_available      text        not null check (time_available in ('5 min', '10 min', '15 min')),
 
     -- Mood score before the session (1–10)
     pre_score           smallint    not null check (pre_score between 1 and 10),
@@ -38,8 +34,8 @@ create table if not exists public.ai_sessions (
     -- Mood score after the session (1–10); set on completion
     post_score          smallint    check (post_score between 1 and 10),
 
-    -- post_score minus pre_score; set on completion
-    mood_delta          smallint,
+    -- post_score minus pre_score; set on completion; constrained to match the two scores
+    mood_delta          smallint    check (mood_delta = post_score - pre_score),
 
     -- The 5-phase AI-generated script
     phase1              text,
@@ -59,9 +55,6 @@ create table if not exists public.ai_sessions (
 
 -- Fetch a user's sessions ordered by most recent
 create index if not exists ai_sessions_user_id_created_at_idx on public.ai_sessions (user_id, created_at desc);
-
--- Lookup sessions linked to a specific job application
-create index if not exists ai_sessions_job_id_idx on public.ai_sessions (job_id);
 
 -- =============================================================
 -- ROW LEVEL SECURITY
