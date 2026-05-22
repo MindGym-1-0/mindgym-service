@@ -16,7 +16,7 @@ def test_session_start_request_valid():
         preparation_for='interview_tomorrow',
         current_feeling='nervous',
         desired_feeling='confident',
-        time_available='10 minutes',
+        time_available='10 min',
         pre_score=7,
     )
     assert req.preparation_for == 'interview_tomorrow'
@@ -37,8 +37,8 @@ def test_session_start_request_all_preparation_for_values():
         req = SessionStartRequest(
             preparation_for=value,
             current_feeling='okay',
-            desired_feeling='great',
-            time_available='5 minutes',
+            desired_feeling='calm',
+            time_available='5 min',
             pre_score=5,
         )
         assert req.preparation_for == value
@@ -50,7 +50,7 @@ def test_session_start_request_invalid_preparation_for():
             preparation_for='interview_today',
             current_feeling='nervous',
             desired_feeling='confident',
-            time_available='10 minutes',
+            time_available='10 min',
             pre_score=7,
         )
 
@@ -61,7 +61,7 @@ def test_session_start_request_pre_score_boundary_valid():
             preparation_for='general_reset',
             current_feeling='tired',
             desired_feeling='calm',
-            time_available='5 minutes',
+            time_available='5 min',
             pre_score=score,
         )
         assert req.pre_score == score
@@ -73,7 +73,7 @@ def test_session_start_request_pre_score_too_low():
             preparation_for='general_reset',
             current_feeling='tired',
             desired_feeling='calm',
-            time_available='5 minutes',
+            time_available='5 min',
             pre_score=0,
         )
 
@@ -84,9 +84,82 @@ def test_session_start_request_pre_score_too_high():
             preparation_for='general_reset',
             current_feeling='tired',
             desired_feeling='calm',
-            time_available='5 minutes',
+            time_available='5 min',
             pre_score=11,
         )
+
+
+def test_session_start_request_all_desired_feeling_values():
+    valid_values = ['calm', 'grounded', 'confident', 'focused', 'clear_minded', 'composed']
+    for value in valid_values:
+        req = SessionStartRequest(
+            preparation_for='general_reset',
+            current_feeling='anxious',
+            desired_feeling=value,
+            time_available='5 min',
+            pre_score=5,
+        )
+        assert req.desired_feeling == value
+
+
+def test_session_start_request_invalid_desired_feeling():
+    with pytest.raises(ValidationError):
+        SessionStartRequest(
+            preparation_for='general_reset',
+            current_feeling='anxious',
+            desired_feeling='happy',
+            time_available='5 min',
+            pre_score=5,
+        )
+
+
+def test_session_start_request_all_time_available_values():
+    for value in ['5 min', '10 min', '15 min']:
+        req = SessionStartRequest(
+            preparation_for='general_reset',
+            current_feeling='anxious',
+            desired_feeling='calm',
+            time_available=value,
+            pre_score=5,
+        )
+        assert req.time_available == value
+
+
+def test_session_start_request_invalid_time_available():
+    with pytest.raises(ValidationError):
+        SessionStartRequest(
+            preparation_for='general_reset',
+            current_feeling='anxious',
+            desired_feeling='calm',
+            time_available='20 min',
+            pre_score=5,
+        )
+
+
+def test_session_start_request_company_and_role_optional():
+    req = SessionStartRequest(
+        preparation_for='interview_tomorrow',
+        current_feeling='nervous',
+        desired_feeling='confident',
+        time_available='10 min',
+        pre_score=7,
+    )
+    assert req.company is None
+    assert req.role is None
+
+
+def test_session_start_request_company_and_role_provided():
+    req = SessionStartRequest(
+        preparation_for='interview_tomorrow',
+        current_feeling='nervous',
+        desired_feeling='confident',
+        time_available='10 min',
+        pre_score=7,
+        company='Google',
+        role='Staff Engineer',
+    )
+    assert req.company == 'Google'
+    assert req.role == 'Staff Engineer'
 
 
 # --- SessionCompleteRequest ---

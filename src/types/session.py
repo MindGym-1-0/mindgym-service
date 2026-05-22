@@ -14,10 +14,19 @@ class SessionStartRequest(BaseModel):
         'restarting_search',
         'general_reset',
     ]
-    current_feeling: str  # TODO: consider adding min_length=1, max_length=500
-    desired_feeling: str  # TODO: consider adding min_length=1, max_length=500
-    time_available: str  # TODO: replace with Literal once Anastasiia confirms dropdown values
+    current_feeling: str  # chip selection or free text from the user
+    desired_feeling: Literal[
+        'calm',
+        'grounded',
+        'confident',
+        'focused',
+        'clear_minded',
+        'composed',
+    ]
+    time_available: Literal['5 min', '10 min', '15 min']
     pre_score: int = Field(..., ge=1, le=10)
+    company: str | None = None
+    role: str | None = None
 
 
 class SessionScript(BaseModel):
@@ -64,6 +73,8 @@ class SessionDetail(BaseModel):
     current_feeling: str
     desired_feeling: str
     time_available: str
+    company: str | None = None
+    role: str | None = None
     pre_score: int
     post_score: int | None
     mood_delta: int | None
