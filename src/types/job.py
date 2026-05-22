@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
@@ -23,7 +23,7 @@ class JobCreate(BaseModel):
     company: str = Field(..., min_length=1)
     role: str = Field(..., min_length=1)
     notes: str | None = None
-    applied_at: date | datetime | None = None
+    applied_at: datetime | None = None
     status: JobStatus | None = None
 
     @field_validator("company", "role", mode="before")
@@ -43,7 +43,7 @@ class JobUpdate(BaseModel):
     company: str | None = Field(default=None, min_length=1)
     role: str | None = Field(default=None, min_length=1)
     notes: str | None = None
-    applied_at: date | datetime | None = None
+    applied_at: datetime | None = None
     status: JobStatus | None = None
 
     @field_validator("company", "role", mode="before")
@@ -64,11 +64,11 @@ class JobResponse(BaseModel):
     user_id: UUID
     company: str
     role: str
-    status: str
+    status: JobStatus
 
-    applied_at: str | datetime | date | None = None
+    applied_at: datetime | None = None
     notes: str | None = None
-    created_at: str | datetime | None = None
+    created_at: datetime | None = None
 
 
 class DeleteOk(BaseModel):

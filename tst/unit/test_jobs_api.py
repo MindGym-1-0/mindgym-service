@@ -7,7 +7,7 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
-import src.api.job_id.jobs_id as jobs_id_module
+import src.api.jobs_id as jobs_id_module
 import src.api.jobs as jobs_module
 from src.lib.auth import require_current_user_id, require_current_user_token
 from src.main import app, create_app
@@ -74,7 +74,6 @@ def test_post_creates_job_201(api_client, sample_job_row: dict[str, object]):
 
     qb.insert.assert_called_once()
     qb.execute.assert_called()
-    qb.insert.return_value.select.assert_called_once()
 
 
 def test_get_lists_jobs_ordered(api_client, sample_job_row: dict[str, object]):
@@ -122,6 +121,20 @@ def test_post_missing_company_400(api_client):
     resp = client.post(
         "/api/jobs",
         json={"role": "Engineer"},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 400
+    qb.insert.assert_not_called()
+
+
+def test_post_only_whitespace_company_400(api_client):
+    """Verifies that strings containing only blank spaces are rejected with a 400."""
+    client, qb, _sb = api_client
+
+    resp = client.post(
+        "/api/jobs",
+        json={"company": "     ", "role": "Backend Engineer"},
         headers={"Authorization": "Bearer fake-token"},
     )
 

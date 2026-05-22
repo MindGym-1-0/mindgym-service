@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.jobs import router as jobs_router
-from src.api.job_id.jobs_id import router as jobs_id_router
+from src.api.jobs_id import router as jobs_id_router
 from src.lib import config
 
 
