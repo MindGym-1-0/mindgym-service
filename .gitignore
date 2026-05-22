@@ -38,6 +38,7 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
 *.so
 .Python
 *.egg

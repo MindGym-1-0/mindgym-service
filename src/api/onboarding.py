@@ -1,4 +1,5 @@
 """Onboarding endpoints for user setup"""
+
 import uuid
 
 import httpx
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/api", tags=["onboarding"])
     response_model=OnboardingResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Complete user onboarding",
-    description="Receives user's job goal, job search stage, and anxiety level to personalize their experience"
+    description="Receives user's job goal, job search stage, and anxiety level to personalize their experience",
 )
 async def onboard(request: OnboardingRequest) -> OnboardingResponse:
     """
@@ -45,11 +46,7 @@ async def onboard(request: OnboardingRequest) -> OnboardingResponse:
         if settings.supabase_url and settings.supabase_key:
             persisted = await insert_onboarding_record(record)
 
-        user_id = (
-            persisted.get("user_id")
-            or persisted.get("id")
-            or str(uuid.uuid4())
-        )
+        user_id = persisted.get("user_id") or persisted.get("id") or str(uuid.uuid4())
 
         return OnboardingResponse(
             success=True,

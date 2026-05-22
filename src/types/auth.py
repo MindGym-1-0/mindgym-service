@@ -5,12 +5,12 @@ class EmailPasswordRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=1024)
 
-    @field_validator('email')
+    @field_validator("email")
     @classmethod
     def validate_email_format(cls, value: str) -> str:
         email = value.strip()
-        if '@' not in email or email.startswith('@') or email.endswith('@'):
-            raise ValueError('Invalid email format')
+        if "@" not in email or email.startswith("@") or email.endswith("@"):
+            raise ValueError("Invalid email format")
         return email.lower()
 
 
@@ -38,4 +38,4 @@ class AuthResponse(BaseModel):
 
 class LogoutResponse(BaseModel):
     authenticated: bool = False
-    message: str = 'Signed out'
+    message: str = "Signed out"
