@@ -66,7 +66,7 @@ def test_post_creates_job_201(api_client, sample_job_row: dict[str, object]):
     qb.execute.return_value = SimpleNamespace(data=[sample_job_row])
 
     resp = client.post(
-        "/api/jobs",
+        "/api/applications",
         json={"company": " Acme ", "role": " Engineer "},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -84,7 +84,7 @@ def test_get_lists_jobs_ordered(api_client, sample_job_row: dict[str, object]):
 
     qb.execute.return_value = SimpleNamespace(data=[row2, sample_job_row])
 
-    resp = client.get("/api/jobs", headers={"Authorization": "Bearer fake-token"})
+    resp = client.get("/api/applications", headers={"Authorization": "Bearer fake-token"})
     assert resp.status_code == 200
 
     assert isinstance(resp.json(), list)
@@ -97,7 +97,7 @@ def test_get_empty_returns_array(api_client):
 
     qb.execute.return_value = SimpleNamespace(data=[])
 
-    resp = client.get("/api/jobs", headers={"Authorization": "Bearer fake-token"})
+    resp = client.get("/api/applications", headers={"Authorization": "Bearer fake-token"})
     assert resp.status_code == 200
     assert resp.json() == []
 
@@ -106,7 +106,7 @@ def test_post_invalid_status_400(api_client):
     client, qb, _sb = api_client
 
     resp = client.post(
-        "/api/jobs",
+        "/api/applications",
         json={"company": "Acme", "role": "Engineer", "status": "nope"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -119,7 +119,7 @@ def test_post_missing_company_400(api_client):
     client, qb, _sb = api_client
 
     resp = client.post(
-        "/api/jobs",
+        "/api/applications",
         json={"role": "Engineer"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -133,7 +133,7 @@ def test_post_only_whitespace_company_400(api_client):
     client, qb, _sb = api_client
 
     resp = client.post(
-        "/api/jobs",
+        "/api/applications",
         json={"company": "     ", "role": "Backend Engineer"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -151,7 +151,7 @@ def test_patch_updates_job(api_client, sample_job_row: dict[str, object]):
     qb.execute.return_value = SimpleNamespace(data=[updated])
 
     resp = client.patch(
-        f"/api/jobs/{sample_job_row['id']}",
+        f"/api/applications/{sample_job_row['id']}",
         json={"status": "screen"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -165,7 +165,7 @@ def test_patch_invalid_status_400(api_client, sample_job_row: dict[str, object])
     client, qb, _sb = api_client
 
     resp = client.patch(
-        f"/api/jobs/{sample_job_row['id']}",
+        f"/api/applications/{sample_job_row['id']}",
         json={"status": "nope"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -180,7 +180,7 @@ def test_patch_not_found_404(api_client, sample_job_row: dict[str, object]):
     qb.execute.return_value = SimpleNamespace(data=[])
 
     resp = client.patch(
-        f"/api/jobs/{sample_job_row['id']}",
+        f"/api/applications/{sample_job_row['id']}",
         json={"status": "screen"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -194,7 +194,7 @@ def test_delete_ok(api_client, sample_job_row: dict[str, object]):
     qb.execute.return_value = SimpleNamespace(data=[{"id": sample_job_row["id"]}])
 
     resp = client.delete(
-        f"/api/jobs/{sample_job_row['id']}",
+        f"/api/applications/{sample_job_row['id']}",
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 200
@@ -207,7 +207,7 @@ def test_delete_not_found_404(api_client, sample_job_row: dict[str, object]):
     qb.execute.return_value = SimpleNamespace(data=[])
 
     resp = client.delete(
-        f"/api/jobs/{sample_job_row['id']}",
+        f"/api/applications/{sample_job_row['id']}",
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 404
@@ -215,5 +215,5 @@ def test_delete_not_found_404(api_client, sample_job_row: dict[str, object]):
 
 def test_unauthenticated_401():
     client = TestClient(create_app())
-    resp = client.get("/api/jobs")
+    resp = client.get("/api/applications")
     assert resp.status_code == 401

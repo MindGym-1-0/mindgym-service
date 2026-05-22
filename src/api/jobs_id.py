@@ -1,19 +1,18 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Body, HTTPException
 from pydantic import ValidationError
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
+from src.lib.errors import raise_400
 from src.lib.supabase import get_supabase_user_client
+from src.lib.utils import cast_row_uuids
 from src.types.job import DeleteOk, JobResponse, JobUpdate
 
 router = APIRouter()
-
-
-def _raise_400(exc: ValidationError) -> None:
-    raise HTTPException(status_code=400, detail=exc.errors(include_url=False)) from None
 
 
 @router.patch("/{job_id}", response_model=JobResponse)
@@ -21,12 +20,12 @@ async def update_job(
     job_id: UUID,
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
-    body: dict = Body(default_factory=dict)
+    body: dict = Body(default_factory=dict),
 ):
     try:
         patch = JobUpdate.model_validate(body)
     except ValidationError as exc:
-        _raise_400(exc)
+        raise_400(exc)
 
     sb = get_supabase_user_client(token)
     updates = patch.model_dump(exclude_unset=True, mode="json")
@@ -35,6 +34,10 @@ async def update_job(
         updates["company"] = updates["company"].strip()
     if "role" in updates and isinstance(updates["role"], str):
         updates["role"] = updates["role"].strip()
+
+    # Automatically update timestamp when status changes
+    if "status" in updates:
+        updates["last_moved_at"] = datetime.now(timezone.utc).isoformat()
 
     if not updates:
         existing = (
@@ -48,10 +51,7 @@ async def update_job(
         if not existing.data:
             raise HTTPException(status_code=404, detail="Not found")
 
-        row = existing.data[0]
-        row["user_id"] = UUID(str(row["user_id"]))
-        row["id"] = UUID(str(row["id"]))
-        return JobResponse.model_validate(row)
+        return JobResponse.model_validate(cast_row_uuids(existing.data[0]))
 
     result = (
         sb.table("jobs")
@@ -64,14 +64,15 @@ async def update_job(
     if not result.data:
         raise HTTPException(status_code=404, detail="Not found")
 
-    row = result.data[0]
-    row["user_id"] = UUID(str(row["user_id"]))
-    row["id"] = UUID(str(row["id"]))
-    return JobResponse.model_validate(row)
+    return JobResponse.model_validate(cast_row_uuids(result.data[0]))
 
 
 @router.delete("/{job_id}", response_model=DeleteOk)
-async def delete_job(job_id: UUID, current_user_id: CurrentUserId, token: CurrentUserToken):
+async def delete_job(
+    job_id: UUID, 
+    current_user_id: CurrentUserId, 
+    token: CurrentUserToken
+):
     sb = get_supabase_user_client(token)
     result = (
         sb.table("jobs")
@@ -83,4 +84,5 @@ async def delete_job(job_id: UUID, current_user_id: CurrentUserId, token: Curren
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Not found")
-    return DeleteOk()
+        
+    return DeleteOk(success=True)

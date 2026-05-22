@@ -26,8 +26,9 @@ def create_app() -> FastAPI:
     def health():
         return {"ok": True}
 
-    app.include_router(jobs_router, prefix="/api/jobs", tags=["jobs"])
-    app.include_router(jobs_id_router, prefix="/api/jobs", tags=["jobs"])
+    # Swapped routing prefixes to match frontend contracts (/api/applications)
+    app.include_router(jobs_router, prefix="/api/applications", tags=["jobs"])
+    app.include_router(jobs_id_router, prefix="/api/applications", tags=["jobs"])
     return app
 
 

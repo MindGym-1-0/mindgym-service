@@ -37,7 +37,15 @@ async def create_job(
     if payload.applied_at is not None:
         insert_row["applied_at"] = payload.applied_at.isoformat()
 
-    result = sb.table("jobs").insert(insert_row).select("*").execute()
+    # Catch database execution exceptions (network errors, schema conflicts, constraint violations)
+    try:
+        result = sb.table("jobs").insert(insert_row).select("*").execute()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Database error during job creation: {str(exc)}"
+        ) from None
+
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create job")
         
@@ -47,13 +55,21 @@ async def create_job(
 @router.get("", response_model=list[JobResponse])
 async def list_jobs(current_user_id: CurrentUserId, token: CurrentUserToken):
     sb = get_supabase_user_client(token)
-    result = (
-        sb.table("jobs")
-        .select("*")
-        .eq("user_id", str(current_user_id))
-        .order("created_at", desc=True)
-        .execute()
-    )
+    
+    try:
+        result = (
+            sb.table("jobs")
+            .select("*")
+            .eq("user_id", str(current_user_id))
+            .order("created_at", desc=True)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Database error while fetching jobs: {str(exc)}"
+        ) from None
+
     rows = result.data or []
 
     return [JobResponse.model_validate(cast_row_uuids(row)) for row in rows]
