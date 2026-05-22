@@ -1,15 +1,36 @@
-"""Load `.env` from repo root and expose configuration."""
+"""Application configuration"""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
-
 from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
 
+# Load .env file for legacy OS getters
 _ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(_ROOT / ".env")
 
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables"""
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+    debug: bool = False
+    frontend_url: str = "http://localhost:3000"
+    supabase_url: str | None = None
+    supabase_key: str | None = None
+    supabase_onboarding_table: str = "onboarding"
+
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+
+settings = Settings()
+
+
+# --- Legacy Function Wrappers for Feature Modules ---
 
 def supabase_url() -> str:
     return os.getenv("SUPABASE_URL", "").strip()

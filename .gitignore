@@ -1,6 +1,53 @@
-venv/
-.env
+# Local context files (not for version control)
+CLAUDE.md
+AGENTS.md
+.cursorrules
+docs/
+test_connection.py
+.agents/supabase/.temp/
+
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+wheels/
+pip-wheel-metadata/
+.installed.cfg
+
+# Virtual environments
+venv/
+env/
+.venv
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Supabase
+.supabase/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pytest & Linting
 .pytest_cache/
 .ruff_cache/
-*.pyc
+htmlcov/
+.coverage
