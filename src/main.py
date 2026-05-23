@@ -13,6 +13,7 @@ from src.api.auth import v1_router as auth_v1_router
 from src.api.onboarding import router as onboarding_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
+
 # 1. IMPORT YOUR NEW STREAKS ROUTER HERE
 from src.api.streaks import router as streaks_router
 from src.lib import config
@@ -31,9 +32,9 @@ async def lifespan(app: FastAPI):
         logger.warning("SUPABASE_SERVICE_ROLE_KEY is not configured")
     if not getattr(settings, "resolved_supabase_jwt_secret", None):
         logger.warning("SUPABASE_JWT_SECRET is not configured")
-        
+
     yield  # ⏸️ Application serves traffic while paused here
-    
+
     # 🛑 Everything here runs on application SHUTDOWN (Optional)
 
 
