@@ -1,7 +1,7 @@
--- 1. Create the interviews table with foreign keys and cascade delete
+-- 1. Create the interviews table with uniform public schema reference and cascade delete
 CREATE TABLE IF NOT EXISTS public.interviews (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE, -- Cascades delete if user is removed
+    user_id UUID NOT NULL REFERENCES public.users (id) ON DELETE CASCADE, -- Updated to point to public.users for consistency
     job_id UUID REFERENCES public.jobs(id) ON DELETE SET NULL, 
     company TEXT NOT NULL,
     role TEXT NOT NULL,
