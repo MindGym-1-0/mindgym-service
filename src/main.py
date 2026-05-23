@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager  # Added for modern lifespan handling
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,8 @@ from src.api.auth import v1_router as auth_v1_router
 from src.api.onboarding import router as onboarding_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
+# 1. IMPORT YOUR NEW STREAKS ROUTER HERE
+from src.api.streaks import router as streaks_router
 from src.lib import config
 from src.lib.config import settings
 
@@ -20,12 +23,27 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handles startup validation routines cleanly via modern lifespan architecture"""
+    # 🚀 Everything here runs on application STARTUP
+    if not getattr(settings, "supabase_service_role_key", None):
+        logger.warning("SUPABASE_SERVICE_ROLE_KEY is not configured")
+    if not getattr(settings, "resolved_supabase_jwt_secret", None):
+        logger.warning("SUPABASE_JWT_SECRET is not configured")
+        
+    yield  # ⏸️ Application serves traffic while paused here
+    
+    # 🛑 Everything here runs on application SHUTDOWN (Optional)
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application"""
     app = FastAPI(
         title="MindGym Service",
         description="Backend API for MindGym - AI-powered job search companion",
         version="0.1.0",
+        lifespan=lifespan,  # Hooking up the clean, warning-free lifespan manager
     )
 
     # Combine both CORS origins requirements
@@ -55,12 +73,8 @@ def create_app() -> FastAPI:
     app.include_router(jobs_router, prefix="/api/applications", tags=["jobs"])
     app.include_router(jobs_id_router, prefix="/api/applications", tags=["jobs"])
 
-    @app.on_event("startup")
-    async def validate_configuration() -> None:
-        if not getattr(settings, "supabase_service_role_key", None):
-            logger.warning("SUPABASE_SERVICE_ROLE_KEY is not configured")
-        if not getattr(settings, "resolved_supabase_jwt_secret", None):
-            logger.warning("SUPABASE_JWT_SECRET is not configured")
+    # 2. MOUNT THE STREAKS ROUTER WITH THE REQUIRED PREFIX AND TAGS
+    app.include_router(streaks_router, prefix="/api/streaks", tags=["streaks"])
 
     @app.get("/")
     async def root():
