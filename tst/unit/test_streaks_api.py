@@ -44,7 +44,9 @@ def test_increment_streak_new_user(client):
     json_data = response.json()
     assert json_data["current_streak"] == 1
     assert json_data["longest_streak"] == 1
-    assert json_data["milestone"] is None  # Added explicitly based on peer review recommendations
+    assert (
+        json_data["milestone"] is None
+    )  # Added explicitly based on peer review recommendations
 
 
 def test_increment_streak_already_active_today(client):
@@ -66,7 +68,9 @@ def test_increment_streak_already_active_today(client):
     json_data = response.json()
     assert json_data["current_streak"] == 5
     assert json_data["longest_streak"] == 10
-    assert json_data["milestone"] is None  # Added explicitly based on peer review recommendations
+    assert (
+        json_data["milestone"] is None
+    )  # Added explicitly based on peer review recommendations
 
 
 def test_increment_streak_consecutive_day_yesterday(client):
