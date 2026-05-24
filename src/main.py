@@ -12,6 +12,8 @@ from src.api.auth import v1_router as auth_v1_router
 from src.api.onboarding import router as onboarding_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
+from src.api.sessions import router as sessions_router
+from src.api.sessions import users_router as users_router
 from src.lib import config
 from src.lib.config import settings
 
@@ -54,6 +56,10 @@ def create_app() -> FastAPI:
     # Include your Job Tracker features under the required specification
     app.include_router(jobs_router, prefix="/api/applications", tags=["jobs"])
     app.include_router(jobs_id_router, prefix="/api/applications", tags=["jobs"])
+
+    # Session and user profile routes
+    app.include_router(sessions_router)
+    app.include_router(users_router)
 
     @app.on_event("startup")
     async def validate_configuration() -> None:
