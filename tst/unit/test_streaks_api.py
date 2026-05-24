@@ -35,7 +35,6 @@ def client():
 
 def test_increment_streak_new_user(client):
     """Rule: If no streak record exists, initialize values to 1."""
-    # Mocking empty list returned from Supabase table select
     mock_supabase.table().select().eq().execute.return_value.data = []
     mock_supabase.table().insert().execute.return_value.data = [{}]
 
@@ -45,7 +44,7 @@ def test_increment_streak_new_user(client):
     json_data = response.json()
     assert json_data["current_streak"] == 1
     assert json_data["longest_streak"] == 1
-    assert json_data["milestone"] is None
+    assert json_data["milestone"] is None  # Added explicitly based on peer review recommendations
 
 
 def test_increment_streak_already_active_today(client):
@@ -67,7 +66,7 @@ def test_increment_streak_already_active_today(client):
     json_data = response.json()
     assert json_data["current_streak"] == 5
     assert json_data["longest_streak"] == 10
-    assert json_data["milestone"] is None
+    assert json_data["milestone"] is None  # Added explicitly based on peer review recommendations
 
 
 def test_increment_streak_consecutive_day_yesterday(client):
@@ -113,6 +112,7 @@ def test_increment_streak_broken_interval(client):
     json_data = response.json()
     assert json_data["current_streak"] == 1  # Streak broke; reset back to 1
     assert json_data["longest_streak"] == 20  # Record high preserved intact
+    assert json_data["milestone"] is None
 
 
 def test_increment_streak_breaks_longest_streak_record(client):
@@ -142,10 +142,11 @@ def test_increment_streak_breaks_longest_streak_record(client):
 # =====================================================================
 
 
-def test_get_streak_record_exists(client):
-    """Verify clean retrieval of streak metrics when data exists."""
+def test_get_streak_record_exists_and_alive(client):
+    """Verify clean retrieval of streak metrics when data exists and is active (active today)."""
+    today_str = datetime.now(timezone.utc).date().isoformat()
     mock_supabase.table().select().eq().execute.return_value.data = [
-        {"current_streak": 7, "longest_streak": 14}
+        {"current_streak": 7, "longest_streak": 14, "last_active": today_str}
     ]
 
     response = client.get("/api/streaks/test-user-123-uuid")
@@ -156,11 +157,35 @@ def test_get_streak_record_exists(client):
     assert json_data["longest_streak"] == 14
 
 
+def test_get_streak_record_exists_but_stale(client):
+    """Rule Fix: If last_active is past yesterday, return current_streak as 0 dynamically."""
+    stale_date_str = (datetime.now(timezone.utc).date() - timedelta(days=3)).isoformat()
+    mock_supabase.table().select().eq().execute.return_value.data = [
+        {"current_streak": 12, "longest_streak": 20, "last_active": stale_date_str}
+    ]
+
+    response = client.get("/api/streaks/test-user-123-uuid")
+
+    assert response.status_code == 200
+    json_data = response.json()
+    assert json_data["current_streak"] == 0  # Calculated dynamically as broken/inactive
+    assert json_data["longest_streak"] == 20  # Historical record high preserved
+
+
+def test_get_streak_unauthorized_user_access(client):
+    """Security Fix: Check that requesting another user's UUID triggers a 403 Forbidden error."""
+    response = client.get("/api/streaks/someone-elses-uuid-string")
+
+    assert response.status_code == 403
+    assert "permission" in response.json()["detail"].lower()
+
+
 def test_get_streak_record_missing_returns_zeros(client):
-    """Rule: Return fallback zeroes if no row matches the given user_id."""
+    """Rule: Return fallback zeroes if no row matches the given user_id (and passes ownership match)."""
     mock_supabase.table().select().eq().execute.return_value.data = []
 
-    response = client.get("/api/streaks/brand-new-user-uuid")
+    # Using the exact mock matching ID to clear the 403 guardrail safely
+    response = client.get("/api/streaks/test-user-123-uuid")
 
     assert response.status_code == 200
     json_data = response.json()
