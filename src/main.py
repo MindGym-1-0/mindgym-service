@@ -1,3 +1,5 @@
+# src/main.py
+
 """FastAPI application factory and main entry point"""
 
 from __future__ import annotations
@@ -13,9 +15,12 @@ from src.api.auth import v1_router as auth_v1_router
 from src.api.onboarding import router as onboarding_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
-
-# 1. IMPORT YOUR NEW STREAKS ROUTER HERE
 from src.api.streaks import router as streaks_router
+from src.api.mood_logs import router as mood_logs_router
+
+# 💡 Import the new daily focus generation engine router
+from src.api.daily_focus import router as daily_focus_router
+
 from src.lib import config
 from src.lib.config import settings
 
@@ -74,8 +79,16 @@ def create_app() -> FastAPI:
     app.include_router(jobs_router, prefix="/api/applications", tags=["jobs"])
     app.include_router(jobs_id_router, prefix="/api/applications", tags=["jobs"])
 
-    # 2. MOUNT THE STREAKS ROUTER WITH THE REQUIRED PREFIX AND TAGS
+    # Mount the streaks router
     app.include_router(streaks_router, prefix="/api/streaks", tags=["streaks"])
+
+    # Mount the mood logs router with prefix /api/mood-logs and tag mood-logs
+    app.include_router(mood_logs_router, prefix="/api/mood-logs", tags=["mood-logs"])
+
+    # 💡 Mount the new daily focus generation engine router
+    app.include_router(
+        daily_focus_router, prefix="/api/daily-focus", tags=["Daily Focus"]
+    )
 
     @app.get("/")
     async def root():
