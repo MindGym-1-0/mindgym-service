@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 import logging
-from datetime import datetime, timedelta, date
-from typing import List, Dict, Optional
 from uuid import UUID
+from datetime import date, timedelta  # Cleaned up explicit imports
+from typing import Dict  # Fixed to resolve Dict type hint error
 from fastapi import APIRouter, HTTPException, status
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
