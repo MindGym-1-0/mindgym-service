@@ -1,22 +1,23 @@
 # tst/unit/test_mood_logs_api.py
 
 from __future__ import annotations
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from unittest.mock import MagicMock, patch
-from uuid import uuid4, UUID
+from uuid import uuid4
 
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
-# Import the actual dependency functions to override them
+# IMPORT THE ACTUAL FUNCTION IMPLEMENTATIONS EXECUTED BY FASTAPI
 from src.lib.auth import require_current_user_id, require_current_user_token
 from src.main import app
 
 client = TestClient(app)
 
-# Generate a static consistent UUID for testing auth overrides
+# Generate consistent static UUIDs for multi-tenant isolation testing
 TEST_USER_UUID = uuid4()
+MALICIOUS_USER_UUID = uuid4()
 
 
 @pytest.fixture
@@ -30,13 +31,17 @@ def mock_supabase():
 
 @pytest.fixture(autouse=True)
 def mock_auth_dependencies():
-    """Bypasses custom Supabase auth checks by injection overriding callables."""
-    app.dependency_overrides[require_current_user_token] = (
-        lambda: "fake-mock-session-token"
-    )
+    """
+    Bypasses FastAPI auth constraints globally by overriding the shared 
+    functional implementations tracking across sub-routers.
+    """
+    # Force overrides on the concrete callable execution blocks
     app.dependency_overrides[require_current_user_id] = lambda: TEST_USER_UUID
+    app.dependency_overrides[require_current_user_token] = lambda: "fake-mock-session-token"
+    
     yield
-    # Clear overrides after each test run to keep testing clean
+    
+    # Clean up overrides cleanly after each individual test run
     app.dependency_overrides.clear()
 
 
@@ -53,7 +58,7 @@ def test_create_mood_log_success(mock_supabase):
         "user_id": user_id,
         "score": 8,
         "note": "Feeling productive today!",
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
     mock_query_result = MagicMock()
@@ -79,7 +84,10 @@ def test_create_mood_log_validation_error(mock_supabase, invalid_score):
         "note": "Testing boundary limits",
     }
     response = client.post("/api/mood-logs", json=payload)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.status_code in [
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+    ]
 
 
 # =====================================================================
@@ -104,18 +112,25 @@ def test_get_mood_summary_empty_history(mock_supabase):
     assert data["total_logs"] == 0
     assert data["avg_score"] is None
     assert len(data["last_7_days"]) == 7
-    assert data["last_7_days"][0]["date"] == date.today().strftime("%Y-%m-%d")
+    
+    today_utc_str = datetime.now(timezone.utc).date().strftime("%Y-%m-%d")
+    assert data["last_7_days"][0]["date"] == today_utc_str
     assert data["last_7_days"][0]["score"] is None
 
 
-def test_get_mood_summary_with_logs(mock_supabase):
-    """Verifies calculation metrics and chronological date structural positioning."""
+def test_get_mood_summary_with_logs_deduplication(mock_supabase):
+    """
+    Verifies metric calculation accuracy and asserts that if a user submits multiple
+    logs on the same day, the newest chronologically is kept while deduplicating historical arrays.
+    """
     user_id = str(TEST_USER_UUID)
-    today_str = date.today().strftime("%Y-%m-%d")
-    yesterday_str = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    today_str = datetime.now(timezone.utc).date().strftime("%Y-%m-%d")
+    yesterday_str = (datetime.now(timezone.utc).date() - timedelta(days=1)).strftime("%Y-%m-%d")
 
+    # Mocks return dataset ordered DESC (newest timestamp first)
     mock_records = [
-        {"score": 10, "created_at": f"{today_str}T10:00:00+00:00"},
+        {"score": 10, "created_at": f"{today_str}T18:00:00+00:00"},  # Newest entry for today
+        {"score": 4, "created_at": f"{today_str}T08:00:00+00:00"},   # Older entry for today (should be skipped in graph)
         {"score": 6, "created_at": f"{yesterday_str}T15:30:00+00:00"},
     ]
 
@@ -129,13 +144,60 @@ def test_get_mood_summary_with_logs(mock_supabase):
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    assert data["total_logs"] == 2
-    assert data["avg_score"] == 8.0
+    
+    assert data["total_logs"] == 3
+    assert data["avg_score"] == round((10 + 4 + 6) / 3, 1)
 
     assert data["last_7_days"][0]["date"] == today_str
-    assert data["last_7_days"][0]["score"] == 10
+    assert data["last_7_days"][0]["score"] == 10  # Confirms deduplication saved the newest entry
 
     assert data["last_7_days"][1]["date"] == yesterday_str
     assert data["last_7_days"][1]["score"] == 6
 
-    assert data["last_7_days"][2]["score"] is None
+
+def test_get_mood_summary_with_period_filters(mock_supabase):
+    """Verifies that shifting the period filter query limits the data row average computations cleanly."""
+    user_id = str(TEST_USER_UUID)
+    today = datetime.now(timezone.utc).date()
+    
+    today_str = today.strftime("%Y-%m-%d")
+    twelve_days_ago_str = (today - timedelta(days=12)).strftime("%Y-%m-%d")
+
+    mock_records = [
+        {"score": 8, "created_at": f"{today_str}T12:00:00+00:00"},
+        {"score": 2, "created_at": f"{twelve_days_ago_str}T12:00:00+00:00"},
+    ]
+
+    mock_query_result = MagicMock()
+    mock_query_result.data = mock_records
+    mock_supabase.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = (
+        mock_query_result
+    )
+
+    # 1. Test week period filtering logic
+    res_week = client.get(f"/api/mood-logs/summary?user_id={user_id}&period=week")
+    assert res_week.status_code == status.HTTP_200_OK
+    assert res_week.json()["total_logs"] == 1
+    assert res_week.json()["avg_score"] == 8.0
+
+    # 2. Test month period filtering logic
+    res_month = client.get(f"/api/mood-logs/summary?user_id={user_id}&period=month")
+    assert res_month.status_code == status.HTTP_200_OK
+    assert res_month.json()["total_logs"] == 2
+    assert res_month.json()["avg_score"] == round((8 + 2) / 2, 1)
+
+
+def test_get_mood_summary_cross_tenant_unauthorized(mock_supabase):
+    """
+    CRITICAL SECURITY TEST: Verifies that an authenticated caller attempting to supply
+    another user's UUID into the parameters is immediately blocked with a 403 Forbidden status code.
+    """
+    malicious_target_id = str(MALICIOUS_USER_UUID)
+
+    response = client.get(f"/api/mood-logs/summary?user_id={malicious_target_id}")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json()["detail"] == "Access to requested profile metrics is denied."
+    
+    # Assert database collection was intercepted completely
+    mock_supabase.table.assert_not_called()
