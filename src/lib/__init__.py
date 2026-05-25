@@ -1,1 +1,1 @@
-"""Shared libraries (config, clients, auth)."""
+"""Shared utilities and helpers"""

@@ -1,196 +1,123 @@
-import logging
-
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
-
-from src.lib.auth_dependencies import (
-    _extract_bearer_token,
-    _extract_cookie_token,
-    get_current_user,
+"""Authentication endpoints for Google OAuth and session management"""
+from fastapi import APIRouter, HTTPException, status, Depends, Header
+from typing import Optional
+from src.types.models import GoogleAuthTokenRequest, AuthResponse
+from src.lib.oauth import (
+    exchange_auth_code_for_token,
+    verify_google_token,
+    create_jwt_token,
+    verify_jwt_token,
 )
-from src.lib.auth_service import (
-    AuthRateLimitError,
-    AuthenticationError,
-    InvalidSignupInputError,
-    SignupDisabledError,
-    UpstreamAuthServiceError,
-    UserAlreadyExistsError,
-    revoke_auth_session,
-    login_with_email_password,
-    signup_with_email_password,
-)
-from src.lib.config import get_settings
-from src.types.auth import AuthResponse, LoginRequest, LogoutResponse, SignupRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-v1_router = APIRouter(prefix="/auth", tags=["auth"])
-logger = logging.getLogger(__name__)
 
 
-def _cookie_config() -> dict:
-    settings = get_settings()
-    return {
-        "httponly": True,
-        "secure": settings.resolved_auth_cookie_secure,
-        "samesite": settings.resolved_auth_cookie_samesite,
-        "path": "/",
-        "domain": settings.auth_cookie_domain,
-    }
-
-
-def _set_auth_cookies(response: Response, auth_result: dict) -> None:
-    cookie_cfg = _cookie_config()
-    session = auth_result.get("session") or {}
-    response.set_cookie(
-        key="access_token",
-        value=session.get("access_token", ""),
-        max_age=session.get("expires_in") or 3600,
-        **cookie_cfg,
-    )
-
-    refresh_token = session.get("refresh_token")
-    if refresh_token:
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_token,
-            max_age=60 * 60 * 24,
-            **cookie_cfg,
+@router.post("/google/callback", response_model=AuthResponse)
+async def google_auth_callback(request: GoogleAuthTokenRequest):
+    """
+    Google OAuth callback endpoint
+    
+    Exchange authorization code for tokens and create user session
+    
+    Args:
+        request: Contains the authorization code from Google
+        
+    Returns:
+        AuthResponse with JWT token and user info
+    """
+    try:
+        # Exchange code for Google tokens
+        token_response = await exchange_auth_code_for_token(request.code)
+        
+        # Verify the ID token
+        id_token = token_response.get("id_token")
+        if not id_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No ID token received from Google"
+            )
+        
+        google_user = verify_google_token(id_token)
+        
+        # Extract user info
+        user_id = google_user.get("sub")  # Google's unique identifier
+        email = google_user.get("email")
+        
+        if not user_id or not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing user information from Google"
+            )
+        
+        # TODO: Create or update user in Supabase
+        # For now, we'll just create a token
+        
+        # Create JWT token for your app
+        access_token = create_jwt_token(user_id, email)
+        
+        return AuthResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user_id=user_id,
+            email=email
+        )
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication failed"
         )
 
 
-def _clear_auth_cookies(response: Response) -> None:
-    cookie_cfg = _cookie_config()
-    response.delete_cookie(
-        key="access_token", path="/", domain=cookie_cfg.get("domain")
-    )
-    response.delete_cookie(
-        key="refresh_token", path="/", domain=cookie_cfg.get("domain")
-    )
-
-
-def _as_auth_response(auth_result: dict, message: str | None = None) -> AuthResponse:
-    return AuthResponse.model_validate(
-        {
-            "authenticated": bool(auth_result.get("authenticated")),
-            "user": auth_result.get("user"),
-            "message": message,
-        }
-    )
-
-
-@router.post(
-    "/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED
-)
-async def signup(payload: SignupRequest, response: Response) -> AuthResponse:
-    """Create a Supabase Auth user and persist the session when available."""
-
-    try:
-        auth_result = await signup_with_email_password(payload.email, payload.password)
-    except UserAlreadyExistsError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="User already exists",
-        ) from exc
-    except InvalidSignupInputError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid email or password format",
-        ) from exc
-    except SignupDisabledError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Signup is currently disabled",
-        ) from exc
-    except AuthRateLimitError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many signup attempts. Please try again later.",
-        ) from exc
-    except UpstreamAuthServiceError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service unavailable",
-        ) from exc
-    except Exception as exc:
-        logger.exception("Unexpected signup error for email=%s", payload.email)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unexpected signup error",
-        ) from exc
-
-    if auth_result.get("authenticated"):
-        _set_auth_cookies(response, auth_result)
-
-    logger.info("User signup successful for email=%s", payload.email)
-    return _as_auth_response(auth_result, message="Signup successful")
-
-
-@router.post("/login", response_model=AuthResponse)
-async def login(payload: LoginRequest, response: Response) -> AuthResponse:
-    """Authenticate with Supabase and set secure HTTP-only cookies."""
-
-    try:
-        auth_result = await login_with_email_password(payload.email, payload.password)
-    except AuthenticationError as exc:
+@router.post("/verify", response_model=dict)
+async def verify_token(authorization: Optional[str] = Header(None)):
+    """
+    Verify JWT token
+    
+    Args:
+        authorization: Bearer token from Authorization header
+        
+    Returns:
+        Token payload if valid
+    """
+    if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        ) from exc
-    except UpstreamAuthServiceError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service unavailable",
-        ) from exc
-    except Exception as exc:
-        logger.exception("Unexpected login error for email=%s", payload.email)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unexpected login error",
-        ) from exc
-
-    _set_auth_cookies(response, auth_result)
-    logger.info("User login successful for email=%s", payload.email)
-    return _as_auth_response(auth_result, message="Login successful")
-
-
-@router.post("/logout", response_model=LogoutResponse)
-async def logout(
-    response: Response,
-    authorization: str | None = Header(default=None),
-    access_token: str | None = Cookie(default=None),
-    refresh_token: str | None = Cookie(default=None),
-) -> LogoutResponse:
-    """Clear cookies and revoke the current Supabase session when possible."""
-
-    token = _extract_bearer_token(authorization) or _extract_cookie_token(access_token)
-    revoked = False
+            detail="Missing authorization header"
+        )
+    
     try:
-        revoked = await revoke_auth_session(token, refresh_token)
-    except Exception:
-        logger.exception("Unexpected logout error")
-
-    _clear_auth_cookies(response)
-    if not token:
-        logger.info("Logout request without active session token")
-        return LogoutResponse(message="No active session")
-    if revoked:
-        logger.info("Logout completed with remote session revocation")
-        return LogoutResponse(message="Signed out")
-
-    logger.info(
-        "Logout completed locally; remote session revocation skipped or unavailable"
-    )
-    return LogoutResponse(message="Signed out locally")
-
-
-@router.get("/me", response_model=AuthResponse)
-async def read_me(current_user: dict = Depends(get_current_user)) -> AuthResponse:
-    """Return the authenticated user profile."""
-
-    return AuthResponse(authenticated=True, user=current_user)
+        # Extract token from "Bearer <token>"
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise ValueError("Invalid authentication scheme")
+        
+        payload = verify_jwt_token(token)
+        return payload
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
 
 
-@v1_router.get("/me", response_model=AuthResponse)
-async def read_me_v1(current_user: dict = Depends(get_current_user)) -> AuthResponse:
-    """Example protected endpoint for downstream feature teams."""
-
-    return AuthResponse(authenticated=True, user=current_user)
+@router.get("/logout")
+async def logout():
+    """
+    Logout endpoint (frontend should discard the token)
+    
+    Returns:
+        Success message
+    """
+    return {"message": "Logged out successfully"}

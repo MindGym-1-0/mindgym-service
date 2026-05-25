@@ -1,12 +1,11 @@
 """Pydantic models for request and response validation"""
-
 from enum import Enum
+from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 
 class JobSearchStage(str, Enum):
     """Current stage in the job search process"""
-
     EXPLORING = "exploring"
     PREPARING = "preparing"
     ACTIVELY_SEARCHING = "actively_searching"
@@ -15,7 +14,6 @@ class JobSearchStage(str, Enum):
 
 class AnxietyLevel(str, Enum):
     """User's current anxiety level"""
-
     LOW = "low"
     MODERATE = "moderate"
     HIGH = "high"
@@ -32,16 +30,9 @@ class AnxietyLevel(str, Enum):
 
 class OnboardingRequest(BaseModel):
     """Request payload for user onboarding"""
-
-    job_goal: str = Field(
-        ..., min_length=1, max_length=500, description="User's job goal or desired role"
-    )
-    job_search_stage: JobSearchStage = Field(
-        ..., description="Current stage in the job search"
-    )
-    anxiety_level: int = Field(
-        ..., ge=1, le=10, description="Current anxiety level on a 1-10 scale"
-    )
+    job_goal: str = Field(..., min_length=1, max_length=500, description="User's job goal or desired role")
+    job_search_stage: JobSearchStage = Field(..., description="Current stage in the job search")
+    anxiety_level: int = Field(..., ge=1, le=10, description="Current anxiety level on a 1-10 scale")
 
     @field_validator("anxiety_level", mode="before")
     def normalize_anxiety_level(cls, value):
@@ -58,19 +49,31 @@ class OnboardingRequest(BaseModel):
                 )
         return value
 
+
+class GoogleAuthTokenRequest(BaseModel):
+    """Request payload for Google OAuth token exchange"""
+    code: str = Field(..., description="Authorization code from Google")
+
+
+class AuthResponse(BaseModel):
+    """Response payload for successful authentication"""
+    access_token: str = Field(..., description="JWT access token")
+    token_type: str = Field(default="bearer", description="Token type")
+    user_id: str = Field(..., description="User ID")
+    email: str = Field(..., description="User email")
+
     class Config:
         json_schema_extra = {
             "example": {
                 "job_goal": "Senior Software Engineer at a tech company",
                 "job_search_stage": "actively_searching",
-                "anxiety_level": "moderate",
+                "anxiety_level": "moderate"
             }
         }
 
 
 class OnboardingResponse(BaseModel):
     """Response payload after successful onboarding"""
-
     success: bool
     message: str
     user_id: str | None = None
@@ -80,6 +83,6 @@ class OnboardingResponse(BaseModel):
             "example": {
                 "success": True,
                 "message": "Onboarding completed successfully",
-                "user_id": "user_123",
+                "user_id": "user_123"
             }
         }

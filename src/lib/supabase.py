@@ -1,29 +1,14 @@
 """Supabase integration helpers."""
-
 from __future__ import annotations
 
+import logging
 from typing import Any
-import httpx
-from supabase import Client, create_client
 
-from src.lib import config
+import httpx
+
 from src.lib.config import settings
 
-
-def get_supabase_user_client(token: str) -> Client:
-    """Initialize a Supabase client authenticated with the user's token."""
-    url = config.supabase_url()
-    anon_key = config.supabase_anon_key()
-
-    if not url or not anon_key:
-        raise RuntimeError(
-            "SUPABASE_URL and SUPABASE_ANON_KEY must be set in the environment."
-        )
-
-    client = create_client(url, anon_key)
-    client.postgrest.auth(token)
-
-    return client
+logger = logging.getLogger(__name__)
 
 
 async def insert_onboarding_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -41,10 +26,12 @@ async def insert_onboarding_record(record: dict[str, Any]) -> dict[str, Any]:
         "Prefer": "return=representation",
     }
 
+    logger.info(f"Inserting onboarding record to {url}")
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(url, json=record, headers=headers)
         response.raise_for_status()
         data = response.json()
+        logger.info(f"Supabase response: {data}")
         if isinstance(data, list):
             return data[0] if data else {}
         return data
