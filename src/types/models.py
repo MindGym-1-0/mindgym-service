@@ -1,33 +1,27 @@
 """Pydantic models for request and response validation"""
 
 from enum import Enum
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class JobSearchStage(str, Enum):
     """Current stage in the job search process"""
 
-    EXPLORING = "exploring"
-    PREPARING = "preparing"
-    ACTIVELY_SEARCHING = "actively_searching"
-    INTERVIEWING = "interviewing"
+    SENDING_APPLICATIONS = "Sending applications"
+    GETTING_RECRUITER_CALLS = "Getting recruiter calls"
+    IN_INTERVIEWS = "In interviews"
+    FINAL_ROUNDS_OFFERS = "Final rounds / offers"
 
 
-class AnxietyLevel(str, Enum):
-    """User's current anxiety level"""
+class MoodChallenge(str, Enum):
+    """Emotional challenge options shown during onboarding"""
 
-    LOW = "low"
-    MODERATE = "moderate"
-    HIGH = "high"
-    VERY_HIGH = "very_high"
-
-    def score(self) -> int:
-        return {
-            self.LOW: 1,
-            self.MODERATE: 4,
-            self.HIGH: 7,
-            self.VERY_HIGH: 10,
-        }[self]
+    INTERVIEW_ANXIETY = "interview-anxiety"
+    OVERTHINKING = "overthinking"
+    REJECTION = "rejection"
+    BURNOUT = "burnout"
+    MOTIVATION = "motivation"
+    CONFIDENCE = "confidence"
 
 
 class OnboardingRequest(BaseModel):
@@ -39,31 +33,16 @@ class OnboardingRequest(BaseModel):
     job_search_stage: JobSearchStage = Field(
         ..., description="Current stage in the job search"
     )
-    anxiety_level: int = Field(
-        ..., ge=1, le=10, description="Current anxiety level on a 1-10 scale"
+    mood: str = Field(
+        ..., min_length=1, description="Emotional challenge selected during onboarding"
     )
-
-    @field_validator("anxiety_level", mode="before")
-    def normalize_anxiety_level(cls, value):
-        if isinstance(value, AnxietyLevel):
-            return value.score()
-        if isinstance(value, str):
-            if value.isdigit():
-                return int(value)
-            try:
-                return AnxietyLevel(value).score()
-            except ValueError:
-                raise ValueError(
-                    "anxiety_level must be an integer 1-10 or one of low, moderate, high, very_high"
-                )
-        return value
 
     class Config:
         json_schema_extra = {
             "example": {
                 "job_goal": "Senior Software Engineer at a tech company",
-                "job_search_stage": "actively_searching",
-                "anxiety_level": "moderate",
+                "job_search_stage": "Sending applications",
+                "mood": "interview-anxiety",
             }
         }
 
