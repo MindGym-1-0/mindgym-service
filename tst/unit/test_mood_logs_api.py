@@ -1,7 +1,7 @@
 # tst/unit/test_mood_logs_api.py
 
 from __future__ import annotations
-from datetime import datetime, date, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
