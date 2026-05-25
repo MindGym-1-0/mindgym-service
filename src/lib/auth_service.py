@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Any, Optional
 
-from src.lib.supabase_client import get_supabase_admin_client, get_supabase_client
+from src.lib.supabase_client import get_supabase_admin_client, get_supabase_client, create_fresh_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +213,7 @@ async def revoke_auth_session(
 
     if refresh_token:
         try:
-            client = get_supabase_client()
+            client = create_fresh_supabase_client()
             await asyncio.to_thread(
                 client.auth.set_session, access_token, refresh_token
             )
