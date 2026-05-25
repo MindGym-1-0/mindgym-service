@@ -26,7 +26,7 @@ async def fetch_user_context(user_id: str) -> dict:
         .maybe_single()
         .execute()
     )
-    return result.data or {}
+    return getattr(result, 'data', None) or {}
 
 
 async def insert_session(user_id: str, request: SessionStartRequest, script: SessionScript) -> str | None:
@@ -65,7 +65,7 @@ async def fetch_session(session_id: str) -> dict | None:
         .maybe_single()
         .execute()
     )
-    return result.data or None
+    return getattr(result, 'data', None) or None
 
 
 async def update_session(session_id: str, post_score: int, mood_delta: int) -> None:
@@ -157,7 +157,7 @@ async def fetch_session_detail(user_id: str, session_id: str) -> dict:
         .maybe_single()
         .execute()
     )
-    row = result.data
+    row = getattr(result, 'data', None)
     if not row:
         raise LookupError(f'Session {session_id!r} not found.')
     if row.get('user_id') and row['user_id'] != user_id:
