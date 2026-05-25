@@ -1,6 +1,5 @@
 """Pydantic models for request and response validation"""
 from enum import Enum
-from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 
