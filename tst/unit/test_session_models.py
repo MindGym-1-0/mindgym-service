@@ -18,12 +18,15 @@ def test_session_start_request_valid():
         desired_feeling='confident',
         time_available='10 min',
         pre_score=7,
+        company='Google',
+        role='Engineer',
     )
     assert req.preparation_for == 'interview_tomorrow'
     assert req.pre_score == 7
 
 
 def test_session_start_request_all_preparation_for_values():
+    mode1_types = {'interview_tomorrow', 'recruiter_call'}
     valid_values = [
         'interview_tomorrow',
         'recruiter_call',
@@ -34,13 +37,17 @@ def test_session_start_request_all_preparation_for_values():
         'general_reset',
     ]
     for value in valid_values:
-        req = SessionStartRequest(
+        kwargs = dict(
             preparation_for=value,
             current_feeling='okay',
             desired_feeling='calm',
             time_available='5 min',
             pre_score=5,
         )
+        if value in mode1_types:
+            kwargs['company'] = 'Acme'
+            kwargs['role'] = 'Engineer'
+        req = SessionStartRequest(**kwargs)
         assert req.preparation_for == value
 
 
@@ -136,16 +143,15 @@ def test_session_start_request_invalid_time_available():
         )
 
 
-def test_session_start_request_company_and_role_optional():
-    req = SessionStartRequest(
-        preparation_for='interview_tomorrow',
-        current_feeling='nervous',
-        desired_feeling='confident',
-        time_available='10 min',
-        pre_score=7,
-    )
-    assert req.company is None
-    assert req.role is None
+def test_session_start_request_company_and_role_required_for_mode1():
+    with pytest.raises(ValidationError):
+        SessionStartRequest(
+            preparation_for='interview_tomorrow',
+            current_feeling='nervous',
+            desired_feeling='confident',
+            time_available='10 min',
+            pre_score=7,
+        )
 
 
 def test_session_start_request_company_and_role_provided():
