@@ -142,6 +142,32 @@ def test_generate_script_returns_none_on_invalid_json() -> None:
 
 
 @pytest.mark.unit
+def test_generate_script_uses_configured_model_name() -> None:
+    """generate_script must pass the model name from settings to GenerativeModel."""
+    mock_response = MagicMock()
+    mock_response.text = _VALID_GEMINI_RESPONSE
+
+    with patch('src.lib.gemini_service.genai') as mock_genai, \
+         patch('src.lib.gemini_service.settings') as mock_settings, \
+         patch('src.lib.prompt_builder.build_prompt', return_value='mock prompt'):
+        mock_settings.gemini_api_key = 'test-key'
+        mock_settings.gemini_model = 'gemini-2.0-flash'
+        mock_genai.GenerativeModel.return_value.generate_content.return_value = mock_response
+
+        generate_script(
+            preparation_for='interview_tomorrow',
+            current_feeling='overwhelmed',
+            desired_feeling='confident',
+            time_available='10 min',
+            company='Stripe',
+            role='PM',
+            user_context=_USER_CONTEXT,
+        )
+
+    mock_genai.GenerativeModel.assert_called_once_with('gemini-2.0-flash')
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize('pre_score,expected_tone', [
     (1, 'slow and calming'),
     (2, 'slow and calming'),
