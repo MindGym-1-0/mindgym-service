@@ -3,16 +3,10 @@
 from __future__ import annotations
 import logging
 from uuid import UUID
-<<<<<<< HEAD
-from datetime import date, timedelta  # Cleaned up explicit imports
-from typing import Dict  # Fixed to resolve Dict type hint error
-from fastapi import APIRouter, HTTPException, status
-=======
 from typing import Dict
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, HTTPException, status, Query
->>>>>>> a0d8292 (feat: implement mood logs api endpoints and verify passing unit tests)
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client

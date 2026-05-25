@@ -1,0 +1,267 @@
+﻿from __future__ import annotations
+import asyncio
+import logging
+import json
+from datetime import date, datetime, timedelta
+from typing import Optional, Dict, Any
+from uuid import UUID
+from fastapi import APIRouter, HTTPException, status
+
+# Upgraded to modern SDK namespace
+from google import genai
+
+from src.lib import config
+from src.lib.auth import CurrentUserId, CurrentUserToken
+from src.lib.supabase import get_supabase_user_client
+from src.types.daily_focus import ActionType, GeminiDailyFocusOutput, DailyFocusResponse
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+# Initialize the standard Client. It picks up your GEMINI_API_KEY environment variable.
+# If you need to fallback to config.supabase_anon_key(), pass api_key=config.supabase_anon_key()
+ai_client = genai.Client()
+
+
+def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
+    """Generates a highly contextual fallback response if Gemini fails or times out."""
+    logger.warning("Executing local fallback logic for daily focus generation.")
+    today = date.today()
+
+    # 1. Check for urgent interview in the next 2 days
+    upcoming_interviews = context.get("interviews", [])
+    for iv in upcoming_interviews:
+        try:
+            iv_date = datetime.strptime(
+                iv["interview_date"].split("T")[0], "%Y-%m-%d"
+            ).date()
+            if today <= iv_date <= (today + timedelta(days=2)):
+                return GeminiDailyFocusOutput(
+                    action_1_text=f"Prepare for your upcoming interview with {iv.get('company')} for the {iv.get('role')} role.",
+                    action_1_type=ActionType.PREPARE_INTERVIEW,
+                    action_2_text="Review your application details and core engineering projects.",
+                    action_2_type=ActionType.GENERIC_PIPELINE,
+                )
+        except Exception:
+            continue
+
+    # 2. Check for stagnant applications (> 14 days)
+    active_jobs = context.get("jobs", [])
+    for job in active_jobs:
+        try:
+            last_moved = datetime.strptime(
+                job["last_moved_at"].split("T")[0], "%Y-%m-%d"
+            ).date()
+            if (today - last_moved).days > 14:
+                return GeminiDailyFocusOutput(
+                    action_1_text=f"Follow up with the hiring team or recruiter at {job.get('company')} regarding your {job.get('role')} application.",
+                    action_1_type=ActionType.FOLLOW_UP,
+                    action_2_text="Keep looking for new technical opportunities to fill your pipeline.",
+                    action_2_type=ActionType.ADD_APPLICATIONS,
+                )
+        except Exception:
+            continue
+
+    # 3. Check for low pipeline numbers
+    applied_count = sum(1 for j in active_jobs if j.get("stage") == "Applied")
+    if applied_count < 3:
+        return GeminiDailyFocusOutput(
+            action_1_text="Find and apply to at least 2 new jobs today to keep your application pipeline healthy.",
+            action_1_type=ActionType.ADD_APPLICATIONS,
+            action_2_text=None,
+            action_2_type=None,
+        )
+
+    # 4. Total safe default
+    return GeminiDailyFocusOutput(
+        action_1_text="Review your open applications and plan out outreach targets for the week.",
+        action_1_type=ActionType.GENERIC_PIPELINE,
+        action_2_text=None,
+        action_2_type=None,
+    )
+
+
+@router.post(
+    "/generate",
+    response_model=DailyFocusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate daily action focus items using pipeline context",
+)
+async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUserToken):
+    today_str = date.today().strftime("%Y-%m-%d")
+    sb = get_supabase_user_client(token)
+    user_uuid_str = str(current_user_id)
+
+    # STEP 1: Fetch multi-table context from Supabase
+    try:
+        user_res = (
+            sb.table("users")
+            .select("goal, stage, anxiety_level")
+            .eq("id", user_uuid_str)
+            .execute()
+        )
+        user_profile = user_res.data[0] if user_res.data else {}
+
+        jobs_res = (
+            sb.table("jobs")
+            .select("company, role, stage, last_moved_at")
+            .eq("user_id", user_uuid_str)
+            .is_("outcome", "null")
+            .order("last_moved_at", descending=True)
+            .execute()
+        )
+        active_jobs = jobs_res.data or []
+
+        interviews_res = (
+            sb.table("interviews")
+            .select("company, role, interview_date")
+            .eq("user_id", user_uuid_str)
+            .gte("interview_date", today_str)
+            .order("interview_date", ascending=True)
+            .limit(2)
+            .execute()
+        )
+        upcoming_interviews = interviews_res.data or []
+
+        sessions_res = (
+            sb.table("ai_sessions")
+            .select("preparation_for, mood_delta, completed_at")
+            .eq("user_id", user_uuid_str)
+            .is_("completed_at", "not.null")
+            .order("completed_at", descending=True)
+            .limit(3)
+            .execute()
+        )
+        recent_sessions = sessions_res.data or []
+
+        streak_res = (
+            sb.table("streaks")
+            .select("current_streak")
+            .eq("user_id", user_uuid_str)
+            .execute()
+        )
+        current_streak = (
+            streak_res.data[0].get("current_streak", 0) if streak_res.data else 0
+        )
+    except Exception as db_err:
+        logger.error(
+            f"Failed to fetch user context tables from Supabase: {str(db_err)}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to look up user metadata context.",
+        )
+
+    context = {
+        "profile": user_profile,
+        "jobs": active_jobs,
+        "interviews": upcoming_interviews,
+        "sessions": recent_sessions,
+        "streak": current_streak,
+    }
+
+    # STEP 2: Build the prompt
+    prompt = f"""
+    You are an elite, highly personalized AI Job Search Assistant for a software engineer.
+    Analyze the user's specific application pipeline below and return exactly 1 or 2 actions for today.
+    
+    CRITICAL PRODUCT REQUIREMENT: Generic output like "apply to more jobs" or "check your status" is a defect. 
+    You MUST reference specific companies, roles, timeline conditions, or interview opportunities present in the raw data context.
+
+    --- USER PIPELINE CONTEXT ---
+    User Profile: {json.dumps(user_profile)}
+    Active Applications: {json.dumps(active_jobs)}
+    Upcoming Interviews: {json.dumps(upcoming_interviews)}
+    Recent App Interaction Sessions: {json.dumps(recent_sessions)}
+    Current Daily Engagement Streak: {current_streak} days
+    Current Date: {today_str}
+
+    --- BUSINESS RULE PRIORITY HEURISTICS ---
+    1. Urgent Interview Focus: If an interview is scheduled in the next 2 days, action_1 MUST guide preparation for that specific company and role.
+    2. Stagnant Applications: If an application has sat in its current stage without moving for more than 14 days, prioritize an outreach or follow-up action naming that company.
+    3. Low Pipeline Volume: If there are fewer than 3 active items in the 'Applied' stage, prioritize adding new job targets.
+    4. Feedback & Debrief Loops: If an application's stage was advanced recently but no post-session debrief was logged, prioritize a debrief logging task.
+    """
+
+    # STEP 3 & 4: Call Gemini 2.5 Flash with strict formatting validation and a 4-second timeout limit
+    validated_output: Optional[GeminiDailyFocusOutput] = None
+    try:
+
+        async def call_gemini_api():
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: ai_client.models.generate_content(
+                    model="gemini-3.0-flash",
+                    contents=prompt,
+                    # Native enforcement via Pydantic model structure
+                    config={
+                        "response_mime_type": "application/json",
+                        "response_schema": GeminiDailyFocusOutput,
+                    },
+                ),
+            )
+            return response.text
+
+        raw_text = await asyncio.wait_for(call_gemini_api(), timeout=4.0)
+        parsed_json = json.loads(raw_text.strip())
+        validated_output = GeminiDailyFocusOutput(**parsed_json)
+    except (asyncio.TimeoutError, Exception) as err:
+        logger.error(
+            f"Gemini generation failure or timeout window exceeded: {repr(err)}"
+        )
+        validated_output = execute_fallback_logic(context)
+
+    if not validated_output or not validated_output.action_1_text:
+        validated_output = execute_fallback_logic(context)
+
+    # STEP 5 & 6: Save/Upsert and Return
+    try:
+        focus_payload = {
+            "user_id": user_uuid_str,
+            "date": today_str,
+            "action_1_text": validated_output.action_1_text,
+            "action_1_type": (
+                validated_output.action_1_type.value
+                if hasattr(validated_output.action_1_type, "value")
+                else validated_output.action_1_type
+            ),
+            "action_2_text": validated_output.action_2_text,
+            "action_2_type": (
+                validated_output.action_2_type.value
+                if validated_output.action_2_type
+                and hasattr(validated_output.action_2_type, "value")
+                else validated_output.action_2_type
+            ),
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+
+        existing_check = (
+            sb.table("daily_focus")
+            .select("id")
+            .eq("user_id", user_uuid_str)
+            .eq("date", today_str)
+            .execute()
+        )
+
+        if existing_check.data:
+            record_id = existing_check.data[0]["id"]
+            db_result = (
+                sb.table("daily_focus")
+                .update(focus_payload)
+                .eq("id", record_id)
+                .execute()
+            )
+        else:
+            focus_payload["created_at"] = datetime.utcnow().isoformat()
+            db_result = sb.table("daily_focus").insert(focus_payload).execute()
+
+        return db_result.data[0]
+    except Exception as save_err:
+        logger.error(
+            f"Error saving daily focus context mapping record: {str(save_err)}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to persist generated focus plan record.",
+        )
