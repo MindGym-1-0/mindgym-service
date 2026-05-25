@@ -32,15 +32,17 @@ def mock_supabase():
 @pytest.fixture(autouse=True)
 def mock_auth_dependencies():
     """
-    Bypasses FastAPI auth constraints globally by overriding the shared 
+    Bypasses FastAPI auth constraints globally by overriding the shared
     functional implementations tracking across sub-routers.
     """
     # Force overrides on the concrete callable execution blocks
     app.dependency_overrides[require_current_user_id] = lambda: TEST_USER_UUID
-    app.dependency_overrides[require_current_user_token] = lambda: "fake-mock-session-token"
-    
+    app.dependency_overrides[require_current_user_token] = (
+        lambda: "fake-mock-session-token"
+    )
+
     yield
-    
+
     # Clean up overrides cleanly after each individual test run
     app.dependency_overrides.clear()
 
@@ -112,7 +114,7 @@ def test_get_mood_summary_empty_history(mock_supabase):
     assert data["total_logs"] == 0
     assert data["avg_score"] is None
     assert len(data["last_7_days"]) == 7
-    
+
     today_utc_str = datetime.now(timezone.utc).date().strftime("%Y-%m-%d")
     assert data["last_7_days"][0]["date"] == today_utc_str
     assert data["last_7_days"][0]["score"] is None
@@ -125,12 +127,20 @@ def test_get_mood_summary_with_logs_deduplication(mock_supabase):
     """
     user_id = str(TEST_USER_UUID)
     today_str = datetime.now(timezone.utc).date().strftime("%Y-%m-%d")
-    yesterday_str = (datetime.now(timezone.utc).date() - timedelta(days=1)).strftime("%Y-%m-%d")
+    yesterday_str = (datetime.now(timezone.utc).date() - timedelta(days=1)).strftime(
+        "%Y-%m-%d"
+    )
 
     # Mocks return dataset ordered DESC (newest timestamp first)
     mock_records = [
-        {"score": 10, "created_at": f"{today_str}T18:00:00+00:00"},  # Newest entry for today
-        {"score": 4, "created_at": f"{today_str}T08:00:00+00:00"},   # Older entry for today (should be skipped in graph)
+        {
+            "score": 10,
+            "created_at": f"{today_str}T18:00:00+00:00",
+        },  # Newest entry for today
+        {
+            "score": 4,
+            "created_at": f"{today_str}T08:00:00+00:00",
+        },  # Older entry for today (should be skipped in graph)
         {"score": 6, "created_at": f"{yesterday_str}T15:30:00+00:00"},
     ]
 
@@ -144,12 +154,14 @@ def test_get_mood_summary_with_logs_deduplication(mock_supabase):
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
-    
+
     assert data["total_logs"] == 3
     assert data["avg_score"] == round((10 + 4 + 6) / 3, 1)
 
     assert data["last_7_days"][0]["date"] == today_str
-    assert data["last_7_days"][0]["score"] == 10  # Confirms deduplication saved the newest entry
+    assert (
+        data["last_7_days"][0]["score"] == 10
+    )  # Confirms deduplication saved the newest entry
 
     assert data["last_7_days"][1]["date"] == yesterday_str
     assert data["last_7_days"][1]["score"] == 6
@@ -159,7 +171,7 @@ def test_get_mood_summary_with_period_filters(mock_supabase):
     """Verifies that shifting the period filter query limits the data row average computations cleanly."""
     user_id = str(TEST_USER_UUID)
     today = datetime.now(timezone.utc).date()
-    
+
     today_str = today.strftime("%Y-%m-%d")
     twelve_days_ago_str = (today - timedelta(days=12)).strftime("%Y-%m-%d")
 
@@ -198,6 +210,6 @@ def test_get_mood_summary_cross_tenant_unauthorized(mock_supabase):
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
     assert response.json()["detail"] == "Access to requested profile metrics is denied."
-    
+
     # Assert database collection was intercepted completely
     mock_supabase.table.assert_not_called()
