@@ -1,6 +1,4 @@
-# src/api/mood_logs.py
-
-from __future__ import annotations
+﻿from __future__ import annotations
 import logging
 from uuid import UUID
 from typing import Dict
@@ -19,6 +17,7 @@ from src.types.mood_log import (
 
 logger = logging.getLogger(__name__)
 
+
 router = APIRouter()
 
 
@@ -31,17 +30,13 @@ router = APIRouter()
 async def create_mood_log(
     payload: MoodLogCreate, current_user_id: CurrentUserId, token: CurrentUserToken
 ):
-    """
-    Saves an authenticated user's mood log score (1-10) and optional note to the database.
-    Enforces the authenticated session identity to block multi-tenant ID spoofing.
-    """
     try:
         sb = get_supabase_user_client(token)
         result = (
             sb.table("mood_logs")
             .insert(
                 {
-                    "user_id": str(current_user_id),  # Fix 2: Overwrite payload context with verified caller ID
+                    "user_id": str(current_user_id),
                     "score": payload.score,
                     "note": payload.note,
                 }
@@ -59,10 +54,10 @@ async def create_mood_log(
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
-        logger.error(f"Error creating mood log: {str(e)}")  # Keep full tracing context internally
+        logger.error(f"Error creating mood log: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred. Please try again.",  # Fix 3: Sanitize leaky message variants
+            detail="An unexpected error occurred. Please try again.",
         )
 
 
@@ -73,20 +68,15 @@ async def create_mood_log(
     summary="Get mood log historical summary metrics",
 )
 async def get_mood_summary(
-    user_id: UUID, 
-    current_user_id: CurrentUserId, 
+    user_id: UUID,
+    current_user_id: CurrentUserId,
     token: CurrentUserToken,
-    period: str = Query("week", regex="^(week|month|all)$")  # Fix 5: Support dashboard filters matching Figma toggle
+    period: str = Query("week", regex="^(week|month|all)$"),
 ):
-    """
-    Calculates average mood scores according to a chosen historic interval window,
-    and returns a standardized 7-day timeline matrix using strict UTC temporal alignments.
-    """
-    # Fix 1: Explicit cross-tenant guard rule. Deny cross-reads across user profiles.
     if str(user_id) != str(current_user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access to requested profile metrics is denied."
+            detail="Access to requested profile metrics is denied.",
         )
 
     try:
@@ -95,25 +85,30 @@ async def get_mood_summary(
             sb.table("mood_logs")
             .select("score, created_at")
             .eq("user_id", str(user_id))
-            .order("created_at", descending=True)  # Raw database sequence output is modern-first
+            .order("created_at", descending=True)
             .execute()
         )
 
         all_logs = result.data or []
-        
-        # Fix 6: Ground date assessments uniformly in UTC to resolve server local shifting anomalies
         today_utc = datetime.now(timezone.utc).date()
 
-        # ----------------=======================================
-        # TIME PERIOD HORIZON FILTERING (Figma Metric Overlays)
-        # -------------------------------------------------------
         filtered_logs = []
         if period == "week":
             cutoff = today_utc - timedelta(days=7)
-            filtered_logs = [l for l in all_logs if datetime.fromisoformat(l["created_at"].replace("Z", "+00:00")).date() >= cutoff]
+            filtered_logs = [
+                log_entry
+                for log_entry in all_logs
+                if datetime.fromisoformat(log_entry["created_at"].replace("Z", "+00:00")).date()
+                >= cutoff
+            ]
         elif period == "month":
             cutoff = today_utc - timedelta(days=30)
-            filtered_logs = [l for l in all_logs if datetime.fromisoformat(l["created_at"].replace("Z", "+00:00")).date() >= cutoff]
+            filtered_logs = [
+                log_entry
+                for log_entry in all_logs
+                if datetime.fromisoformat(log_entry["created_at"].replace("Z", "+00:00")).date()
+                >= cutoff
+            ]
         else:
             filtered_logs = all_logs
 
@@ -122,11 +117,7 @@ async def get_mood_summary(
         if total_logs > 0:
             avg_score = round(sum(log["score"] for log in filtered_logs) / total_logs, 1)
 
-        # ----------------=======================================
-        # HISTORIC CHRONOLOGY GRID PROCESSING (7-Day Metric View)
-        # -------------------------------------------------------
         daily_scores_map: Dict[str, int] = {}
-        # Fix 4: Stripped reversed(). Since it's sorted DESC, parsing naturally captures the latest record per day first.
         for log in all_logs:
             log_date_str = log["created_at"].split("T")[0]
             if log_date_str not in daily_scores_map:
@@ -137,19 +128,14 @@ async def get_mood_summary(
             target_date = today_utc - timedelta(days=i)
             target_date_str = target_date.strftime("%Y-%m-%d")
             day_score = daily_scores_map.get(target_date_str, None)
-
-            last_7_days_list.append(
-                DailyMoodHistoryItem(date=target_date_str, score=day_score)
-            )
+            last_7_days_list.append(DailyMoodHistoryItem(date=target_date_str, score=day_score))
 
         return MoodLogSummaryResponse(
             avg_score=avg_score, total_logs=total_logs, last_7_days=last_7_days_list
         )
 
-    except HTTPException as http_exc:
-        raise http_exc
     except Exception as e:
-        logger.error(f"Error compiling mood log summary details: {str(e)}")
+        logger.error(f"Error compiling mood log summary: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred. Please try again.",
