@@ -1,9 +1,10 @@
-﻿from __future__ import annotations
-from datetime import datetime, date
+from __future__ import annotations
+
 from enum import Enum
 from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, Field, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ActionType(str, Enum):
@@ -24,13 +25,13 @@ class GeminiDailyFocusOutput(BaseModel):
 class DailyFocusResponse(BaseModel):
     id: UUID
     user_id: UUID
-    date: date
+    date: str  # Kept as str to match your API payload routing cleanly
     action_1_text: str
     action_1_type: ActionType
     action_2_text: Optional[str] = None
     action_2_type: Optional[ActionType] = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: str
+    updated_at: str
 
     model_config = ConfigDict(from_attributes=True)
 
