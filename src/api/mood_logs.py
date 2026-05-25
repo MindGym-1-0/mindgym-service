@@ -39,7 +39,9 @@ async def create_mood_log(
             sb.table("mood_logs")
             .insert(
                 {
-                    "user_id": str(current_user_id),  # Fix 2: Overwrite payload context with verified caller ID
+                    "user_id": str(
+                        current_user_id
+                    ),  # Fix 2: Overwrite payload context with verified caller ID
                     "score": payload.score,
                     "note": payload.note,
                 }
@@ -57,7 +59,9 @@ async def create_mood_log(
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
-        logger.error(f"Error creating mood log: {str(e)}")  # Keep full tracing context internally
+        logger.error(
+            f"Error creating mood log: {str(e)}"
+        )  # Keep full tracing context internally
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred. Please try again.",  # Fix 3: Sanitize leaky message variants
@@ -71,10 +75,12 @@ async def create_mood_log(
     summary="Get mood log historical summary metrics",
 )
 async def get_mood_summary(
-    user_id: UUID, 
-    current_user_id: CurrentUserId, 
+    user_id: UUID,
+    current_user_id: CurrentUserId,
     token: CurrentUserToken,
-    period: str = Query("week", regex="^(week|month|all)$")  # Fix 5: Support dashboard filters matching Figma toggle
+    period: str = Query(
+        "week", regex="^(week|month|all)$"
+    ),  # Fix 5: Support dashboard filters matching Figma toggle
 ):
     """
     Calculates average mood scores according to a chosen historic interval window,
@@ -84,7 +90,7 @@ async def get_mood_summary(
     if str(user_id) != str(current_user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access to requested profile metrics is denied."
+            detail="Access to requested profile metrics is denied.",
         )
 
     try:
@@ -93,12 +99,14 @@ async def get_mood_summary(
             sb.table("mood_logs")
             .select("score, created_at")
             .eq("user_id", str(user_id))
-            .order("created_at", descending=True)  # Raw database sequence output is modern-first
+            .order(
+                "created_at", descending=True
+            )  # Raw database sequence output is modern-first
             .execute()
         )
 
         all_logs = result.data or []
-        
+
         # Fix 6: Ground date assessments uniformly in UTC to resolve server local shifting anomalies
         today_utc = datetime.now(timezone.utc).date()
 
@@ -108,17 +116,29 @@ async def get_mood_summary(
         filtered_logs = []
         if period == "week":
             cutoff = today_utc - timedelta(days=7)
-            filtered_logs = [l for l in all_logs if datetime.fromisoformat(l["created_at"].replace("Z", "+00:00")).date() >= cutoff]
+            filtered_logs = [
+                l
+                for l in all_logs
+                if datetime.fromisoformat(l["created_at"].replace("Z", "+00:00")).date()
+                >= cutoff
+            ]
         elif period == "month":
             cutoff = today_utc - timedelta(days=30)
-            filtered_logs = [l for l in all_logs if datetime.fromisoformat(l["created_at"].replace("Z", "+00:00")).date() >= cutoff]
+            filtered_logs = [
+                l
+                for l in all_logs
+                if datetime.fromisoformat(l["created_at"].replace("Z", "+00:00")).date()
+                >= cutoff
+            ]
         else:
             filtered_logs = all_logs
 
         total_logs = len(filtered_logs)
         avg_score = None
         if total_logs > 0:
-            avg_score = round(sum(log["score"] for log in filtered_logs) / total_logs, 1)
+            avg_score = round(
+                sum(log["score"] for log in filtered_logs) / total_logs, 1
+            )
 
         # ----------------=======================================
         # HISTORIC CHRONOLOGY GRID PROCESSING (7-Day Metric View)
