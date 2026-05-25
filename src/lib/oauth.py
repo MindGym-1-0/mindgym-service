@@ -1,5 +1,4 @@
 """Google OAuth utilities and token management"""
-import json
 from typing import Optional
 import httpx
 import jwt
@@ -105,7 +104,7 @@ def create_jwt_token(user_id: str, email: str, expires_delta: Optional[timedelta
         payload,
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
-    ) 
+    )
     return token
 
 
