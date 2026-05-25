@@ -105,8 +105,7 @@ def create_jwt_token(user_id: str, email: str, expires_delta: Optional[timedelta
         payload,
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
-    )
-    
+    ) 
     return token
 
 
