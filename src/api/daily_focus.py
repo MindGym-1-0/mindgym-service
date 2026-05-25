@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import json
@@ -162,8 +162,8 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
     prompt = f"""
     You are an elite, highly personalized AI Job Search Assistant for a software engineer.
     Analyze the user's specific application pipeline below and return exactly 1 or 2 actions for today.
-    
-    CRITICAL PRODUCT REQUIREMENT: Generic output like "apply to more jobs" or "check your status" is a defect. 
+
+    CRITICAL PRODUCT REQUIREMENT: Generic output like "apply to more jobs" or "check your status" is a defect.
     You MUST reference specific companies, roles, timeline conditions, or interview opportunities present in the raw data context.
 
     --- USER PIPELINE CONTEXT ---

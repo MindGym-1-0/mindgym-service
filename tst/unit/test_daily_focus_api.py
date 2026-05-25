@@ -1,7 +1,7 @@
 ﻿from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta, UTC
-from uuid import uuid4, UUID
+from uuid import uuid4
 from unittest.mock import patch, MagicMock
 
 import pytest

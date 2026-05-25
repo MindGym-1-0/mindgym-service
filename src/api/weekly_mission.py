@@ -167,7 +167,7 @@ async def generate_weekly_mission(
     # --------------------------------==========
     prompt = f"""
     You are an expert career performance optimization AI. Analyze the user's data to generate 3 actionable, non-generic target missions for next week.
-    
+
     User Context:
     - Career Goal: {user_profile.get('goal')}
     - Application Stage: {user_profile.get('stage')}
@@ -175,7 +175,7 @@ async def generate_weekly_mission(
     - Performance Trend Data (Last 4 Records): {json.dumps(performance_logs)}
     - Activity Volume This Week: {session_count} completed sessions (Avg Mood Change: {avg_mood_delta})
     - Completed Targets from Last Week: {prev_completion_count}/3
-    
+
     Requirements:
     1. Focus heavily on pipeline gaps, performance gaps, or momentum drop-offs.
     2. Write highly concrete and contextually tailored strings for this individual user. Avoid generic platitudes.
