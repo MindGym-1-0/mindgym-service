@@ -19,16 +19,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
-import os  # noqa: E402
-
-from openai import OpenAI  # noqa: E402
+import google.generativeai as genai  # noqa: E402
 
 from src.lib.config import settings  # noqa: E402
 from src.lib.gemini_service import derive_pre_score  # noqa: E402
 from src.lib.prompt_builder import build_prompt  # noqa: E402
 from src.types.session import SessionScript  # noqa: E402
-
-OPENAI_MODEL = 'gpt-4o'
 
 
 PREPARATION_FOR_OPTIONS = [
@@ -153,7 +149,8 @@ def run_scenario(inputs: dict) -> None:
     user_context = inputs["user_context"]
 
     try:
-        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        genai.configure(api_key=settings.gemini_api_key)
+        model = genai.GenerativeModel(settings.gemini_model)
 
         pre_score = derive_pre_score(inputs["current_feeling"])
         prompt = build_prompt(
@@ -167,12 +164,8 @@ def run_scenario(inputs: dict) -> None:
             user_context=user_context,
         )
 
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-        )
-        raw_text = response.choices[0].message.content
+        response = model.generate_content(prompt)
+        raw_text = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
 
         print(f"\n  Raw Gemini response:\n  {raw_text}\n")
 
@@ -217,7 +210,7 @@ def run_scenario(inputs: dict) -> None:
 def main() -> None:
     print(f"\n{_divider()}")
     print("  MindGym Script Quality Evaluator")
-    print(f"  Model: {OPENAI_MODEL} (OpenAI — eval only)")
+    print(f"  Model: {settings.gemini_model} (Gemini)")
     print(_divider())
 
     while True:

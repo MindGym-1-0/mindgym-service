@@ -73,7 +73,8 @@ def generate_script(
         )
 
         response = model.generate_content(prompt)
-        data = json.loads(response.text)
+        raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
+        data = json.loads(raw)
         script = SessionScript(**data)
 
         if company and role:
