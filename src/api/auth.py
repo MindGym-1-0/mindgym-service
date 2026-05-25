@@ -1,123 +1,75 @@
-"""Authentication endpoints for Google OAuth and session management"""
-from fastapi import APIRouter, HTTPException, status, Depends, Header
-from typing import Optional
-from src.types.models import GoogleAuthTokenRequest, AuthResponse
-from src.lib.oauth import (
-    exchange_auth_code_for_token,
-    verify_google_token,
-    create_jwt_token,
-    verify_jwt_token,
-)
+from __future__ import annotations
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+import logging
+from typing import Annotated
+from uuid import UUID
+
+import httpx
+from fastapi import Depends, HTTPException, Request
+
+from src.lib import config
+from src.lib.tokens import extract_access_token_from_request
+
+logger = logging.getLogger(__name__)
 
 
-@router.post("/google/callback", response_model=AuthResponse)
-async def google_auth_callback(request: GoogleAuthTokenRequest):
-    """
-    Google OAuth callback endpoint
-    
-    Exchange authorization code for tokens and create user session
-    
-    Args:
-        request: Contains the authorization code from Google
-        
-    Returns:
-        AuthResponse with JWT token and user info
-    """
+async def fetch_supabase_user_id(access_token: str) -> UUID:
+    base = config.supabase_url()
+    url = f"{base.rstrip('/')}/auth/v1/user"
+    api_key = config.supabase_anon_key()
+
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Server missing SUPABASE_ANON_KEY",
+        )
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "apikey": api_key,
+    }
+
     try:
-        # Exchange code for Google tokens
-        token_response = await exchange_auth_code_for_token(request.code)
-        
-        # Verify the ID token
-        id_token = token_response.get("id_token")
-        if not id_token:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No ID token received from Google"
-            )
-        
-        google_user = verify_google_token(id_token)
-        
-        # Extract user info
-        user_id = google_user.get("sub")  # Google's unique identifier
-        email = google_user.get("email")
-        
-        if not user_id or not email:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing user information from Google"
-            )
-        
-        # TODO: Create or update user in Supabase
-        # For now, we'll just create a token
-        
-        # Create JWT token for your app
-        access_token = create_jwt_token(user_id, email)
-        
-        return AuthResponse(
-            access_token=access_token,
-            token_type="bearer",
-            user_id=user_id,
-            email=email
-        )
-        
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Authentication failed"
-        )
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers, timeout=15.0)
+    except httpx.HTTPError:
+        logger.exception("Supabase auth request failed.")
+        raise HTTPException(status_code=401, detail="Unauthorized") from None
 
+    if resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
-@router.post("/verify", response_model=dict)
-async def verify_token(authorization: Optional[str] = Header(None)):
-    """
-    Verify JWT token
-    
-    Args:
-        authorization: Bearer token from Authorization header
-        
-    Returns:
-        Token payload if valid
-    """
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization header"
-        )
-    
     try:
-        # Extract token from "Bearer <token>"
-        scheme, token = authorization.split()
-        if scheme.lower() != "bearer":
-            raise ValueError("Invalid authentication scheme")
-        
-        payload = verify_jwt_token(token)
-        return payload
-        
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+        data = resp.json()
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Unauthorized") from None
+
+    user_id = data.get("id")
+    try:
+        return UUID(str(user_id))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Unauthorized") from None
 
 
-@router.get("/logout")
-async def logout():
-    """
-    Logout endpoint (frontend should discard the token)
-    
-    Returns:
-        Success message
-    """
-    return {"message": "Logged out successfully"}
+def require_current_user_token(request: Request) -> str:
+    token = extract_access_token_from_request(
+        auth_header=request.headers.get("authorization"),
+        cookies=dict(request.cookies),
+    )
+    if not token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if not config.supabase_url():
+        raise HTTPException(status_code=500, detail="Server missing SUPABASE_URL")
+
+    return token
+
+
+async def require_current_user_id(
+    token: str = Depends(require_current_user_token),
+) -> UUID:
+    return await fetch_supabase_user_id(token)
+
+
+CurrentUserId = Annotated[UUID, Depends(require_current_user_id)]
+CurrentUserToken = Annotated[str, Depends(require_current_user_token)]
