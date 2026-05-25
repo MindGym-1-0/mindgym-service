@@ -25,7 +25,6 @@ _FAKE_START_RESPONSE = SessionStartResponse(
     session_id='session-abc',
     script=_FAKE_SCRIPT,
     mode='interview_tomorrow',
-    fallback_used=False,
 )
 _FAKE_COMPLETE_RESPONSE = SessionCompleteResponse(
     session_id='session-abc',
@@ -57,7 +56,6 @@ _FAKE_DETAIL = SessionDetail(
     post_score=8,
     mood_delta=5,
     script=_FAKE_SCRIPT,
-    fallback_used=False,
     completed_at='2026-05-24T10:00:00+00:00',
     created_at='2026-05-24T09:00:00+00:00',
 )
@@ -94,7 +92,7 @@ def test_start_session_returns_201_with_script(client) -> None:
     assert response.status_code == 201
     body = response.json()
     assert body['session_id'] == 'session-abc'
-    assert body['fallback_used'] is False
+    assert body['mode'] == 'interview_tomorrow'
     assert body['script']['phase1'] == 'Breathe.'
 
 
@@ -123,6 +121,32 @@ def test_start_session_returns_400_on_invalid_payload(client) -> None:
         response = client.post('/api/sessions/start', json=bad_payload)
 
     assert response.status_code == 422
+
+
+@pytest.mark.unit
+def test_start_session_returns_422_when_mode1_missing_company(client) -> None:
+    """POST /api/sessions/start must return 422 when interview_tomorrow is submitted without company."""
+    bad_payload = {**_START_PAYLOAD, 'company': None, 'role': None}
+    with patch('src.api.sessions.start_session', new_callable=AsyncMock, return_value=_FAKE_START_RESPONSE):
+        response = client.post('/api/sessions/start', json=bad_payload)
+
+    assert response.status_code == 422
+
+
+@pytest.mark.unit
+def test_start_session_allows_missing_company_for_general_reset(client) -> None:
+    """POST /api/sessions/start must accept general_reset without company or role."""
+    general_payload = {
+        'preparation_for': 'general_reset',
+        'current_feeling': 'overwhelmed',
+        'desired_feeling': 'calm',
+        'time_available': '5 min',
+        'pre_score': 5,
+    }
+    with patch('src.api.sessions.start_session', new_callable=AsyncMock, return_value=_FAKE_START_RESPONSE):
+        response = client.post('/api/sessions/start', json=general_payload)
+
+    assert response.status_code == 201
 
 
 # ---------------------------------------------------------------------------
