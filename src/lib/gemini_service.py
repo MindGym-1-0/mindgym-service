@@ -77,8 +77,10 @@ def generate_script(
         script = SessionScript(**data)
 
         if company and role:
-            if (company not in script.phase3 or role not in script.phase3
-                    or company not in script.phase5 or role not in script.phase5):
+            p3 = script.phase3.lower()
+            p5 = script.phase5.lower()
+            if (company.lower() not in p3 or role.lower() not in p3
+                    or company.lower() not in p5 or role.lower() not in p5):
                 return None
 
         return script
