@@ -63,21 +63,7 @@ async def test_start_session_returns_response_on_gemini_success() -> None:
 
     assert response.session_id == 'session-abc'
     assert response.script == _MOCK_SCRIPT
-    assert response.fallback_used is False
     assert response.mode == 'interview_tomorrow'
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_start_session_sets_fallback_used_false_when_gemini_succeeds() -> None:
-    """fallback_used must be False when Gemini returns a valid script."""
-    with patch('src.lib.session_service.fetch_user_context', new_callable=AsyncMock, return_value=_MOCK_USER_ROW), \
-         patch('src.lib.session_service.generate_script', return_value=_MOCK_SCRIPT), \
-         patch('src.lib.session_service.insert_session', new_callable=AsyncMock, return_value='session-abc'):
-
-        response = await start_session(user_id=_USER_ID, request=_VALID_REQUEST)
-
-    assert response.fallback_used is False
 
 
 # ---------------------------------------------------------------------------
@@ -96,22 +82,7 @@ async def test_start_session_uses_fallback_when_gemini_returns_none() -> None:
         response = await start_session(user_id=_USER_ID, request=_VALID_REQUEST)
 
     mock_fallback.assert_called_once()
-    assert response.fallback_used is True
     assert response.script == _MOCK_SCRIPT
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_start_session_sets_fallback_used_true_when_gemini_fails() -> None:
-    """fallback_used must be True when the fallback script is served."""
-    with patch('src.lib.session_service.fetch_user_context', new_callable=AsyncMock, return_value=_MOCK_USER_ROW), \
-         patch('src.lib.session_service.generate_script', return_value=None), \
-         patch('src.lib.session_service.get_fallback_script', return_value=_MOCK_SCRIPT), \
-         patch('src.lib.session_service.insert_session', new_callable=AsyncMock, return_value='session-abc'):
-
-        response = await start_session(user_id=_USER_ID, request=_VALID_REQUEST)
-
-    assert response.fallback_used is True
 
 
 # ---------------------------------------------------------------------------
@@ -223,4 +194,21 @@ async def test_complete_session_raises_404_when_session_belongs_to_other_user() 
     with patch('src.lib.session_service.fetch_session', new_callable=AsyncMock, return_value=other_user_session):
 
         with pytest.raises(LookupError):
+            await complete_session(user_id=_USER_ID, request=request)
+
+
+# ---------------------------------------------------------------------------
+# update_session — silent failure detection
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_complete_session_raises_when_update_returns_no_rows() -> None:
+    """complete_session must raise RuntimeError when the DB update matches no rows."""
+    request = SessionCompleteRequest(session_id='session-abc', post_score=7)
+
+    with patch('src.lib.session_service.fetch_session', new_callable=AsyncMock, return_value=_MOCK_SESSION_ROW), \
+         patch('src.lib.session_service.update_session', new_callable=AsyncMock, side_effect=RuntimeError('no rows matched')):
+
+        with pytest.raises(RuntimeError):
             await complete_session(user_id=_USER_ID, request=request)

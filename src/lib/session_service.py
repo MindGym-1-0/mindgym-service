@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from src.lib.fallbacks import get_fallback_script
 from src.lib.gemini_service import generate_script
-from src.lib.supabase_client import get_supabase_client
+from src.lib.supabase_client import get_supabase_admin_client
 from src.types.session import (
     SessionCompleteRequest,
     SessionCompleteResponse,
@@ -18,20 +18,20 @@ _USER_CONTEXT_DEFAULTS = {'goal': '', 'stage': '', 'anxiety_level': 5}
 
 async def fetch_user_context(user_id: str) -> dict:
     """Fetch goal, stage, and anxiety_level from the users table."""
-    client = get_supabase_client()
+    client = get_supabase_admin_client()
     result = await asyncio.to_thread(
         lambda: client.table('users')
         .select('goal, stage, anxiety_level')
         .eq('id', user_id)
-        .single()
+        .maybe_single()
         .execute()
     )
     return result.data or {}
 
 
-async def insert_session(user_id: str, request: SessionStartRequest, script: SessionScript, fallback_used: bool) -> str | None:
+async def insert_session(user_id: str, request: SessionStartRequest, script: SessionScript) -> str | None:
     """Insert a new ai_sessions row and return the generated session id."""
-    client = get_supabase_client()
+    client = get_supabase_admin_client()
     payload = {
         'user_id': user_id,
         'preparation_for': request.preparation_for,
@@ -46,7 +46,6 @@ async def insert_session(user_id: str, request: SessionStartRequest, script: Ses
         'phase3': script.phase3,
         'phase4': script.phase4,
         'phase5': script.phase5,
-        'fallback_used': fallback_used,
     }
     result = await asyncio.to_thread(
         lambda: client.table('ai_sessions').insert(payload).execute()
@@ -58,12 +57,12 @@ async def insert_session(user_id: str, request: SessionStartRequest, script: Ses
 
 async def fetch_session(session_id: str) -> dict | None:
     """Fetch an ai_sessions row by id."""
-    client = get_supabase_client()
+    client = get_supabase_admin_client()
     result = await asyncio.to_thread(
         lambda: client.table('ai_sessions')
         .select('id, user_id, pre_score, completed_at')
         .eq('id', session_id)
-        .single()
+        .maybe_single()
         .execute()
     )
     return result.data or None
@@ -71,8 +70,8 @@ async def fetch_session(session_id: str) -> dict | None:
 
 async def update_session(session_id: str, post_score: int, mood_delta: int) -> None:
     """Update an ai_sessions row with post_score, mood_delta, and completed_at."""
-    client = get_supabase_client()
-    await asyncio.to_thread(
+    client = get_supabase_admin_client()
+    result = await asyncio.to_thread(
         lambda: client.table('ai_sessions')
         .update({
             'post_score': post_score,
@@ -82,6 +81,8 @@ async def update_session(session_id: str, post_score: int, mood_delta: int) -> N
         .eq('id', session_id)
         .execute()
     )
+    if not result.data:
+        raise RuntimeError(f'Failed to update session {session_id!r} — no rows matched.')
 
 
 async def start_session(user_id: str, request: SessionStartRequest) -> SessionStartResponse:
@@ -102,8 +103,7 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
         user_context=user_context,
     )
 
-    fallback_used = script is None
-    if fallback_used:
+    if script is None:
         try:
             script = get_fallback_script(
                 preparation_for=request.preparation_for,
@@ -114,7 +114,7 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
         except ValueError as exc:
             raise RuntimeError(f'Session generation failed and no fallback exists: {exc}') from exc
 
-    session_id = await insert_session(user_id, request, script, fallback_used)
+    session_id = await insert_session(user_id, request, script)
     if session_id is None:
         raise RuntimeError('Session was generated but could not be persisted — insert returned no id.')
 
@@ -122,18 +122,18 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
         session_id=session_id,
         script=script,
         mode=request.preparation_for,
-        fallback_used=fallback_used,
     )
 
 
 async def fetch_session_history(user_id: str) -> list:
     """Return completed sessions for a user, ordered newest first."""
-    client = get_supabase_client()
+    client = get_supabase_admin_client()
     result = await asyncio.to_thread(
         lambda: client.table('ai_sessions')
         .select('id, preparation_for, pre_score, post_score, mood_delta, completed_at, created_at')
         .eq('user_id', user_id)
-        .order('created_at', desc=True)
+        .not_.is_('completed_at', 'null')
+        .order('completed_at', desc=True)
         .execute()
     )
     return result.data or []
@@ -144,17 +144,17 @@ async def fetch_session_detail(user_id: str, session_id: str) -> dict:
 
     Raises LookupError if the session does not exist or belongs to another user.
     """
-    client = get_supabase_client()
+    client = get_supabase_admin_client()
     result = await asyncio.to_thread(
         lambda: client.table('ai_sessions')
         .select(
             'id, preparation_for, current_feeling, desired_feeling, time_available, '
             'company, role, pre_score, post_score, mood_delta, '
             'phase1, phase2, phase3, phase4, phase5, '
-            'fallback_used, completed_at, created_at, user_id'
+            'completed_at, created_at, user_id'
         )
         .eq('id', session_id)
-        .single()
+        .maybe_single()
         .execute()
     )
     row = result.data
@@ -162,7 +162,28 @@ async def fetch_session_detail(user_id: str, session_id: str) -> dict:
         raise LookupError(f'Session {session_id!r} not found.')
     if row.get('user_id') and row['user_id'] != user_id:
         raise LookupError(f'Session {session_id!r} not found.')
-    return row
+
+    return {
+        'id': row['id'],
+        'preparation_for': row['preparation_for'],
+        'current_feeling': row['current_feeling'],
+        'desired_feeling': row['desired_feeling'],
+        'time_available': row['time_available'],
+        'company': row.get('company'),
+        'role': row.get('role'),
+        'pre_score': row['pre_score'],
+        'post_score': row.get('post_score'),
+        'mood_delta': row.get('mood_delta'),
+        'script': SessionScript(
+            phase1=row['phase1'],
+            phase2=row['phase2'],
+            phase3=row['phase3'],
+            phase4=row['phase4'],
+            phase5=row['phase5'],
+        ),
+        'completed_at': row.get('completed_at'),
+        'created_at': row['created_at'],
+    }
 
 
 async def update_user_profile(user_id: str, request) -> None:
@@ -170,7 +191,7 @@ async def update_user_profile(user_id: str, request) -> None:
     updates = {k: v for k, v in request.model_dump().items() if v is not None}
     if not updates:
         return
-    client = get_supabase_client()
+    client = get_supabase_admin_client()
     await asyncio.to_thread(
         lambda: client.table('users').update(updates).eq('id', user_id).execute()
     )

@@ -1,7 +1,7 @@
 """Pydantic models for session request and response validation"""
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SessionStartRequest(BaseModel):
@@ -28,6 +28,17 @@ class SessionStartRequest(BaseModel):
     company: str | None = None
     role: str | None = None
 
+    _MODE1_TYPES = {'interview_tomorrow', 'recruiter_call'}
+
+    @model_validator(mode='after')
+    def require_company_and_role_for_mode1(self) -> 'SessionStartRequest':
+        if self.preparation_for in self._MODE1_TYPES:
+            if not self.company or not self.role:
+                raise ValueError(
+                    f"'company' and 'role' are required for preparation_for='{self.preparation_for}'"
+                )
+        return self
+
 
 class SessionScript(BaseModel):
     phase1: str
@@ -41,7 +52,6 @@ class SessionStartResponse(BaseModel):
     session_id: str
     script: SessionScript
     mode: str  # echoes preparation_for back to the frontend
-    fallback_used: bool
 
 
 class SessionCompleteRequest(BaseModel):
@@ -79,7 +89,6 @@ class SessionDetail(BaseModel):
     post_score: int | None
     mood_delta: int | None
     script: SessionScript
-    fallback_used: bool
     completed_at: str | None
     created_at: str
 
