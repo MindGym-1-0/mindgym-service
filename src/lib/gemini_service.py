@@ -56,7 +56,7 @@ def generate_script(
     """
     try:
         genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel(settings.gemini_model)
 
         pre_score = derive_pre_score(current_feeling)
 
