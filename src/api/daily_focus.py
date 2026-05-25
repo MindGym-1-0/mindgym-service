@@ -1,25 +1,23 @@
-﻿from __future__ import annotations
-import asyncio
-import logging
-import json
-from datetime import date, datetime, timedelta
-from typing import Optional, Dict, Any
-from uuid import UUID
-from fastapi import APIRouter, HTTPException, status
+from __future__ import annotations
 
+import asyncio
+import json
+import logging
+from datetime import date, datetime, timedelta
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, HTTPException, status
 # Upgraded to modern SDK namespace
 from google import genai
 
-from src.lib import config
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client
-from src.types.daily_focus import ActionType, GeminiDailyFocusOutput, DailyFocusResponse
+from src.types.daily_focus import ActionType, DailyFocusResponse, GeminiDailyFocusOutput
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Initialize the standard Client. It picks up your GEMINI_API_KEY environment variable.
-# If you need to fallback to config.supabase_anon_key(), pass api_key=config.supabase_anon_key()
 ai_client = genai.Client()
 
 
@@ -183,18 +181,16 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
     4. Feedback & Debrief Loops: If an application's stage was advanced recently but no post-session debrief was logged, prioritize a debrief logging task.
     """
 
-    # STEP 3 & 4: Call Gemini 2.5 Flash with strict formatting validation and a 4-second timeout limit
+    # STEP 3 & 4: Call Gemini with strict formatting validation and a 4-second timeout limit
     validated_output: Optional[GeminiDailyFocusOutput] = None
     try:
-
         async def call_gemini_api():
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
                 None,
                 lambda: ai_client.models.generate_content(
-                    model="gemini-3.0-flash",
+                    model="gemini-2.5-flash",
                     contents=prompt,
-                    # Native enforcement via Pydantic model structure
                     config={
                         "response_mime_type": "application/json",
                         "response_schema": GeminiDailyFocusOutput,
