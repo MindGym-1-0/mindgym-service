@@ -1,0 +1,450 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from types import SimpleNamespace
+from uuid import UUID
+
+import pytest
+from fastapi.testclient import TestClient
+
+import src.api.coach as coach_module
+from src.lib.auth import require_current_user_id, require_current_user_token
+from src.lib.gemini import GeminiInvalidJsonError, GeminiTimeoutError
+
+os.environ["DEBUG"] = "false"
+from src.main import app
+
+
+@dataclass
+class _Filter:
+    op: str
+    field: str
+    value: object
+
+
+class FakeQuery:
+    def __init__(self, sb: "FakeSupabase", table_name: str):
+        self.sb = sb
+        self.table_name = table_name
+        self.filters: list[_Filter] = []
+        self.order_field: str | None = None
+        self.order_desc = False
+        self.limit_value: int | None = None
+        self.select_fields: str | None = None
+        self.upsert_payload: dict | None = None
+
+    def select(self, fields: str):
+        self.select_fields = fields
+        return self
+
+    def eq(self, field: str, value: object):
+        self.filters.append(_Filter("eq", field, value))
+        return self
+
+    def gte(self, field: str, value: object):
+        self.filters.append(_Filter("gte", field, value))
+        return self
+
+    def order(self, field: str, desc: bool = False):
+        self.order_field = field
+        self.order_desc = desc
+        return self
+
+    def limit(self, value: int):
+        self.limit_value = value
+        return self
+
+    @property
+    def not_(self):
+        return self
+
+    def is_(self, field: str, value: object):
+        self.filters.append(_Filter("not_is", field, value))
+        return self
+
+    def upsert(self, payload: dict, on_conflict: str | None = None):
+        self.upsert_payload = payload
+        self.sb.last_upsert = {
+            "table": self.table_name,
+            "payload": payload,
+            "on_conflict": on_conflict,
+        }
+        return self
+
+    def _apply_filters(self, rows: list[dict]) -> list[dict]:
+        result = list(rows)
+        for flt in self.filters:
+            if flt.op == "eq":
+                result = [r for r in result if r.get(flt.field) == flt.value]
+            elif flt.op == "gte":
+                result = [r for r in result if str(r.get(flt.field) or "") >= str(flt.value)]
+            elif flt.op == "not_is":
+                # We only need completed_at IS NOT NULL behavior for these tests.
+                if flt.value == "null":
+                    result = [r for r in result if r.get(flt.field) is not None]
+        return result
+
+    def _apply_order(self, rows: list[dict]) -> list[dict]:
+        if not self.order_field:
+            return rows
+        return sorted(
+            rows,
+            key=lambda r: (r.get(self.order_field) is None, r.get(self.order_field)),
+            reverse=self.order_desc,
+        )
+
+    def execute(self):
+        if self.upsert_payload is not None:
+            rows = self.sb.tables.setdefault(self.table_name, [])
+            key_fields = (self.sb.last_upsert or {}).get("on_conflict", "")
+            keys = [k.strip() for k in key_fields.split(",") if k.strip()]
+            replaced = False
+            for idx, row in enumerate(rows):
+                if keys and all(row.get(k) == self.upsert_payload.get(k) for k in keys):
+                    new_row = dict(row)
+                    new_row.update(self.upsert_payload)
+                    rows[idx] = new_row
+                    replaced = True
+                    break
+            if not replaced:
+                new_row = dict(self.upsert_payload)
+                new_row.setdefault("created_at", "2026-05-25T12:00:00+00:00")
+                rows.append(new_row)
+            return SimpleNamespace(data=[self.upsert_payload])
+
+        rows = self.sb.tables.get(self.table_name, [])
+        result = self._apply_filters(rows)
+        result = self._apply_order(result)
+        if self.limit_value is not None:
+            result = result[: self.limit_value]
+        return SimpleNamespace(data=result)
+
+
+class FakeSupabase:
+    def __init__(self, tables: dict[str, list[dict]] | None = None):
+        self.tables = tables or {}
+        self.last_upsert: dict | None = None
+
+    def table(self, table_name: str) -> FakeQuery:
+        return FakeQuery(self, table_name)
+
+
+@pytest.fixture
+def fake_user_id() -> UUID:
+    return UUID("11111111-1111-1111-1111-111111111111")
+
+
+@pytest.fixture
+def client(fake_user_id: UUID, monkeypatch):
+    monkeypatch.setitem(
+        app.dependency_overrides, require_current_user_id, lambda: fake_user_id
+    )
+    monkeypatch.setitem(
+        app.dependency_overrides, require_current_user_token, lambda: "fake-token"
+    )
+    tc = TestClient(app)
+    yield tc
+    app.dependency_overrides.pop(require_current_user_id, None)
+    app.dependency_overrides.pop(require_current_user_token, None)
+
+
+def _base_tables(user_id: str) -> dict[str, list[dict]]:
+    return {
+        "users": [
+            {"id": user_id, "goal": "Land senior backend role", "stage": "interviewing", "anxiety_level": 7}
+        ],
+        "interviews": [],
+        "ai_sessions": [],
+        "streaks": [{"user_id": user_id, "current_streak": 4}],
+        "coach_prep_plans": [],
+    }
+
+
+def _mock_coach_deps(monkeypatch, sb: FakeSupabase, gemini_result_or_exc):
+    monkeypatch.setattr(coach_module, "get_supabase_user_client", lambda token: sb)
+    if isinstance(gemini_result_or_exc, Exception):
+        async def _raise(*_args, **_kwargs):
+            raise gemini_result_or_exc
+        monkeypatch.setattr(coach_module, "generate_gemini_flash_json", _raise)
+    else:
+        async def _ok(*_args, **_kwargs):
+            return gemini_result_or_exc
+        monkeypatch.setattr(coach_module, "generate_gemini_flash_json", _ok)
+
+
+def test_get_coach_home_success(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "iv1",
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-01T12:00:00+00:00",
+        }
+    ]
+    tables["ai_sessions"] = [
+        {"user_id": uid, "preparation_for": "interview_tomorrow", "mood_delta": 2, "completed_at": "2026-05-24T10:00:00+00:00"}
+    ]
+    sb = FakeSupabase(tables)
+
+    gemini = {
+        "recommended_sessions": [
+            {"title": "A", "duration_mins": 10, "focus": "f1", "session_type": "interview_tomorrow"},
+            {"title": "B", "duration_mins": 8, "focus": "f2", "session_type": "general_reset"},
+            {"title": "C", "duration_mins": 12, "focus": "f3", "session_type": "recruiter_call"},
+        ],
+        "recommended_today": ["i1", "i2", "i3", "i4"],
+        "maya_suggests": {"text": "Prep for your interview", "session_type": "interview_tomorrow", "time_suggestion": "10 min now"},
+        "maya_greeting": "Your interview is coming up, let's focus today.",
+    }
+    _mock_coach_deps(monkeypatch, sb, gemini)
+
+    resp = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["recommended_sessions"]) == 3
+    assert len(body["recommended_today"]) == 4
+    assert "maya_suggests" in body
+    assert "maya_greeting" in body
+    assert "interview" in body["maya_greeting"].lower()
+
+
+def test_get_coach_home_no_upcoming_interview_fallback_momentum(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, GeminiTimeoutError("timeout"))
+
+    resp = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["recommended_sessions"]) == 3
+    assert len(body["recommended_today"]) == 4
+    assert "momentum" in body["maya_greeting"].lower()
+
+
+def test_get_coach_home_gemini_invalid_json_returns_fallback(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, GeminiInvalidJsonError("bad json"))
+
+    resp = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+    assert resp.status_code == 200
+    assert len(resp.json()["recommended_sessions"]) == 3
+    assert len(resp.json()["recommended_today"]) == 4
+
+
+def test_post_prep_plan_success_and_saves_upsert(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "iv-prep-1",
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "event_type": "onsite",
+            "interview_date": "2026-06-03T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    gemini = {
+        "plan": [
+            {"day": 1, "task": "Acme role prep", "description": "Focus on Backend Engineer scope", "session_type": "general_reset", "duration_mins": 10},
+            {"day": 2, "task": "Acme stories", "description": "Role-aligned examples", "session_type": "interview_tomorrow", "duration_mins": 10},
+            {"day": 3, "task": "Acme pressure run", "description": "Backend Engineer timed drill", "session_type": "recruiter_call", "duration_mins": 10},
+            {"day": 4, "task": "Acme confidence", "description": "Role strengths", "session_type": "general_reset", "duration_mins": 8},
+            {"day": 5, "task": "Acme final", "description": "Backend Engineer focus", "session_type": "interview_tomorrow", "duration_mins": 12},
+        ],
+        "recommended_first_session": {"session_type": "general_reset", "reason": "Start calm", "duration_mins": 10},
+        "coach_note": "You are ready.",
+    }
+    _mock_coach_deps(monkeypatch, sb, gemini)
+
+    resp = client.post(
+        "/api/coach/prep-plan",
+        json={"interview_id": "iv-prep-1", "worry_input": "I'm worried about blanking out"},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["plan"]) == 5
+    assert "recommended_first_session" in body
+    assert body["coach_note"]
+    assert sb.last_upsert is not None
+    assert sb.last_upsert["table"] == "coach_prep_plans"
+    assert sb.last_upsert["on_conflict"] == "user_id,interview_id"
+
+
+def test_post_prep_plan_gemini_failure_returns_fallback_and_saves(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "iv-prep-2",
+            "user_id": uid,
+            "company": "Zenith",
+            "role": "Platform Engineer",
+            "event_type": "phone",
+            "interview_date": "2026-06-04T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, GeminiTimeoutError("timeout"))
+
+    resp = client.post(
+        "/api/coach/prep-plan",
+        json={"interview_id": "iv-prep-2", "worry_input": "I ramble"},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["plan"]) == 5
+    assert body["recommended_first_session"]["session_type"] in {
+        "general_reset",
+        "interview_tomorrow",
+        "recruiter_call",
+        "networking",
+        "salary_negotiation",
+        "rejection_recovery",
+        "restarting_search",
+    }
+    assert sb.last_upsert is not None
+
+
+def test_post_prep_plan_invalid_session_type_uses_fallback(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "iv-prep-3",
+            "user_id": uid,
+            "company": "Nova",
+            "role": "Data Engineer",
+            "event_type": "onsite",
+            "interview_date": "2026-06-05T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    bad = {
+        "plan": [
+            {"day": i, "task": "Nova Data Engineer task", "description": "desc", "session_type": "bad_type", "duration_mins": 10}
+            for i in [1, 2, 3, 4, 5]
+        ],
+        "recommended_first_session": {"session_type": "bad_type", "reason": "x", "duration_mins": 10},
+        "coach_note": "note",
+    }
+    _mock_coach_deps(monkeypatch, sb, bad)
+
+    resp = client.post(
+        "/api/coach/prep-plan",
+        json={"interview_id": "iv-prep-3", "worry_input": "I freeze"},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()["plan"]) == 5
+    assert resp.json()["recommended_first_session"]["session_type"] != "bad_type"
+
+
+def test_post_prep_plan_missing_company_role_mentions_uses_fallback(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "iv-prep-4",
+            "user_id": uid,
+            "company": "Orbit",
+            "role": "SRE",
+            "event_type": "onsite",
+            "interview_date": "2026-06-06T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    bad = {
+        "plan": [
+            {"day": i, "task": "Generic task", "description": "No company role mentioned", "session_type": "general_reset", "duration_mins": 10}
+            for i in [1, 2, 3, 4, 5]
+        ],
+        "recommended_first_session": {"session_type": "general_reset", "reason": "x", "duration_mins": 10},
+        "coach_note": "note",
+    }
+    _mock_coach_deps(monkeypatch, sb, bad)
+
+    resp = client.post(
+        "/api/coach/prep-plan",
+        json={"interview_id": "iv-prep-4", "worry_input": "I lose focus"},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+    combined = " ".join([f"{i['task']} {i['description']}" for i in resp.json()["plan"]]).lower()
+    assert "orbit" in combined
+    assert "sre" in combined
+
+
+def test_get_saved_prep_plan_existing_returns_saved(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["coach_prep_plans"] = [
+        {
+            "user_id": uid,
+            "interview_id": "iv-existing",
+            "plan": {
+                "plan": [
+                    {"day": 1, "task": "A", "description": "B", "session_type": "general_reset", "duration_mins": 10},
+                    {"day": 2, "task": "A2", "description": "B2", "session_type": "interview_tomorrow", "duration_mins": 10},
+                    {"day": 3, "task": "A3", "description": "B3", "session_type": "recruiter_call", "duration_mins": 10},
+                    {"day": 4, "task": "A4", "description": "B4", "session_type": "general_reset", "duration_mins": 10},
+                    {"day": 5, "task": "A5", "description": "B5", "session_type": "interview_tomorrow", "duration_mins": 10},
+                ],
+                "recommended_first_session": {"session_type": "general_reset", "reason": "x", "duration_mins": 10},
+            },
+            "coach_note": "Saved note",
+            "created_at": "2026-05-25T12:00:00+00:00",
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, {"unused": True})
+
+    resp = client.get("/api/coach/prep-plan/iv-existing", headers={"Authorization": "Bearer fake-token"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["plan"]) == 5
+    assert body["coach_note"] == "Saved note"
+    assert "recommended_first_session" in body
+    assert "created_at" in body
+
+
+def test_get_saved_prep_plan_missing_returns_404(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    sb = FakeSupabase(_base_tables(uid))
+    _mock_coach_deps(monkeypatch, sb, {"unused": True})
+
+    resp = client.get("/api/coach/prep-plan/does-not-exist", headers={"Authorization": "Bearer fake-token"})
+    assert resp.status_code == 404
+
+
+def test_get_saved_prep_plan_does_not_expose_other_users_plan(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["coach_prep_plans"] = [
+        {
+            "user_id": "22222222-2222-2222-2222-222222222222",
+            "interview_id": "iv-shared",
+            "plan": [],
+            "coach_note": "Other user note",
+            "created_at": "2026-05-25T12:00:00+00:00",
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, {"unused": True})
+
+    resp = client.get("/api/coach/prep-plan/iv-shared", headers={"Authorization": "Bearer fake-token"})
+    assert resp.status_code == 404
