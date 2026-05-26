@@ -105,8 +105,6 @@ def collect_inputs() -> dict:
 
     goal = _prompt_optional("user goal (e.g. 'Land a senior PM role')")
     stage = _prompt_optional("user stage (e.g. 'interviewing')")
-    raw_anxiety = input("\nanxiety_level 1-10 (press Enter for 5): ").strip()
-    anxiety_level = int(raw_anxiety) if raw_anxiety.isdigit() else 5
 
     return {
         "preparation_for": preparation_for,
@@ -118,7 +116,6 @@ def collect_inputs() -> dict:
         "user_context": {
             "goal": goal or "",
             "stage": stage or "",
-            "anxiety_level": anxiety_level,
         },
     }
 

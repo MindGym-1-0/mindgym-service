@@ -64,7 +64,7 @@ def increment_streak(
     longest_streak = record["longest_streak"]
 
     last_active_str = record.get("last_active")
-    last_active = date.fromisoformat(last_active_str) if last_active_str else None
+    last_active = datetime.fromisoformat(last_active_str).date() if last_active_str else None
 
     # 2. Process rules based on last active date
     if last_active == today:
@@ -143,7 +143,7 @@ def get_user_streak(
     if last_active_str:
         today = datetime.now(timezone.utc).date()
         yesterday = today - timedelta(days=1)
-        last_active = date.fromisoformat(last_active_str)
+        last_active = datetime.fromisoformat(last_active_str).date()
 
         # If the streak is broken (last active is older than yesterday), present it as zero
         if last_active != today and last_active != yesterday:
