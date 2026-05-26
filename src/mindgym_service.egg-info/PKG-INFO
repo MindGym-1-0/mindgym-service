@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: mindgym-service
+Version: 0.1.0
+Summary: FastAPI backend for MindGym onboarding and meditation platform
+Requires-Python: >=3.9
+Requires-Dist: fastapi==0.104.1
+Requires-Dist: uvicorn==0.24.0
+Requires-Dist: pydantic==2.5.0
+Requires-Dist: pydantic-settings==2.1.0
+Requires-Dist: python-dotenv==1.0.0
+Provides-Extra: dev
+Requires-Dist: pytest==7.4.3; extra == "dev"
+Requires-Dist: pytest-asyncio==0.21.1; extra == "dev"
+Requires-Dist: httpx==0.25.2; extra == "dev"
+Requires-Dist: pytest-cov==4.1.0; extra == "dev"
