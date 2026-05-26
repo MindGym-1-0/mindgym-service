@@ -13,6 +13,7 @@ from src.api.auth import v1_router as auth_v1_router
 from src.api.onboarding import router as onboarding_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
+from src.api.coach import router as coach_router
 
 # 1. IMPORT YOUR NEW STREAKS ROUTER HERE
 from src.api.streaks import router as streaks_router
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
 
     # 2. MOUNT THE STREAKS ROUTER WITH THE REQUIRED PREFIX AND TAGS
     app.include_router(streaks_router, prefix="/api/streaks", tags=["streaks"])
+    app.include_router(coach_router, prefix="/api/coach", tags=["coach"])
 
     @app.get("/")
     async def root():
