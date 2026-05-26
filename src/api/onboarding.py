@@ -24,7 +24,7 @@ async def onboard(
     client = get_supabase_user_client(token)
 
     try:
-        result = (
+        result = await(
             client.table("users")
             .update({
                 "goal": request.job_goal,

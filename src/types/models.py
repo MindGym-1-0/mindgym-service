@@ -1,6 +1,7 @@
 """Pydantic models for request and response validation"""
 
 from enum import Enum
+from typing import Union
 from pydantic import BaseModel, Field
 
 
@@ -33,7 +34,7 @@ class OnboardingRequest(BaseModel):
     job_search_stage: JobSearchStage = Field(
         ..., description="Current stage in the job search"
     )
-    mood: str = Field(
+    mood: Union[MoodChallenge, str]= Field(
         ..., min_length=1, description="Emotional challenge selected during onboarding"
     )
 
