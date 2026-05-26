@@ -149,6 +149,13 @@ def client(fake_user_id: UUID, monkeypatch):
     app.dependency_overrides.pop(require_current_user_token, None)
 
 
+@pytest.fixture(autouse=True)
+def clear_coach_home_cache():
+    coach_module._COACH_HOME_CACHE.clear()
+    yield
+    coach_module._COACH_HOME_CACHE.clear()
+
+
 def _base_tables(user_id: str) -> dict[str, list[dict]]:
     return {
         "users": [
@@ -210,6 +217,213 @@ def test_get_coach_home_success(client, fake_user_id: UUID, monkeypatch):
     assert "maya_suggests" in body
     assert "maya_greeting" in body
     assert "interview" in body["maya_greeting"].lower()
+
+
+def test_get_coach_home_requires_actual_company_or_role_mention(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "iv2",
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-02T12:00:00+00:00",
+        }
+    ]
+    sb = FakeSupabase(tables)
+
+    # Generic wording includes "role" and "interview" but not actual company/role values.
+    gemini = {
+        "recommended_sessions": [
+            {"title": "A", "duration_mins": 10, "focus": "f1", "session_type": "interview_tomorrow"},
+            {"title": "B", "duration_mins": 8, "focus": "f2", "session_type": "general_reset"},
+            {"title": "C", "duration_mins": 12, "focus": "f3", "session_type": "recruiter_call"},
+        ],
+        "recommended_today": ["i1", "i2", "i3", "i4"],
+        "maya_suggests": {"text": "Prepare for your role interview", "session_type": "interview_tomorrow", "time_suggestion": "10 min"},
+        "maya_greeting": "Your role interview is coming up.",
+    }
+    _mock_coach_deps(monkeypatch, sb, gemini)
+
+    resp = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+    assert resp.status_code == 200
+    # Should fallback because actual company/role context is missing.
+    assert "upcoming interview soon" in resp.json()["maya_greeting"].lower()
+
+
+def test_get_coach_home_actual_company_or_role_mention_passes(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "iv3",
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-03T12:00:00+00:00",
+        }
+    ]
+    sb = FakeSupabase(tables)
+
+    gemini = {
+        "recommended_sessions": [
+            {"title": "A", "duration_mins": 10, "focus": "f1", "session_type": "interview_tomorrow"},
+            {"title": "B", "duration_mins": 8, "focus": "f2", "session_type": "general_reset"},
+            {"title": "C", "duration_mins": 12, "focus": "f3", "session_type": "recruiter_call"},
+        ],
+        "recommended_today": ["i1", "i2", "i3", "i4"],
+        "maya_suggests": {"text": "Let's prepare for Acme", "session_type": "interview_tomorrow", "time_suggestion": "10 min"},
+        "maya_greeting": "Your Acme interview is coming up, let's focus.",
+    }
+    _mock_coach_deps(monkeypatch, sb, gemini)
+
+    resp = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+    assert resp.status_code == 200
+    assert "acme" in resp.json()["maya_greeting"].lower()
+
+
+def test_get_coach_home_same_user_uses_cache(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "iv4",
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-04T12:00:00+00:00",
+        }
+    ]
+    sb = FakeSupabase(tables)
+    monkeypatch.setattr(coach_module, "get_supabase_user_client", lambda token: sb)
+
+    calls = {"count": 0}
+
+    async def _gemini(*_args, **_kwargs):
+        calls["count"] += 1
+        return {
+            "recommended_sessions": [
+                {"title": "A", "duration_mins": 10, "focus": "f1", "session_type": "interview_tomorrow"},
+                {"title": "B", "duration_mins": 8, "focus": "f2", "session_type": "general_reset"},
+                {"title": "C", "duration_mins": 12, "focus": "f3", "session_type": "recruiter_call"},
+            ],
+            "recommended_today": ["i1", "i2", "i3", "i4"],
+            "maya_suggests": {"text": "Let's prepare for Acme", "session_type": "interview_tomorrow", "time_suggestion": "10 min"},
+            "maya_greeting": "Your Acme interview is coming up, let's focus.",
+        }
+
+    monkeypatch.setattr(coach_module, "generate_gemini_flash_json", _gemini)
+
+    first = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+    second = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert calls["count"] == 1
+
+
+def test_get_coach_home_cache_is_per_user(monkeypatch):
+    uid1 = UUID("11111111-1111-1111-1111-111111111111")
+    uid2 = UUID("22222222-2222-2222-2222-222222222222")
+    current_user = {"id": uid1}
+
+    app.dependency_overrides[require_current_user_id] = lambda: current_user["id"]
+    app.dependency_overrides[require_current_user_token] = lambda: "fake-token"
+    client = TestClient(app)
+
+    def _sb_for_user(token: str):
+        uid = str(current_user["id"])
+        tables = _base_tables(uid)
+        tables["interviews"] = [
+            {
+                "id": f"iv-{uid}",
+                "user_id": uid,
+                "company": "Acme" if uid.endswith("111111111111") else "Zenith",
+                "role": "Backend Engineer",
+                "interview_date": "2026-06-05T12:00:00+00:00",
+            }
+        ]
+        return FakeSupabase(tables)
+
+    monkeypatch.setattr(coach_module, "get_supabase_user_client", _sb_for_user)
+    calls = {"count": 0}
+
+    async def _gemini(*_args, **_kwargs):
+        calls["count"] += 1
+        label = "Acme" if str(current_user["id"]).endswith("111111111111") else "Zenith"
+        return {
+            "recommended_sessions": [
+                {"title": "A", "duration_mins": 10, "focus": "f1", "session_type": "interview_tomorrow"},
+                {"title": "B", "duration_mins": 8, "focus": "f2", "session_type": "general_reset"},
+                {"title": "C", "duration_mins": 12, "focus": "f3", "session_type": "recruiter_call"},
+            ],
+            "recommended_today": ["i1", "i2", "i3", "i4"],
+            "maya_suggests": {"text": f"Let's prepare for {label}", "session_type": "interview_tomorrow", "time_suggestion": "10 min"},
+            "maya_greeting": f"Your {label} interview is coming up, let's focus.",
+        }
+
+    monkeypatch.setattr(coach_module, "generate_gemini_flash_json", _gemini)
+
+    r1 = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+    current_user["id"] = uid2
+    r2 = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert calls["count"] == 2
+    assert "acme" in r1.json()["maya_greeting"].lower()
+    assert "zenith" in r2.json()["maya_greeting"].lower()
+
+    app.dependency_overrides.pop(require_current_user_id, None)
+    app.dependency_overrides.pop(require_current_user_token, None)
+
+
+def test_get_coach_home_expired_cache_triggers_fresh_generation(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "iv5",
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-06T12:00:00+00:00",
+        }
+    ]
+    sb = FakeSupabase(tables)
+    monkeypatch.setattr(coach_module, "get_supabase_user_client", lambda token: sb)
+
+    calls = {"count": 0}
+
+    async def _gemini(*_args, **_kwargs):
+        calls["count"] += 1
+        return {
+            "recommended_sessions": [
+                {"title": "A", "duration_mins": 10, "focus": "f1", "session_type": "interview_tomorrow"},
+                {"title": "B", "duration_mins": 8, "focus": "f2", "session_type": "general_reset"},
+                {"title": "C", "duration_mins": 12, "focus": "f3", "session_type": "recruiter_call"},
+            ],
+            "recommended_today": ["i1", "i2", "i3", "i4"],
+            "maya_suggests": {"text": "Let's prepare for Acme", "session_type": "interview_tomorrow", "time_suggestion": "10 min"},
+            "maya_greeting": "Your Acme interview is coming up, let's focus.",
+        }
+
+    monkeypatch.setattr(coach_module, "generate_gemini_flash_json", _gemini)
+
+    fake_now = {"value": 1000.0}
+
+    def _fake_time():
+        return fake_now["value"]
+
+    monkeypatch.setattr(coach_module.time, "time", _fake_time)
+
+    r1 = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+    fake_now["value"] += coach_module.COACH_HOME_CACHE_TTL_SECONDS + 1
+    r2 = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert calls["count"] == 2
 
 
 def test_get_coach_home_no_upcoming_interview_fallback_momentum(client, fake_user_id: UUID, monkeypatch):
@@ -482,6 +696,18 @@ def test_post_prep_plan_whitespace_worry_input_returns_422(client):
         json={
             "interview_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5",
             "worry_input": "     ",
+        },
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 422
+
+
+def test_post_prep_plan_overlong_worry_input_returns_422(client):
+    resp = client.post(
+        "/api/coach/prep-plan",
+        json={
+            "interview_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5",
+            "worry_input": "a" * 301,
         },
         headers={"Authorization": "Bearer fake-token"},
     )
