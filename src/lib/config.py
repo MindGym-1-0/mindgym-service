@@ -103,10 +103,6 @@ def cors_origins_raw() -> str:
     return os.getenv("CORS_ORIGINS", "").strip()
 
 
-def gemini_api_key() -> str:
-    return os.getenv("GEMINI_API_KEY", "").strip()
-
-
 def auth_api_key() -> str:
     """Value for `apikey` when calling Supabase Auth `/auth/v1/user`."""
     return supabase_anon_key() or supabase_service_role_key()

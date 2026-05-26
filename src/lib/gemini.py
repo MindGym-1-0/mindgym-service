@@ -7,7 +7,7 @@ import httpx
 
 from src.lib.config import settings
 
-_GEMINI_FLASH_MODEL = "gemini-1.5-flash"
+_GEMINI_FLASH_MODEL = "gemini-2.5"
 _GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
