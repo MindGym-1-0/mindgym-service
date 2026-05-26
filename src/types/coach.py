@@ -54,7 +54,7 @@ class CoachPrepPlanRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     interview_id: UUID
-    worry_input: str = Field(..., min_length=1)
+    worry_input: str = Field(..., min_length=1, max_length=300)
 
     @field_validator("worry_input", mode="before")
     @classmethod

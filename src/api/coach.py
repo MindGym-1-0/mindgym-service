@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -30,6 +31,8 @@ _VALID_SESSION_TYPES = {
     "restarting_search",
 }
 MAX_SESSION_HISTORY_FOR_PREP = 50
+COACH_HOME_CACHE_TTL_SECONDS = 60
+_COACH_HOME_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
 def _parse_iso_datetime(raw: str | None) -> datetime | None:
@@ -40,6 +43,30 @@ def _parse_iso_datetime(raw: str | None) -> datetime | None:
         return datetime.fromisoformat(normalized)
     except ValueError:
         return None
+
+
+def _get_cached_coach_home(user_id: str) -> CoachHomeResponse | None:
+    cached = _COACH_HOME_CACHE.get(user_id)
+    if not cached:
+        return None
+
+    expires_at, payload = cached
+    if expires_at <= time.time():
+        _COACH_HOME_CACHE.pop(user_id, None)
+        return None
+
+    try:
+        return CoachHomeResponse.model_validate(payload)
+    except Exception:
+        _COACH_HOME_CACHE.pop(user_id, None)
+        return None
+
+
+def _set_cached_coach_home(user_id: str, response: CoachHomeResponse) -> None:
+    _COACH_HOME_CACHE[user_id] = (
+        time.time() + COACH_HOME_CACHE_TTL_SECONDS,
+        response.model_dump(),
+    )
 
 
 def _fallback_home_response(has_upcoming_interviews: bool) -> CoachHomeResponse:
@@ -104,10 +131,23 @@ def _validate_gemini_home_payload(payload: Any) -> CoachHomeResponse | None:
     return model
 
 
-def _mentions_interview_context(text: str) -> bool:
-    lowered = text.lower()
-    keywords = ("interview", "role", "company", "tomorrow")
-    return any(k in lowered for k in keywords)
+def _mentions_interview_context(
+    text: str, upcoming_interviews: list[dict[str, Any]]
+) -> bool:
+    lowered_text = (text or "").strip().lower()
+    if not lowered_text:
+        return False
+
+    for interview in upcoming_interviews:
+        company = str(interview.get("company") or "").strip().lower()
+        role = str(interview.get("role") or "").strip().lower()
+
+        if company and company in lowered_text:
+            return True
+        if role and role in lowered_text:
+            return True
+
+    return False
 
 
 def _build_gemini_prompt(
@@ -378,12 +418,18 @@ async def get_coach_home(
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
 ) -> CoachHomeResponse:
+    user_id = str(current_user_id)
+    cached_response = _get_cached_coach_home(user_id)
+    if cached_response is not None:
+        return cached_response
+
     try:
         sb = get_supabase_user_client(token)
     except Exception:
         logger.exception("Failed to initialize Supabase client for coach home; using fallback.")
-        return _fallback_home_response(False)
-    user_id = str(current_user_id)
+        response = _fallback_home_response(False)
+        _set_cached_coach_home(user_id, response)
+        return response
 
     user_context: dict[str, Any] = {}
     upcoming_interviews: list[dict[str, Any]] = []
@@ -437,7 +483,9 @@ async def get_coach_home(
             current_streak = int(streak_rows[0].get("current_streak") or 0)
     except Exception:
         logger.exception("Failed to load coach home data from Supabase; using fallback.")
-        return _fallback_home_response(bool(upcoming_interviews))
+        response = _fallback_home_response(bool(upcoming_interviews))
+        _set_cached_coach_home(user_id, response)
+        return response
 
     prompt = _build_gemini_prompt(
         user_context=user_context,
@@ -450,18 +498,27 @@ async def get_coach_home(
         gemini_payload = await generate_gemini_flash_json(prompt, timeout_seconds=4.0)
     except GeminiServiceError:
         logger.exception("Gemini failed for coach home; using fallback.")
-        return _fallback_home_response(bool(upcoming_interviews))
+        response = _fallback_home_response(bool(upcoming_interviews))
+        _set_cached_coach_home(user_id, response)
+        return response
 
     validated = _validate_gemini_home_payload(gemini_payload)
     if validated is None:
         logger.warning("Gemini payload failed CoachHomeResponse validation; using fallback.")
-        return _fallback_home_response(bool(upcoming_interviews))
-    if upcoming_interviews and not _mentions_interview_context(validated.maya_greeting):
+        response = _fallback_home_response(bool(upcoming_interviews))
+        _set_cached_coach_home(user_id, response)
+        return response
+    if upcoming_interviews and not _mentions_interview_context(
+        validated.maya_greeting, upcoming_interviews
+    ):
         logger.warning(
             "Gemini greeting missed required interview context with upcoming interviews; using fallback."
         )
-        return _fallback_home_response(True)
+        response = _fallback_home_response(True)
+        _set_cached_coach_home(user_id, response)
+        return response
 
+    _set_cached_coach_home(user_id, validated)
     return validated
 
 
