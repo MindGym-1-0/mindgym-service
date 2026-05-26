@@ -34,7 +34,7 @@ class OnboardingRequest(BaseModel):
     job_search_stage: JobSearchStage = Field(
         ..., description="Current stage in the job search"
     )
-    mood: Union[MoodChallenge, str]= Field(
+    mood: Union[MoodChallenge, str] = Field(
         ..., min_length=1, description="Emotional challenge selected during onboarding"
     )
 
