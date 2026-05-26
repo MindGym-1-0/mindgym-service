@@ -6,7 +6,7 @@
 
 create table if not exists public.coach_prep_plans (
     id              uuid        not null default gen_random_uuid(),
-    user_id         uuid        not null references auth.users (id) on delete cascade,
+    user_id         uuid        not null references public.users (id) on delete cascade,
     interview_id    uuid        not null references public.interviews (id) on delete cascade,
     worry_input     text        not null,
     plan            jsonb       not null,
@@ -57,7 +57,7 @@ begin
     ) then
         alter table public.coach_prep_plans
             add constraint coach_prep_plans_user_id_fkey
-            foreign key (user_id) references auth.users(id) on delete cascade;
+            foreign key (user_id) references public.users(id) on delete cascade;
     end if;
 
     if not exists (
