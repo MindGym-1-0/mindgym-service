@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 
@@ -28,6 +29,7 @@ _VALID_SESSION_TYPES = {
     "rejection_recovery",
     "restarting_search",
 }
+MAX_SESSION_HISTORY_FOR_PREP = 50
 
 
 def _parse_iso_datetime(raw: str | None) -> datetime | None:
@@ -476,12 +478,13 @@ async def create_coach_prep_plan(
         raise HTTPException(status_code=500, detail="Unable to initialize data client.") from None
 
     user_id = str(current_user_id)
+    interview_id = str(body.interview_id)
 
     try:
         interview_res = (
             sb.table("interviews")
             .select("id,company,role,event_type,interview_date,job_id")
-            .eq("id", body.interview_id)
+            .eq("id", interview_id)
             .eq("user_id", user_id)
             .limit(1)
             .execute()
@@ -532,6 +535,8 @@ async def create_coach_prep_plan(
                 .eq("user_id", user_id)
                 .eq("job_id", job_id)
                 .not_.is_("completed_at", "null")
+                .order("completed_at", desc=True)
+                .limit(MAX_SESSION_HISTORY_FOR_PREP)
                 .execute()
             )
             completed_rows = sessions_by_job.data or []
@@ -549,6 +554,8 @@ async def create_coach_prep_plan(
                 .eq("company", company)
                 .eq("role", role)
                 .not_.is_("completed_at", "null")
+                .order("completed_at", desc=True)
+                .limit(MAX_SESSION_HISTORY_FOR_PREP)
                 .execute()
             )
             completed_rows = sessions_by_company_role.data or []
@@ -608,7 +615,7 @@ async def create_coach_prep_plan(
 
     save_payload = {
         "user_id": user_id,
-        "interview_id": body.interview_id,
+        "interview_id": interview_id,
         "worry_input": body.worry_input,
         "plan": {
             "plan": [item.model_dump() for item in final_response.plan],
@@ -633,7 +640,7 @@ async def create_coach_prep_plan(
 
 @router.get("/prep-plan/{interview_id}", response_model=SavedCoachPrepPlanResponse)
 async def get_saved_coach_prep_plan(
-    interview_id: str,
+    interview_id: UUID,
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
 ) -> SavedCoachPrepPlanResponse:
@@ -644,13 +651,14 @@ async def get_saved_coach_prep_plan(
         raise HTTPException(status_code=500, detail="Unable to initialize data client.") from None
 
     user_id = str(current_user_id)
+    interview_id_str = str(interview_id)
 
     try:
         result = (
             sb.table("coach_prep_plans")
             .select("plan,coach_note,created_at")
             .eq("user_id", user_id)
-            .eq("interview_id", interview_id)
+            .eq("interview_id", interview_id_str)
             .order("created_at", desc=True)
             .limit(1)
             .execute()

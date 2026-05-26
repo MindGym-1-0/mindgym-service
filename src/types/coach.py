@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class RecommendedSession(BaseModel):
@@ -52,8 +53,18 @@ class RecommendedFirstSession(BaseModel):
 class CoachPrepPlanRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    interview_id: str = Field(..., min_length=1)
+    interview_id: UUID
     worry_input: str = Field(..., min_length=1)
+
+    @field_validator("worry_input", mode="before")
+    @classmethod
+    def strip_and_validate_worry_input(cls, value: str) -> str:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                raise ValueError("worry_input cannot be empty or whitespace.")
+            return stripped
+        return value
 
 
 class CoachPrepPlanResponse(BaseModel):
