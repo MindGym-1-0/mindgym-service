@@ -1,5 +1,4 @@
 """Google OAuth utilities and token management"""
-import json
 from typing import Optional
 import httpx
 import jwt
@@ -24,9 +23,9 @@ async def exchange_auth_code_for_token(code: str) -> dict:
     """
     if not settings.google_client_id or not settings.google_client_secret:
         raise ValueError("Google OAuth credentials not configured")
-    
+
     token_url = "https://oauth2.googleapis.com/token"
-    
+
     payload = {
         "code": code,
         "client_id": settings.google_client_id,
@@ -34,13 +33,13 @@ async def exchange_auth_code_for_token(code: str) -> dict:
         "redirect_uri": settings.google_redirect_uri,
         "grant_type": "authorization_code",
     }
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.post(token_url, data=payload)
-        
+
         if response.status_code != 200:
             raise ValueError(f"Failed to exchange code for token: {response.text}")
-        
+
         return response.json()
 
 
@@ -85,22 +84,22 @@ def create_jwt_token(user_id: str, email: str, expires_delta: Optional[timedelta
     """
     if expires_delta is None:
         expires_delta = timedelta(hours=24)
-    
+
     expire = datetime.utcnow() + expires_delta
-    
+
     payload = {
         "user_id": user_id,
         "email": email,
         "exp": expire,
         "iat": datetime.utcnow(),
     }
-    
+
     token = jwt.encode(
         payload,
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
     )
-    
+
     return token
 
 
