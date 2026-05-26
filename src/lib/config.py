@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool | None = Field(default=None, alias="AUTH_COOKIE_SECURE")
     auth_cookie_samesite: str = Field(default="lax", alias="AUTH_COOKIE_SAMESITE")
     auth_cookie_domain: str | None = Field(default=None, alias="AUTH_COOKIE_DOMAIN")
+    gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
 
     @property
     def resolved_supabase_jwt_secret(self) -> str | None:
@@ -100,6 +101,10 @@ def supabase_service_role_key() -> str:
 
 def cors_origins_raw() -> str:
     return os.getenv("CORS_ORIGINS", "").strip()
+
+
+def gemini_api_key() -> str:
+    return os.getenv("GEMINI_API_KEY", "").strip()
 
 
 def auth_api_key() -> str:
