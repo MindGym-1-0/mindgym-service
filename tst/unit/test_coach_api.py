@@ -243,7 +243,7 @@ def test_post_prep_plan_success_and_saves_upsert(client, fake_user_id: UUID, mon
     tables = _base_tables(uid)
     tables["interviews"] = [
         {
-            "id": "iv-prep-1",
+            "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
             "user_id": uid,
             "company": "Acme",
             "role": "Backend Engineer",
@@ -268,7 +268,7 @@ def test_post_prep_plan_success_and_saves_upsert(client, fake_user_id: UUID, mon
 
     resp = client.post(
         "/api/coach/prep-plan",
-        json={"interview_id": "iv-prep-1", "worry_input": "I'm worried about blanking out"},
+        json={"interview_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1", "worry_input": "I'm worried about blanking out"},
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 200
@@ -286,7 +286,7 @@ def test_post_prep_plan_gemini_failure_returns_fallback_and_saves(client, fake_u
     tables = _base_tables(uid)
     tables["interviews"] = [
         {
-            "id": "iv-prep-2",
+            "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2",
             "user_id": uid,
             "company": "Zenith",
             "role": "Platform Engineer",
@@ -300,7 +300,7 @@ def test_post_prep_plan_gemini_failure_returns_fallback_and_saves(client, fake_u
 
     resp = client.post(
         "/api/coach/prep-plan",
-        json={"interview_id": "iv-prep-2", "worry_input": "I ramble"},
+        json={"interview_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2", "worry_input": "I ramble"},
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 200
@@ -323,7 +323,7 @@ def test_post_prep_plan_invalid_session_type_uses_fallback(client, fake_user_id:
     tables = _base_tables(uid)
     tables["interviews"] = [
         {
-            "id": "iv-prep-3",
+            "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3",
             "user_id": uid,
             "company": "Nova",
             "role": "Data Engineer",
@@ -345,7 +345,7 @@ def test_post_prep_plan_invalid_session_type_uses_fallback(client, fake_user_id:
 
     resp = client.post(
         "/api/coach/prep-plan",
-        json={"interview_id": "iv-prep-3", "worry_input": "I freeze"},
+        json={"interview_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3", "worry_input": "I freeze"},
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 200
@@ -358,7 +358,7 @@ def test_post_prep_plan_missing_company_role_mentions_uses_fallback(client, fake
     tables = _base_tables(uid)
     tables["interviews"] = [
         {
-            "id": "iv-prep-4",
+            "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4",
             "user_id": uid,
             "company": "Orbit",
             "role": "SRE",
@@ -380,7 +380,7 @@ def test_post_prep_plan_missing_company_role_mentions_uses_fallback(client, fake
 
     resp = client.post(
         "/api/coach/prep-plan",
-        json={"interview_id": "iv-prep-4", "worry_input": "I lose focus"},
+        json={"interview_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4", "worry_input": "I lose focus"},
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 200
@@ -395,7 +395,7 @@ def test_get_saved_prep_plan_existing_returns_saved(client, fake_user_id: UUID, 
     tables["coach_prep_plans"] = [
         {
             "user_id": uid,
-            "interview_id": "iv-existing",
+            "interview_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1",
             "plan": {
                 "plan": [
                     {"day": 1, "task": "A", "description": "B", "session_type": "general_reset", "duration_mins": 10},
@@ -413,7 +413,10 @@ def test_get_saved_prep_plan_existing_returns_saved(client, fake_user_id: UUID, 
     sb = FakeSupabase(tables)
     _mock_coach_deps(monkeypatch, sb, {"unused": True})
 
-    resp = client.get("/api/coach/prep-plan/iv-existing", headers={"Authorization": "Bearer fake-token"})
+    resp = client.get(
+        "/api/coach/prep-plan/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1",
+        headers={"Authorization": "Bearer fake-token"},
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert len(body["plan"]) == 5
@@ -427,7 +430,10 @@ def test_get_saved_prep_plan_missing_returns_404(client, fake_user_id: UUID, mon
     sb = FakeSupabase(_base_tables(uid))
     _mock_coach_deps(monkeypatch, sb, {"unused": True})
 
-    resp = client.get("/api/coach/prep-plan/does-not-exist", headers={"Authorization": "Bearer fake-token"})
+    resp = client.get(
+        "/api/coach/prep-plan/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2",
+        headers={"Authorization": "Bearer fake-token"},
+    )
     assert resp.status_code == 404
 
 
@@ -437,7 +443,7 @@ def test_get_saved_prep_plan_does_not_expose_other_users_plan(client, fake_user_
     tables["coach_prep_plans"] = [
         {
             "user_id": "22222222-2222-2222-2222-222222222222",
-            "interview_id": "iv-shared",
+            "interview_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3",
             "plan": [],
             "coach_note": "Other user note",
             "created_at": "2026-05-25T12:00:00+00:00",
@@ -446,5 +452,37 @@ def test_get_saved_prep_plan_does_not_expose_other_users_plan(client, fake_user_
     sb = FakeSupabase(tables)
     _mock_coach_deps(monkeypatch, sb, {"unused": True})
 
-    resp = client.get("/api/coach/prep-plan/iv-shared", headers={"Authorization": "Bearer fake-token"})
+    resp = client.get(
+        "/api/coach/prep-plan/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb3",
+        headers={"Authorization": "Bearer fake-token"},
+    )
     assert resp.status_code == 404
+
+
+def test_post_prep_plan_invalid_uuid_returns_422(client):
+    resp = client.post(
+        "/api/coach/prep-plan",
+        json={"interview_id": "not-a-uuid", "worry_input": "I ramble"},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 422
+
+
+def test_get_saved_prep_plan_invalid_uuid_path_returns_422(client):
+    resp = client.get(
+        "/api/coach/prep-plan/not-a-uuid",
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 422
+
+
+def test_post_prep_plan_whitespace_worry_input_returns_422(client):
+    resp = client.post(
+        "/api/coach/prep-plan",
+        json={
+            "interview_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5",
+            "worry_input": "     ",
+        },
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 422
