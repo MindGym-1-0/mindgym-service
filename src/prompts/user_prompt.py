@@ -14,7 +14,6 @@ def build_user_prompt(
     first_name = user_context.get('first_name', '')
     goal = user_context.get('goal', '')
     stage = user_context.get('stage', '')
-    anxiety_level = user_context.get('anxiety_level', '')
 
     is_mode1 = bool(company and role)
 
@@ -57,7 +56,6 @@ CRITICAL RULES FOR THIS SESSION:
 {name_line}
 Career goal: {goal}
 Job search stage: {stage}
-Baseline anxiety level: {anxiety_level}/10
 {mode1_context}
 --- SESSION INPUTS ---
 Preparing for: {preparation_for}

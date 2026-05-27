@@ -100,7 +100,6 @@ def test_user(admin_client) -> dict[str, Any]:
             "id": user_id,
             "goal": "Land a senior product manager role",
             "stage": "interviewing",
-            "anxiety_level": 5,
         }
     ).execute()
 
@@ -131,7 +130,6 @@ def other_test_user(admin_client) -> dict[str, Any]:
             "id": user_id,
             "goal": "Find a new design leadership role",
             "stage": "exploring",
-            "anxiety_level": 4,
         }
     ).execute()
 
@@ -163,7 +161,7 @@ def test_session_happy_path_real_supabase_real_gemini(client, admin_client, test
     3. call POST /api/sessions/start with real Gemini
     4. verify ai_sessions row was saved
     5. call POST /api/sessions/complete
-    6. verify post_score, mood_delta, completed_at
+    6. verify anxiety_level_after, anxiety_level_delta, completed_at
     7. call GET /api/sessions/history
     8. call GET /api/sessions/{session_id}
     9. cleanup test auth user
@@ -173,7 +171,7 @@ def test_session_happy_path_real_supabase_real_gemini(client, admin_client, test
         "current_feeling": "overwhelmed",
         "desired_feeling": "confident",
         "time_available": "5 min",
-        "pre_score": 2,
+        "anxiety_level_before": 2,
         "company": "Stripe",
         "role": "Product Manager",
     }
@@ -191,7 +189,7 @@ def test_session_happy_path_real_supabase_real_gemini(client, admin_client, test
     saved = (
         admin_client.table("ai_sessions")
         .select(
-            "id, user_id, preparation_for, company, role, pre_score, "
+            "id, user_id, preparation_for, company, role, anxiety_level_before, "
             "phase1, phase2, phase3, phase4, phase5"
         )
         .eq("id", session_id)
@@ -206,24 +204,24 @@ def test_session_happy_path_real_supabase_real_gemini(client, admin_client, test
 
     complete_response = client.post(
         "/api/sessions/complete",
-        json={"session_id": session_id, "post_score": 7},
+        json={"session_id": session_id, "anxiety_level_after": 7},
     )
     assert complete_response.status_code == 200, complete_response.text
     complete_body = complete_response.json()
-    assert complete_body["pre_score"] == 2
-    assert complete_body["post_score"] == 7
-    assert complete_body["mood_delta"] == 5
+    assert complete_body["anxiety_level_before"] == 2
+    assert complete_body["anxiety_level_after"] == 7
+    assert complete_body["anxiety_level_delta"] == 5
 
     updated = (
         admin_client.table("ai_sessions")
-        .select("post_score, mood_delta, completed_at")
+        .select("anxiety_level_after, anxiety_level_delta, completed_at")
         .eq("id", session_id)
         .maybe_single()
         .execute()
     ).data
     assert updated is not None
-    assert updated["post_score"] == 7
-    assert updated["mood_delta"] == 5
+    assert updated["anxiety_level_after"] == 7
+    assert updated["anxiety_level_delta"] == 5
     assert updated["completed_at"] is not None
 
     history_response = client.get("/api/sessions/history")
@@ -258,7 +256,7 @@ def test_start_session_uses_fallback_when_gemini_returns_none(
         "current_feeling": "overwhelmed",
         "desired_feeling": "confident",
         "time_available": "5 min",
-        "pre_score": 2,
+        "anxiety_level_before": 2,
         "company": "Stripe",
         "role": "Product Manager",
     }
@@ -316,7 +314,7 @@ def test_user_cannot_view_or_complete_another_users_session(
         "current_feeling": "overwhelmed",
         "desired_feeling": "confident",
         "time_available": "5 min",
-        "pre_score": 2,
+        "anxiety_level_before": 2,
         "company": "Stripe",
         "role": "Product Manager",
     }
@@ -332,7 +330,7 @@ def test_user_cannot_view_or_complete_another_users_session(
 
     complete_response = client.post(
         "/api/sessions/complete",
-        json={"session_id": session_id, "post_score": 7},
+        json={"session_id": session_id, "anxiety_level_after": 7},
     )
     assert complete_response.status_code == 404, complete_response.text
 
@@ -353,7 +351,7 @@ def test_event_specific_session_requires_company_and_role(client):
         "current_feeling": "overwhelmed",
         "desired_feeling": "confident",
         "time_available": "5 min",
-        "pre_score": 2,
+        "anxiety_level_before": 2,
     }
 
     response = client.post("/api/sessions/start", json=start_payload)
@@ -380,7 +378,7 @@ def test_missing_session_returns_404_for_detail_and_complete(client):
 
     complete_response = client.post(
         "/api/sessions/complete",
-        json={"session_id": fake_session_id, "post_score": 7},
+        json={"session_id": fake_session_id, "anxiety_level_after": 7},
     )
     assert complete_response.status_code == 404, complete_response.text
 
@@ -396,7 +394,7 @@ def test_patch_user_me_updates_only_provided_profile_fields(
     2. create matching public.users profile
     3. call PATCH /api/users/me with only goal
     4. verify users.goal changed
-    5. verify users.stage and users.anxiety_level stayed the same
+    5. verify users.stage stayed the same
     6. cleanup test auth user
     """
     response = client.patch(
@@ -408,7 +406,7 @@ def test_patch_user_me_updates_only_provided_profile_fields(
 
     profile = (
         admin_client.table("users")
-        .select("goal, stage, anxiety_level")
+        .select("goal, stage")
         .eq("id", test_user["id"])
         .maybe_single()
         .execute()
@@ -417,4 +415,3 @@ def test_patch_user_me_updates_only_provided_profile_fields(
     assert profile is not None
     assert profile["goal"] == "Land a principal product manager role"
     assert profile["stage"] == "interviewing"
-    assert profile["anxiety_level"] == 5

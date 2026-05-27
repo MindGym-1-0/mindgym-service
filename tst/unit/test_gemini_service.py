@@ -3,7 +3,7 @@ import pytest
 
 from unittest.mock import MagicMock, patch
 
-from src.lib.gemini_service import calibrate_tone, derive_pre_score, generate_script
+from src.lib.gemini_service import calibrate_tone, derive_anxiety_level_before, generate_script
 from src.types.session import SessionScript
 
 
@@ -15,21 +15,21 @@ from src.types.session import SessionScript
     ('unsure', 5),
     ('anxious but hopeful', 6),
 ])
-def test_derive_pre_score_all_chips(current_feeling: str, expected_score: int) -> None:
-    """All 5 feeling chips must map to the correct pre_score."""
-    assert derive_pre_score(current_feeling) == expected_score
+def test_derive_anxiety_level_before_all_chips(current_feeling: str, expected_score: int) -> None:
+    """All 5 feeling chips must map to the correct anxiety_level_before."""
+    assert derive_anxiety_level_before(current_feeling) == expected_score
 
 
 @pytest.mark.unit
-def test_derive_pre_score_unknown_chip_raises_value_error() -> None:
+def test_derive_anxiety_level_before_unknown_chip_raises_value_error() -> None:
     """An unrecognised chip must raise ValueError."""
     with pytest.raises(ValueError, match='Unknown current_feeling'):
-        derive_pre_score('completely_fine')
+        derive_anxiety_level_before('completely_fine')
 
 
 _VALID_GEMINI_RESPONSE = '{"phase1": "Breathe.", "phase2": "Ground.", "phase3": "Picture yourself at Stripe for your PM role.", "phase4": "Anchor.", "phase5": "You are ready for Stripe as a PM."}'
 
-_USER_CONTEXT = {'goal': 'Land a PM role', 'stage': 'active', 'anxiety_level': 5}
+_USER_CONTEXT = {'goal': 'Land a PM role', 'stage': 'active'}
 
 
 @pytest.mark.unit
@@ -46,6 +46,7 @@ def test_generate_script_returns_session_script_on_success() -> None:
             current_feeling='overwhelmed',
             desired_feeling='confident',
             time_available='10 min',
+            anxiety_level_before=2,
             company='Stripe',
             role='PM',
             user_context=_USER_CONTEXT,
@@ -67,6 +68,7 @@ def test_generate_script_returns_none_on_timeout() -> None:
             current_feeling='overwhelmed',
             desired_feeling='confident',
             time_available='10 min',
+            anxiety_level_before=2,
             company='Stripe',
             role='PM',
             user_context=_USER_CONTEXT,
@@ -89,6 +91,7 @@ def test_generate_script_returns_none_when_company_and_role_missing_from_mode1_o
             current_feeling='overwhelmed',
             desired_feeling='confident',
             time_available='10 min',
+            anxiety_level_before=2,
             company='Stripe',
             role='PM',
             user_context=_USER_CONTEXT,
@@ -111,6 +114,7 @@ def test_generate_script_returns_none_when_role_missing_from_mode1_output() -> N
             current_feeling='overwhelmed',
             desired_feeling='confident',
             time_available='10 min',
+            anxiety_level_before=2,
             company='Stripe',
             role='PM',
             user_context=_USER_CONTEXT,
@@ -133,6 +137,7 @@ def test_generate_script_returns_none_on_invalid_json() -> None:
             current_feeling='overwhelmed',
             desired_feeling='confident',
             time_available='10 min',
+            anxiety_level_before=2,
             company='Stripe',
             role='PM',
             user_context=_USER_CONTEXT,
@@ -159,6 +164,7 @@ def test_generate_script_uses_configured_model_name() -> None:
             current_feeling='overwhelmed',
             desired_feeling='confident',
             time_available='10 min',
+            anxiety_level_before=2,
             company='Stripe',
             role='PM',
             user_context=_USER_CONTEXT,
@@ -168,7 +174,7 @@ def test_generate_script_uses_configured_model_name() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize('pre_score,expected_tone', [
+@pytest.mark.parametrize('anxiety_level_before,expected_tone', [
     (1, 'slow and calming'),
     (2, 'slow and calming'),
     (3, 'slow and calming'),
@@ -180,7 +186,7 @@ def test_generate_script_uses_configured_model_name() -> None:
     (9, 'confident and energetic'),
     (10, 'confident and energetic'),
 ])
-def test_tone_calibration_boundary_values(pre_score: int, expected_tone: str) -> None:
+def test_tone_calibration_boundary_values(anxiety_level_before: int, expected_tone: str) -> None:
     """Tone calibration must return the correct tone for all boundary values."""
-    tone = calibrate_tone(pre_score=pre_score)
-    assert tone == expected_tone, f'pre_score={pre_score} expected "{expected_tone}" but got "{tone}"'
+    tone = calibrate_tone(anxiety_level_before=anxiety_level_before)
+    assert tone == expected_tone, f'anxiety_level_before={anxiety_level_before} expected "{expected_tone}" but got "{tone}"'

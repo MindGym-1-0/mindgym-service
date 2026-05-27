@@ -52,7 +52,7 @@ def _render_emotional_calibration(ec: dict) -> str:
     arc = ec['tone_arc']
     return f"""--- EMOTIONAL CALIBRATION ---
 Current feeling: {ec['current_feeling']}
-Current emotional score: {ec['pre_score']}/10 (1 = completely depleted/overwhelmed, 5 = neutral/uncertain, 10 = peak energy and confidence)
+Current emotional score: {ec['anxiety_level_before']}/10 (1 = completely depleted/overwhelmed, 5 = neutral/uncertain, 10 = peak energy and confidence)
 Overall tone: {ec['tone']}
 Stress level: {ec['stress_level']}
 Energy level: {ec['energy_level']}

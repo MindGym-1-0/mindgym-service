@@ -112,7 +112,6 @@ def test_user(admin_db) -> Any:
         "id": user_id,
         "goal": "Land a senior product manager role",
         "stage": "interviewing",
-        "anxiety_level": 5,
     }).execute()
 
     try:
@@ -142,7 +141,7 @@ _MODE1_PAYLOAD = {
     "current_feeling": "overwhelmed",
     "desired_feeling": "confident",
     "time_available": "10 min",
-    "pre_score": 3,
+    "anxiety_level_before": 3,
     "company": "Stripe",
     "role": "Product Manager",
 }
@@ -152,7 +151,7 @@ _MODE2_PAYLOAD = {
     "current_feeling": "exhausted",
     "desired_feeling": "calm",
     "time_available": "5 min",
-    "pre_score": 4,
+    "anxiety_level_before": 4,
 }
 
 _SCRIPT_PHASES = {"phase1", "phase2", "phase3", "phase4", "phase5"}
@@ -167,7 +166,7 @@ def test_session_start_then_complete_then_streak(api_client, admin_db, test_user
     """Full journey: start → complete → increment streak → read streak state.
 
     Verifies that real Gemini generates a valid script, Supabase persists it,
-    mood_delta is computed correctly, and the streak service responds to the
+    anxiety_level_delta is computed correctly, and the streak service responds to the
     completed session by initialising a streak row.
     """
     start_resp = api_client.post("/api/sessions/start", json=_MODE1_PAYLOAD)
@@ -184,7 +183,7 @@ def test_session_start_then_complete_then_streak(api_client, admin_db, test_user
     # Verify the row exists in ai_sessions before completion
     saved = (
         admin_db.table("ai_sessions")
-        .select("id, user_id, preparation_for, company, role, pre_score")
+        .select("id, user_id, preparation_for, company, role, anxiety_level_before")
         .eq("id", session_id)
         .maybe_single()
         .execute()
@@ -193,29 +192,29 @@ def test_session_start_then_complete_then_streak(api_client, admin_db, test_user
     assert saved["user_id"] == test_user["id"]
     assert saved["company"] == "Stripe"
     assert saved["role"] == "Product Manager"
-    assert saved["pre_score"] == 3
+    assert saved["anxiety_level_before"] == 3
 
     # Complete the session
     complete_resp = api_client.post(
         "/api/sessions/complete",
-        json={"session_id": session_id, "post_score": 8},
+        json={"session_id": session_id, "anxiety_level_after": 8},
     )
     assert complete_resp.status_code == 200, complete_resp.text
     complete_body = complete_resp.json()
-    assert complete_body["pre_score"] == 3
-    assert complete_body["post_score"] == 8
-    assert complete_body["mood_delta"] == 5
+    assert complete_body["anxiety_level_before"] == 3
+    assert complete_body["anxiety_level_after"] == 8
+    assert complete_body["anxiety_level_delta"] == 5
 
-    # Verify mood_delta persisted to ai_sessions
+    # Verify anxiety_level_delta persisted to ai_sessions
     updated = (
         admin_db.table("ai_sessions")
-        .select("post_score, mood_delta, completed_at")
+        .select("anxiety_level_after, anxiety_level_delta, completed_at")
         .eq("id", session_id)
         .maybe_single()
         .execute()
     ).data
-    assert updated["post_score"] == 8
-    assert updated["mood_delta"] == 5
+    assert updated["anxiety_level_after"] == 8
+    assert updated["anxiety_level_delta"] == 5
     assert updated["completed_at"] is not None
 
     # Increment streak — first action of the day creates the streak row
@@ -244,7 +243,7 @@ def test_multiple_sessions_history_is_newest_first(api_client):
 
     api_client.post(
         "/api/sessions/complete",
-        json={"session_id": session_a_id, "post_score": 6},
+        json={"session_id": session_a_id, "anxiety_level_after": 6},
     )
 
     resp_b = api_client.post("/api/sessions/start", json=_MODE1_PAYLOAD)
@@ -253,7 +252,7 @@ def test_multiple_sessions_history_is_newest_first(api_client):
 
     api_client.post(
         "/api/sessions/complete",
-        json={"session_id": session_b_id, "post_score": 9},
+        json={"session_id": session_b_id, "anxiety_level_after": 9},
     )
 
     history_resp = api_client.get("/api/sessions/history")
@@ -285,10 +284,10 @@ def test_mode2_session_general_reset_full_flow(api_client):
 
     complete_resp = api_client.post(
         "/api/sessions/complete",
-        json={"session_id": session_id, "post_score": 7},
+        json={"session_id": session_id, "anxiety_level_after": 7},
     )
     assert complete_resp.status_code == 200, complete_resp.text
-    assert complete_resp.json()["mood_delta"] == 3  # 7 - 4
+    assert complete_resp.json()["anxiety_level_delta"] == 3  # 7 - 4
 
     detail_resp = api_client.get(f"/api/sessions/{session_id}")
     assert detail_resp.status_code == 200, detail_resp.text
@@ -318,14 +317,13 @@ def test_profile_update_persists_before_next_session(api_client, admin_db, test_
 
     profile = (
         admin_db.table("users")
-        .select("goal, stage, anxiety_level")
+        .select("goal, stage")
         .eq("id", test_user["id"])
         .maybe_single()
         .execute()
     ).data
     assert profile["goal"] == "Become a principal PM at a Series B startup"
     assert profile["stage"] == "interviewing"  # unchanged
-    assert profile["anxiety_level"] == 5        # unchanged
 
     # Session generation must still work after the profile update
     start_resp = api_client.post("/api/sessions/start", json=_MODE1_PAYLOAD)
@@ -350,7 +348,7 @@ def test_session_replay_preserves_all_five_phases_exactly(api_client):
 
     api_client.post(
         "/api/sessions/complete",
-        json={"session_id": session_id, "post_score": 8},
+        json={"session_id": session_id, "anxiety_level_after": 8},
     )
 
     detail_resp = api_client.get(f"/api/sessions/{session_id}")

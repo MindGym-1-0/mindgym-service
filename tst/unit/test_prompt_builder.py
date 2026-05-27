@@ -4,7 +4,7 @@ import pytest
 from src.lib.prompt_builder import build_prompt
 
 
-_USER_CONTEXT = {'goal': 'Land a PM role', 'stage': 'active', 'anxiety_level': 5}
+_USER_CONTEXT = {'goal': 'Land a PM role', 'stage': 'active'}
 _USER_CONTEXT_WITH_NAME = {**_USER_CONTEXT, 'first_name': 'Claire'}
 
 
@@ -16,7 +16,7 @@ def test_build_prompt_mode1_contains_company_and_role() -> None:
         current_feeling='overwhelmed',
         desired_feeling='confident',
         time_available='10 min',
-        pre_score=2,
+        anxiety_level_before=2,
         company='Stripe',
         role='PM',
         user_context=_USER_CONTEXT,
@@ -34,7 +34,7 @@ def test_build_prompt_mode1_contains_critical_rules() -> None:
         current_feeling='overwhelmed',
         desired_feeling='confident',
         time_available='10 min',
-        pre_score=2,
+        anxiety_level_before=2,
         company='Stripe',
         role='PM',
         user_context=_USER_CONTEXT,
@@ -45,31 +45,31 @@ def test_build_prompt_mode1_contains_critical_rules() -> None:
 
 @pytest.mark.unit
 def test_build_prompt_mode2_omits_company_and_role_sections() -> None:
-    """Mode 2 prompt must not include company/role context or critical rules."""
+    """Mode 2 prompt must not include company/role context or mode1 company enforcement."""
     prompt = build_prompt(
         preparation_for='networking_event',
         current_feeling='unsure',
         desired_feeling='calm',
         time_available='5 min',
-        pre_score=5,
+        anxiety_level_before=5,
         company=None,
         role=None,
         user_context=_USER_CONTEXT,
     )
 
-    assert 'CRITICAL' not in prompt
     assert 'Company:' not in prompt
+    assert 'use the actual names' not in prompt
 
 
 @pytest.mark.unit
 def test_build_prompt_contains_user_context_fields() -> None:
-    """Prompt must include the user context fields: goal, stage, anxiety_level."""
+    """Prompt must include the user context fields: goal and stage."""
     prompt = build_prompt(
         preparation_for='interview_tomorrow',
         current_feeling='overwhelmed',
         desired_feeling='confident',
         time_available='10 min',
-        pre_score=2,
+        anxiety_level_before=2,
         company=None,
         role=None,
         user_context=_USER_CONTEXT,
@@ -77,7 +77,7 @@ def test_build_prompt_contains_user_context_fields() -> None:
 
     assert 'Land a PM role' in prompt
     assert 'active' in prompt
-    assert '5' in prompt
+    assert '2' in prompt
 
 
 @pytest.mark.unit
@@ -88,7 +88,7 @@ def test_build_prompt_contains_session_inputs() -> None:
         current_feeling='anxious but hopeful',
         desired_feeling='calm',
         time_available='15 min',
-        pre_score=6,
+        anxiety_level_before=6,
         company=None,
         role=None,
         user_context=_USER_CONTEXT,
@@ -108,7 +108,7 @@ def test_build_prompt_contains_maya_persona() -> None:
         current_feeling='overwhelmed',
         desired_feeling='confident',
         time_available='10 min',
-        pre_score=2,
+        anxiety_level_before=2,
         company=None,
         role=None,
         user_context=_USER_CONTEXT,
@@ -125,7 +125,7 @@ def test_build_prompt_contains_phase_structure() -> None:
         current_feeling='overwhelmed',
         desired_feeling='confident',
         time_available='10 min',
-        pre_score=2,
+        anxiety_level_before=2,
         company=None,
         role=None,
         user_context=_USER_CONTEXT,
@@ -143,7 +143,7 @@ def test_build_prompt_contains_json_output_instruction() -> None:
         current_feeling='overwhelmed',
         desired_feeling='confident',
         time_available='10 min',
-        pre_score=2,
+        anxiety_level_before=2,
         company=None,
         role=None,
         user_context=_USER_CONTEXT,
@@ -160,7 +160,7 @@ def test_build_prompt_contains_emotional_calibration() -> None:
         current_feeling='overwhelmed',
         desired_feeling='confident',
         time_available='10 min',
-        pre_score=2,
+        anxiety_level_before=2,
         company=None,
         role=None,
         user_context=_USER_CONTEXT,
@@ -179,7 +179,7 @@ def test_build_prompt_includes_first_name_when_provided() -> None:
         current_feeling='overwhelmed',
         desired_feeling='confident',
         time_available='10 min',
-        pre_score=2,
+        anxiety_level_before=2,
         company=None,
         role=None,
         user_context=_USER_CONTEXT_WITH_NAME,

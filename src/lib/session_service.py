@@ -13,15 +13,15 @@ from src.types.session import (
     SessionStartResponse,
 )
 
-_USER_CONTEXT_DEFAULTS = {'goal': '', 'stage': '', 'anxiety_level': 5}
+_USER_CONTEXT_DEFAULTS = {'goal': '', 'stage': ''}
 
 
 async def fetch_user_context(user_id: str) -> dict:
-    """Fetch goal, stage, and anxiety_level from the users table."""
+    """Fetch goal and stage from the users table."""
     client = get_supabase_admin_client()
     result = await asyncio.to_thread(
         lambda: client.table('users')
-        .select('goal, stage, anxiety_level')
+        .select('goal, stage')
         .eq('id', user_id)
         .maybe_single()
         .execute()
@@ -40,7 +40,7 @@ async def insert_session(user_id: str, request: SessionStartRequest, script: Ses
         'time_available': request.time_available,
         'company': request.company,
         'role': request.role,
-        'pre_score': request.pre_score,
+        'anxiety_level_before': request.anxiety_level_before,
         'phase1': script.phase1,
         'phase2': script.phase2,
         'phase3': script.phase3,
@@ -60,7 +60,7 @@ async def fetch_session(session_id: str) -> dict | None:
     client = get_supabase_admin_client()
     result = await asyncio.to_thread(
         lambda: client.table('ai_sessions')
-        .select('id, user_id, pre_score, completed_at')
+        .select('id, user_id, anxiety_level_before, completed_at')
         .eq('id', session_id)
         .maybe_single()
         .execute()
@@ -68,14 +68,14 @@ async def fetch_session(session_id: str) -> dict | None:
     return getattr(result, 'data', None) or None
 
 
-async def update_session(session_id: str, post_score: int, mood_delta: int) -> None:
-    """Update an ai_sessions row with post_score, mood_delta, and completed_at."""
+async def update_session(session_id: str, anxiety_level_after: int, anxiety_level_delta: int) -> None:
+    """Update an ai_sessions row with anxiety_level_after, anxiety_level_delta, and completed_at."""
     client = get_supabase_admin_client()
     result = await asyncio.to_thread(
         lambda: client.table('ai_sessions')
         .update({
-            'post_score': post_score,
-            'mood_delta': mood_delta,
+            'anxiety_level_after': anxiety_level_after,
+            'anxiety_level_delta': anxiety_level_delta,
             'completed_at': datetime.now(timezone.utc).isoformat(),
         })
         .eq('id', session_id)
@@ -98,6 +98,7 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
         current_feeling=request.current_feeling,
         desired_feeling=request.desired_feeling,
         time_available=request.time_available,
+        anxiety_level_before=request.anxiety_level_before,
         company=request.company,
         role=request.role,
         user_context=user_context,
@@ -130,7 +131,7 @@ async def fetch_session_history(user_id: str) -> list:
     client = get_supabase_admin_client()
     result = await asyncio.to_thread(
         lambda: client.table('ai_sessions')
-        .select('id, preparation_for, pre_score, post_score, mood_delta, completed_at, created_at')
+        .select('id, preparation_for, anxiety_level_before, anxiety_level_after, anxiety_level_delta, completed_at, created_at')
         .eq('user_id', user_id)
         .not_.is_('completed_at', 'null')
         .order('completed_at', desc=True)
@@ -149,7 +150,7 @@ async def fetch_session_detail(user_id: str, session_id: str) -> dict:
         lambda: client.table('ai_sessions')
         .select(
             'id, preparation_for, current_feeling, desired_feeling, time_available, '
-            'company, role, pre_score, post_score, mood_delta, '
+            'company, role, anxiety_level_before, anxiety_level_after, anxiety_level_delta, '
             'phase1, phase2, phase3, phase4, phase5, '
             'completed_at, created_at, user_id'
         )
@@ -171,9 +172,9 @@ async def fetch_session_detail(user_id: str, session_id: str) -> dict:
         'time_available': row['time_available'],
         'company': row.get('company'),
         'role': row.get('role'),
-        'pre_score': row['pre_score'],
-        'post_score': row.get('post_score'),
-        'mood_delta': row.get('mood_delta'),
+        'anxiety_level_before': row['anxiety_level_before'],
+        'anxiety_level_after': row.get('anxiety_level_after'),
+        'anxiety_level_delta': row.get('anxiety_level_delta'),
         'script': SessionScript(
             phase1=row['phase1'],
             phase2=row['phase2'],
@@ -198,7 +199,7 @@ async def update_user_profile(user_id: str, request) -> None:
 
 
 async def complete_session(user_id: str, request: SessionCompleteRequest) -> SessionCompleteResponse:
-    """Mark a session complete, compute mood_delta, and persist.
+    """Mark a session complete, compute anxiety_level_delta, and persist.
 
     Raises LookupError if the session does not exist or belongs to another user.
     """
@@ -210,15 +211,15 @@ async def complete_session(user_id: str, request: SessionCompleteRequest) -> Ses
     if session.get('user_id') and session['user_id'] != user_id:
         raise LookupError(f'Session {request.session_id!r} not found.')
 
-    pre_score = session['pre_score']
-    mood_delta = request.post_score - pre_score
+    anxiety_level_before = session['anxiety_level_before']
+    anxiety_level_delta = request.anxiety_level_after - anxiety_level_before
 
-    await update_session(request.session_id, request.post_score, mood_delta)
+    await update_session(request.session_id, request.anxiety_level_after, anxiety_level_delta)
 
     return SessionCompleteResponse(
         session_id=request.session_id,
-        pre_score=pre_score,
-        post_score=request.post_score,
-        mood_delta=mood_delta,
-        message=f'Session complete. Mood shifted by {mood_delta:+d}.',
+        anxiety_level_before=anxiety_level_before,
+        anxiety_level_after=request.anxiety_level_after,
+        anxiety_level_delta=anxiety_level_delta,
+        message=f'Session complete. Anxiety shifted by {anxiety_level_delta:+d}.',
     )

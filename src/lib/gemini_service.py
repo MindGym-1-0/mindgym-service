@@ -6,7 +6,7 @@ import google.generativeai as genai
 from src.lib.config import settings
 from src.types.session import SessionScript
 
-_CHIP_TO_PRE_SCORE: dict[str, int] = {
+_CHIP_TO_ANXIETY_LEVEL: dict[str, int] = {
     'overwhelmed': 2,
     'discouraged': 3,
     'exhausted': 3,
@@ -15,27 +15,27 @@ _CHIP_TO_PRE_SCORE: dict[str, int] = {
 }
 
 
-def derive_pre_score(current_feeling: str) -> int:
-    """Convert a feeling chip string to a pre_score (1–10).
+def derive_anxiety_level_before(current_feeling: str) -> int:
+    """Convert a feeling chip string to an anxiety_level_before score (1–10).
 
     Raises ValueError for unrecognised chip values.
     """
     key = current_feeling.strip().lower()
-    if key not in _CHIP_TO_PRE_SCORE:
+    if key not in _CHIP_TO_ANXIETY_LEVEL:
         raise ValueError(f'Unknown current_feeling: {current_feeling!r}')
-    return _CHIP_TO_PRE_SCORE[key]
+    return _CHIP_TO_ANXIETY_LEVEL[key]
 
 
-def calibrate_tone(pre_score: int) -> str:
-    """Map a pre_score to a tone string for the Gemini prompt.
+def calibrate_tone(anxiety_level_before: int) -> str:
+    """Map an anxiety_level_before score to a tone string for the Gemini prompt.
 
-    Raises ValueError if pre_score is outside the valid 1–10 range.
+    Raises ValueError if the score is outside the valid 1–10 range.
     """
-    if not 1 <= pre_score <= 10:
-        raise ValueError(f'pre_score out of range: {pre_score}')
-    if pre_score <= 3:
+    if not 1 <= anxiety_level_before <= 10:
+        raise ValueError(f'anxiety_level_before out of range: {anxiety_level_before}')
+    if anxiety_level_before <= 3:
         return 'slow and calming'
-    if pre_score <= 6:
+    if anxiety_level_before <= 6:
         return 'balanced and steady'
     return 'confident and energetic'
 
@@ -45,6 +45,7 @@ def generate_script(
     current_feeling: str,
     desired_feeling: str,
     time_available: str,
+    anxiety_level_before: int,
     company: str | None,
     role: str | None,
     user_context: dict,
@@ -58,15 +59,13 @@ def generate_script(
         genai.configure(api_key=settings.gemini_api_key)
         model = genai.GenerativeModel(settings.gemini_model)
 
-        pre_score = derive_pre_score(current_feeling)
-
         from src.lib.prompt_builder import build_prompt
         prompt = build_prompt(
             preparation_for=preparation_for,
             current_feeling=current_feeling,
             desired_feeling=desired_feeling,
             time_available=time_available,
-            pre_score=pre_score,
+            anxiety_level_before=anxiety_level_before,
             company=company,
             role=role,
             user_context=user_context,

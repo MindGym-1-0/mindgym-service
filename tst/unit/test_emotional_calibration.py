@@ -4,10 +4,10 @@ import pytest
 from src.lib.emotional_calibration import build_emotional_calibration
 
 
-# --- pre_score → stress/energy/confidence bands ---
+# --- anxiety_level_before → stress/energy/confidence bands ---
 
 @pytest.mark.unit
-@pytest.mark.parametrize('pre_score,expected', [
+@pytest.mark.parametrize('anxiety_level_before,expected', [
     (1, ('high', 'low', 'low')),
     (2, ('high', 'low', 'low')),
     (3, ('high', 'low', 'low')),
@@ -19,14 +19,14 @@ from src.lib.emotional_calibration import build_emotional_calibration
     (9, ('low', 'high', 'high')),
     (10, ('low', 'high', 'high')),
 ])
-def test_intensity_bands_from_pre_score(
-    pre_score: int, expected: tuple[str, str, str]
+def test_intensity_bands_from_anxiety_level_before(
+    anxiety_level_before: int, expected: tuple[str, str, str]
 ) -> None:
-    """pre_score must map to correct stress/energy/confidence levels."""
+    """anxiety_level_before must map to correct stress/energy/confidence levels."""
     result = build_emotional_calibration(
         current_feeling='unsure',
         desired_feeling='confident',
-        pre_score=pre_score,
+        anxiety_level_before=anxiety_level_before,
         baseline_anxiety_level=5,
     )
     assert result['stress_level'] == expected[0]
@@ -51,7 +51,7 @@ def test_primary_need_from_current_feeling(
     result = build_emotional_calibration(
         current_feeling=current_feeling,
         desired_feeling='confident',
-        pre_score=3,
+        anxiety_level_before=3,
         baseline_anxiety_level=5,
     )
     assert result['primary_need'] == expected_primary_need
@@ -63,7 +63,7 @@ def test_tone_arc_overwhelmed() -> None:
     result = build_emotional_calibration(
         current_feeling='overwhelmed',
         desired_feeling='confident',
-        pre_score=2,
+        anxiety_level_before=2,
         baseline_anxiety_level=5,
     )
     arc = result['tone_arc']
@@ -79,7 +79,7 @@ def test_tone_arc_anxious_but_hopeful() -> None:
     result = build_emotional_calibration(
         current_feeling='anxious but hopeful',
         desired_feeling='confident',
-        pre_score=6,
+        anxiety_level_before=6,
         baseline_anxiety_level=5,
     )
     arc = result['tone_arc']
@@ -105,7 +105,7 @@ def test_desired_feeling_shapes_phase5_landing(
     result = build_emotional_calibration(
         current_feeling='unsure',
         desired_feeling=desired_feeling,
-        pre_score=4,
+        anxiety_level_before=4,
         baseline_anxiety_level=5,
     )
     assert result['tone_arc']['phase5'] == expected_phase5
@@ -119,12 +119,12 @@ def test_passthrough_fields_are_present() -> None:
     result = build_emotional_calibration(
         current_feeling='overwhelmed',
         desired_feeling='confident',
-        pre_score=2,
+        anxiety_level_before=2,
         baseline_anxiety_level=7,
     )
     assert result['current_feeling'] == 'overwhelmed'
     assert result['desired_feeling'] == 'confident'
-    assert result['pre_score'] == 2
+    assert result['anxiety_level_before'] == 2
     assert result['baseline_anxiety_level'] == 7
     assert result['tone'] == 'slow and calming'
 
@@ -136,6 +136,6 @@ def test_unknown_current_feeling_raises() -> None:
         build_emotional_calibration(
             current_feeling='totally_fine',
             desired_feeling='confident',
-            pre_score=5,
+            anxiety_level_before=5,
             baseline_anxiety_level=5,
         )

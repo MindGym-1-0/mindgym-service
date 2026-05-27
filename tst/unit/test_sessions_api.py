@@ -28,18 +28,18 @@ _FAKE_START_RESPONSE = SessionStartResponse(
 )
 _FAKE_COMPLETE_RESPONSE = SessionCompleteResponse(
     session_id='session-abc',
-    pre_score=3,
-    post_score=8,
-    mood_delta=5,
-    message='Session complete. Mood shifted by +5.',
+    anxiety_level_before=3,
+    anxiety_level_after=8,
+    anxiety_level_delta=5,
+    message='Session complete. Anxiety shifted by +5.',
 )
 _FAKE_HISTORY = [
     SessionHistoryItem(
         id='session-abc',
         preparation_for='interview_tomorrow',
-        pre_score=3,
-        post_score=8,
-        mood_delta=5,
+        anxiety_level_before=3,
+        anxiety_level_after=8,
+        anxiety_level_delta=5,
         completed_at='2026-05-24T10:00:00+00:00',
         created_at='2026-05-24T09:00:00+00:00',
     )
@@ -52,9 +52,9 @@ _FAKE_DETAIL = SessionDetail(
     time_available='10 min',
     company='Stripe',
     role='PM',
-    pre_score=3,
-    post_score=8,
-    mood_delta=5,
+    anxiety_level_before=3,
+    anxiety_level_after=8,
+    anxiety_level_delta=5,
     script=_FAKE_SCRIPT,
     completed_at='2026-05-24T10:00:00+00:00',
     created_at='2026-05-24T09:00:00+00:00',
@@ -65,11 +65,11 @@ _START_PAYLOAD = {
     'current_feeling': 'overwhelmed',
     'desired_feeling': 'confident',
     'time_available': '10 min',
-    'pre_score': 3,
+    'anxiety_level_before': 3,
     'company': 'Stripe',
     'role': 'PM',
 }
-_COMPLETE_PAYLOAD = {'session_id': 'session-abc', 'post_score': 8}
+_COMPLETE_PAYLOAD = {'session_id': 'session-abc', 'anxiety_level_after': 8}
 
 
 @pytest.fixture
@@ -141,7 +141,7 @@ def test_start_session_allows_missing_company_for_general_reset(client) -> None:
         'current_feeling': 'overwhelmed',
         'desired_feeling': 'calm',
         'time_available': '5 min',
-        'pre_score': 5,
+        'anxiety_level_before': 5,
     }
     with patch('src.api.sessions.start_session', new_callable=AsyncMock, return_value=_FAKE_START_RESPONSE):
         response = client.post('/api/sessions/start', json=general_payload)
@@ -154,16 +154,16 @@ def test_start_session_allows_missing_company_for_general_reset(client) -> None:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_complete_session_returns_200_with_mood_delta(client) -> None:
-    """POST /api/sessions/complete must return 200 with pre, post, and delta."""
+def test_complete_session_returns_200_with_anxiety_level_delta(client) -> None:
+    """POST /api/sessions/complete must return 200 with before, after, and delta."""
     with patch('src.api.sessions.complete_session', new_callable=AsyncMock, return_value=_FAKE_COMPLETE_RESPONSE):
         response = client.post('/api/sessions/complete', json=_COMPLETE_PAYLOAD)
 
     assert response.status_code == 200
     body = response.json()
-    assert body['mood_delta'] == 5
-    assert body['pre_score'] == 3
-    assert body['post_score'] == 8
+    assert body['anxiety_level_delta'] == 5
+    assert body['anxiety_level_before'] == 3
+    assert body['anxiety_level_after'] == 8
 
 
 @pytest.mark.unit
@@ -197,7 +197,7 @@ def test_get_history_returns_200_with_list(client) -> None:
     body = response.json()
     assert isinstance(body, list)
     assert body[0]['id'] == 'session-abc'
-    assert body[0]['mood_delta'] == 5
+    assert body[0]['anxiety_level_delta'] == 5
 
 
 @pytest.mark.unit
@@ -268,7 +268,7 @@ def test_patch_user_me_returns_200(client) -> None:
 def test_patch_user_me_accepts_partial_update(client) -> None:
     """PATCH /api/users/me must accept a body with only some fields set."""
     with patch('src.api.sessions.update_user_profile', new_callable=AsyncMock, return_value=None):
-        response = client.patch('/api/users/me', json={'anxiety_level': 3})
+        response = client.patch('/api/users/me', json={'stage': 'active'})
 
     assert response.status_code == 200
 
@@ -279,12 +279,3 @@ def test_patch_user_me_returns_401_when_unauthenticated() -> None:
     client = TestClient(app)
     response = client.patch('/api/users/me', json={'goal': 'something'})
     assert response.status_code == 401
-
-
-@pytest.mark.unit
-def test_patch_user_me_returns_422_for_invalid_anxiety_level(client) -> None:
-    """PATCH /api/users/me must return 422 when anxiety_level is out of 1-10 range."""
-    with patch('src.api.sessions.update_user_profile', new_callable=AsyncMock, return_value=None):
-        response = client.patch('/api/users/me', json={'anxiety_level': 99})
-
-    assert response.status_code == 422

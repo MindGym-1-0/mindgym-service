@@ -2,17 +2,17 @@
 
 from src.lib.gemini_service import calibrate_tone
 
-# pre_score bands → stress / energy / confidence
+# anxiety_level_before bands → stress / energy / confidence
 _INTENSITY_BANDS: dict[str, tuple[str, str, str]] = {
     'low':      ('high',     'low',    'low'),
     'moderate': ('moderate', 'moderate', 'moderate'),
     'high':     ('low',      'high',   'high'),
 }
 
-def _intensity_band(pre_score: int) -> str:
-    if pre_score <= 3:
+def _intensity_band(anxiety_level_before: int) -> str:
+    if anxiety_level_before <= 3:
         return 'low'
-    if pre_score <= 6:
+    if anxiety_level_before <= 6:
         return 'moderate'
     return 'high'
 
@@ -82,24 +82,24 @@ _PHASE5_DEFAULT = 'concise confidence boost'
 def build_emotional_calibration(
     current_feeling: str,
     desired_feeling: str,
-    pre_score: int,
+    anxiety_level_before: int,
     baseline_anxiety_level: int,
 ) -> dict:
     """Build an emotional calibration object from session inputs.
 
-    Combines pre_score intensity, current_feeling shape, and desired_feeling
+    Combines anxiety_level_before intensity, current_feeling shape, and desired_feeling
     destination into a structured object for the system prompt.
 
     Raises ValueError for unrecognised current_feeling values.
     """
-    if not 1 <= pre_score <= 10:
-        raise ValueError(f'pre_score out of range: {pre_score}. Must be 1–10.')
+    if not 1 <= anxiety_level_before <= 10:
+        raise ValueError(f'anxiety_level_before out of range: {anxiety_level_before}. Must be 1–10.')
 
     key = current_feeling.strip().lower()
     if key not in _FEELING_ARCS:
         raise ValueError(f'Unknown current_feeling: {current_feeling!r}')
 
-    band = _intensity_band(pre_score)
+    band = _intensity_band(anxiety_level_before)
     stress_level, energy_level, confidence_level = _INTENSITY_BANDS[band]
 
     arc_def = _FEELING_ARCS[key]
@@ -109,12 +109,12 @@ def build_emotional_calibration(
     return {
         'current_feeling': current_feeling,
         'desired_feeling': desired_feeling,
-        'pre_score': pre_score,
+        'anxiety_level_before': anxiety_level_before,
         'baseline_anxiety_level': baseline_anxiety_level,
         'stress_level': stress_level,
         'energy_level': energy_level,
         'confidence_level': confidence_level,
         'primary_need': arc_def['primary_need'],
-        'tone': calibrate_tone(pre_score),
+        'tone': calibrate_tone(anxiety_level_before),
         'tone_arc': tone_arc,
     }

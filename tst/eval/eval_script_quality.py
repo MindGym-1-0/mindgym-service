@@ -22,7 +22,7 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 import google.generativeai as genai  # noqa: E402
 
 from src.lib.config import settings  # noqa: E402
-from src.lib.gemini_service import derive_pre_score  # noqa: E402
+from src.lib.gemini_service import derive_anxiety_level_before  # noqa: E402
 from src.lib.prompt_builder import build_prompt  # noqa: E402
 from src.types.session import SessionScript  # noqa: E402
 
@@ -149,13 +149,13 @@ def run_scenario(inputs: dict) -> None:
         genai.configure(api_key=settings.gemini_api_key)
         model = genai.GenerativeModel(settings.gemini_model)
 
-        pre_score = derive_pre_score(inputs["current_feeling"])
+        anxiety_level_before = derive_anxiety_level_before(inputs["current_feeling"])
         prompt = build_prompt(
             preparation_for=inputs["preparation_for"],
             current_feeling=inputs["current_feeling"],
             desired_feeling=inputs["desired_feeling"],
             time_available=inputs["time_available"],
-            pre_score=pre_score,
+            anxiety_level_before=anxiety_level_before,
             company=company,
             role=role,
             user_context=user_context,
@@ -192,7 +192,7 @@ def run_scenario(inputs: dict) -> None:
                 print("\n  !! Fallback would be used in production.")
                 return
 
-        print(f"\n  [OK] Script passed all checks  (pre_score={pre_score})")
+        print(f"\n  [OK] Script passed all checks  (anxiety_level_before={anxiety_level_before})")
         print(f"\n  Phase 1: {script.phase1}")
         print(f"\n  Phase 2: {script.phase2}")
         print(f"\n  Phase 3: {script.phase3}")
