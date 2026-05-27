@@ -16,8 +16,6 @@ from src.types.mood_log import (
 )
 
 logger = logging.getLogger(__name__)
-
-
 router = APIRouter()
 
 
@@ -51,8 +49,6 @@ async def create_mood_log(
             )
 
         return result.data[0]
-    except HTTPException as http_exc:
-        raise http_exc
     except Exception as e:
         logger.error(f"Error creating mood log: {str(e)}")
         raise HTTPException(
@@ -96,17 +92,21 @@ async def get_mood_summary(
         if period == "week":
             cutoff = today_utc - timedelta(days=7)
             filtered_logs = [
-                log_entry
-                for log_entry in all_logs
-                if datetime.fromisoformat(log_entry["created_at"].replace("Z", "+00:00")).date()
+                log
+                for log in all_logs
+                if datetime.fromisoformat(
+                    log["created_at"].replace("Z", "+00:00")
+                ).date()
                 >= cutoff
             ]
         elif period == "month":
             cutoff = today_utc - timedelta(days=30)
             filtered_logs = [
-                log_entry
-                for log_entry in all_logs
-                if datetime.fromisoformat(log_entry["created_at"].replace("Z", "+00:00")).date()
+                log
+                for log in all_logs
+                if datetime.fromisoformat(
+                    log["created_at"].replace("Z", "+00:00")
+                ).date()
                 >= cutoff
             ]
         else:
@@ -115,7 +115,9 @@ async def get_mood_summary(
         total_logs = len(filtered_logs)
         avg_score = None
         if total_logs > 0:
-            avg_score = round(sum(log["score"] for log in filtered_logs) / total_logs, 1)
+            avg_score = round(
+                sum(log["score"] for log in filtered_logs) / total_logs, 1
+            )
 
         daily_scores_map: Dict[str, int] = {}
         for log in all_logs:
@@ -128,7 +130,9 @@ async def get_mood_summary(
             target_date = today_utc - timedelta(days=i)
             target_date_str = target_date.strftime("%Y-%m-%d")
             day_score = daily_scores_map.get(target_date_str, None)
-            last_7_days_list.append(DailyMoodHistoryItem(date=target_date_str, score=day_score))
+            last_7_days_list.append(
+                DailyMoodHistoryItem(date=target_date_str, score=day_score)
+            )
 
         return MoodLogSummaryResponse(
             avg_score=avg_score, total_logs=total_logs, last_7_days=last_7_days_list

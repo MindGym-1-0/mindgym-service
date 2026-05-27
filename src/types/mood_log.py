@@ -1,5 +1,3 @@
-# src/types/mood_log.py
-
 from __future__ import annotations
 from datetime import datetime
 from typing import Optional
@@ -8,7 +6,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class MoodLogCreate(BaseModel):
-    user_id: UUID
+    # Removed user_id as it is sourced from the authenticated token
     score: int = Field(
         ..., ge=1, le=10, description="Score must be an integer between 1 and 10"
     )
@@ -36,7 +34,7 @@ class DailyMoodHistoryItem(BaseModel):
 class MoodLogSummaryResponse(BaseModel):
     avg_score: Optional[float] = None
     total_logs: int
-    last_7_days: list[DailyMoodHistoryItem]  # 💡 Swapped List -> list here
+    last_7_days: list[DailyMoodHistoryItem]
 
     model_config = ConfigDict(from_attributes=True)
 
