@@ -4,10 +4,11 @@ from src.lib.gemini_service import calibrate_tone
 
 # anxiety_level_before bands → stress / energy / confidence
 _INTENSITY_BANDS: dict[str, tuple[str, str, str]] = {
-    'low':      ('high',     'low',    'low'),
+    'low': ('high', 'low', 'low'),
     'moderate': ('moderate', 'moderate', 'moderate'),
-    'high':     ('low',      'high',   'high'),
+    'high': ('low', 'high', 'high'),
 }
+
 
 def _intensity_band(anxiety_level_before: int) -> str:
     if anxiety_level_before <= 3:
@@ -68,12 +69,12 @@ _FEELING_ARCS: dict[str, dict] = {
 
 # desired_feeling → phase5 landing
 _PHASE5_LANDINGS: dict[str, str] = {
-    'calm':        'softer ending',
-    'grounded':    'steady ending',
-    'confident':   'stronger send-off',
-    'focused':     'clear next-step ending',
+    'calm': 'softer ending',
+    'grounded': 'steady ending',
+    'confident': 'stronger send-off',
+    'focused': 'clear next-step ending',
     'clear_minded': 'uncluttered, simple ending',
-    'composed':    'poised, controlled ending',
+    'composed': 'poised, controlled ending',
 }
 
 _PHASE5_DEFAULT = 'concise confidence boost'

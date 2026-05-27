@@ -1,5 +1,4 @@
 """Session route handlers — thin wrappers around session_service."""
-import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status

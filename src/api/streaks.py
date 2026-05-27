@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from supabase import Client, create_client
-from datetime import datetime, timezone, date, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from src.lib import config
