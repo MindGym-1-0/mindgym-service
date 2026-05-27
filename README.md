@@ -191,13 +191,3 @@ if (response.ok) {
 }
 ```
 
-## Contributing
-
-1. Create a feature branch
-2. Make your changes
-3. Run tests to ensure they pass
-4. Submit a pull request
-
-## License
-
-[Add your license here]
