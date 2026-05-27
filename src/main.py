@@ -56,12 +56,13 @@ def create_app() -> FastAPI:
 
     # Merge both origin lists cleanly removing duplicates
     final_origins = list(dict.fromkeys(allow_origins + cors_origins))
-    allow_all = "*" in final_origins
+    # Credentials-based auth cannot be used with wildcard CORS origins.
+    final_origins = [origin for origin in final_origins if origin != "*"]
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if allow_all else final_origins,
-        allow_credentials=not allow_all,
+        allow_origins=final_origins,
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
