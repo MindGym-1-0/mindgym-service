@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -439,44 +440,44 @@ async def get_coach_home(
     now_iso = datetime.now(timezone.utc).isoformat()
 
     try:
-        users_res = (
+        users_res = await asyncio.to_thread(
             sb.table("users")
             .select("goal,stage,anxiety_level")
             .eq("id", user_id)
             .limit(1)
-            .execute()
+            .execute
         )
         user_rows = users_res.data or []
         user_context = user_rows[0] if user_rows else {}
 
-        interviews_res = (
+        interviews_res = await asyncio.to_thread(
             sb.table("interviews")
             .select("company,role,interview_date")
             .eq("user_id", user_id)
             .gte("interview_date", now_iso)
             .order("interview_date", desc=False)
             .limit(2)
-            .execute()
+            .execute
         )
         upcoming_interviews = interviews_res.data or []
 
-        sessions_res = (
+        sessions_res = await asyncio.to_thread(
             sb.table("ai_sessions")
             .select("preparation_for,mood_delta,completed_at")
             .eq("user_id", user_id)
             .not_.is_("completed_at", "null")
             .order("completed_at", desc=True)
             .limit(5)
-            .execute()
+            .execute
         )
         recent_sessions = sessions_res.data or []
 
-        streak_res = (
+        streak_res = await asyncio.to_thread(
             sb.table("streaks")
             .select("current_streak")
             .eq("user_id", user_id)
             .limit(1)
-            .execute()
+            .execute
         )
         streak_rows = streak_res.data or []
         if streak_rows:
@@ -538,13 +539,13 @@ async def create_coach_prep_plan(
     interview_id = str(body.interview_id)
 
     try:
-        interview_res = (
+        interview_res = await asyncio.to_thread(
             sb.table("interviews")
             .select("id,company,role,event_type,interview_date,job_id")
             .eq("id", interview_id)
             .eq("user_id", user_id)
             .limit(1)
-            .execute()
+            .execute
         )
     except Exception:
         logger.exception("Failed to fetch interview for prep plan.")
@@ -568,12 +569,12 @@ async def create_coach_prep_plan(
 
     user_context: dict[str, Any] = {}
     try:
-        users_res = (
+        users_res = await asyncio.to_thread(
             sb.table("users")
             .select("goal,stage,anxiety_level")
             .eq("id", user_id)
             .limit(1)
-            .execute()
+            .execute
         )
         user_rows = users_res.data or []
         user_context = user_rows[0] if user_rows else {}
@@ -586,7 +587,7 @@ async def create_coach_prep_plan(
 
     if job_id:
         try:
-            sessions_by_job = (
+            sessions_by_job = await asyncio.to_thread(
                 sb.table("ai_sessions")
                 .select("mood_delta,completed_at")
                 .eq("user_id", user_id)
@@ -594,7 +595,7 @@ async def create_coach_prep_plan(
                 .not_.is_("completed_at", "null")
                 .order("completed_at", desc=True)
                 .limit(MAX_SESSION_HISTORY_FOR_PREP)
-                .execute()
+                .execute
             )
             completed_rows = sessions_by_job.data or []
         except Exception:
@@ -604,7 +605,7 @@ async def create_coach_prep_plan(
 
     if not completed_rows:
         try:
-            sessions_by_company_role = (
+            sessions_by_company_role = await asyncio.to_thread(
                 sb.table("ai_sessions")
                 .select("mood_delta,completed_at")
                 .eq("user_id", user_id)
@@ -613,7 +614,7 @@ async def create_coach_prep_plan(
                 .not_.is_("completed_at", "null")
                 .order("completed_at", desc=True)
                 .limit(MAX_SESSION_HISTORY_FOR_PREP)
-                .execute()
+                .execute
             )
             completed_rows = sessions_by_company_role.data or []
         except Exception:
@@ -683,10 +684,10 @@ async def create_coach_prep_plan(
     }
 
     try:
-        (
+        await asyncio.to_thread(
             sb.table("coach_prep_plans")
             .upsert(save_payload, on_conflict="user_id,interview_id")
-            .execute()
+            .execute
         )
     except Exception:
         logger.exception("Failed to save coach prep plan to Supabase.")
@@ -711,14 +712,14 @@ async def get_saved_coach_prep_plan(
     interview_id_str = str(interview_id)
 
     try:
-        result = (
+        result = await asyncio.to_thread(
             sb.table("coach_prep_plans")
             .select("plan,coach_note,created_at")
             .eq("user_id", user_id)
             .eq("interview_id", interview_id_str)
             .order("created_at", desc=True)
             .limit(1)
-            .execute()
+            .execute
         )
     except Exception:
         logger.exception("Failed to fetch saved coach prep plan.")
