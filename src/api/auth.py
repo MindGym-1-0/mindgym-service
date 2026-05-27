@@ -15,6 +15,7 @@ from src.lib.auth_service import (
     UpstreamAuthServiceError,
     UserAlreadyExistsError,
     revoke_auth_session,
+    refresh_session_with_refresh_token,
     login_with_email_password,
     signup_with_email_password,
 )
@@ -180,6 +181,41 @@ async def logout(
         "Logout completed locally; remote session revocation skipped or unavailable"
     )
     return LogoutResponse(message="Signed out locally")
+
+
+@router.post("/refresh", response_model=AuthResponse)
+async def refresh_session(
+    response: Response,
+    refresh_token: str | None = Cookie(default=None),
+) -> AuthResponse:
+    """Refresh access session cookies using a valid refresh token cookie."""
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token required",
+        )
+
+    try:
+        auth_result = await refresh_session_with_refresh_token(refresh_token)
+    except AuthenticationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        ) from exc
+    except UpstreamAuthServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Unexpected refresh error")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected refresh error",
+        ) from exc
+
+    _set_auth_cookies(response, auth_result)
+    return _as_auth_response(auth_result, message="Session refreshed")
 
 
 @router.get("/me", response_model=AuthResponse)

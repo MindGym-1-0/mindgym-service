@@ -82,6 +82,11 @@ def extract_access_token_from_request(
     if bearer:
         return bearer
 
+    # Local auth flow may store access token in a plain HTTP-only cookie.
+    plain_access_cookie = cookies.get("access_token", "").strip()
+    if plain_access_cookie:
+        return plain_access_cookie
+
     jwt_access = assemble_chunked_sb_cookie(cookies, _COOKIE_ACCESS_RE)
     if jwt_access:
         return jwt_access
