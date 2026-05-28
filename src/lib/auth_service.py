@@ -46,6 +46,8 @@ def _normalize_user(user: Any) -> dict[str, Any]:
         "id": str(user.id),
         "email": user.email,
         "phone": user.phone,
+        "first_name": metadata.get("first_name", ""),
+        "last_name": metadata.get("last_name", ""),
         "app_metadata": user.app_metadata,
         "user_metadata": user.user_metadata,
     }
@@ -102,7 +104,12 @@ async def login_with_email_password(email: str, password: str) -> dict[str, Any]
     return _build_auth_payload(response)
 
 
-async def signup_with_email_password(email: str, password: str) -> dict[str, Any]:
+async def signup_with_email_password(
+    email: str,
+    password: str,
+    first_name: str = "",
+    last_name: str = "",
+) -> dict[str, Any]:
     """Create a new Supabase Auth user."""
 
     client = get_supabase_client()
@@ -110,7 +117,16 @@ async def signup_with_email_password(email: str, password: str) -> dict[str, Any
     try:
         response = await asyncio.to_thread(
             client.auth.sign_up,
-            {"email": email, "password": password},
+            {
+                "email": email,
+                "password": password,
+                "options": {
+                    "data": {
+                        "first_name": first_name,
+                        "last_name": last_name,
+                    },
+                },
+            },
         )
     except Exception as exc:
         message = str(exc).lower()
@@ -171,6 +187,25 @@ async def signup_with_email_password(email: str, password: str) -> dict[str, Any
     if user is None:
         logger.exception("Supabase signup response missing user for email=%s", email)
         raise UpstreamAuthServiceError("Authentication provider unavailable")
+
+    user = getattr(response, "user", None)
+    if user is None:
+        logger.exception("Supabase signup response missing user for email=%s", email)
+        raise UpstreamAuthServiceError("Authentication provider unavailable")
+
+    admin_client = get_supabase_admin_client()
+    if admin_client and user and (first_name or last_name):
+        try:
+            await asyncio.to_thread(
+                lambda: admin_client.table("users").upset({
+                    'ID': str(user.id),
+                    "first_name": first_name,
+                    "last_name": last_name,
+                })
+                .execute()
+            )
+        except Exception:
+            logger.exception("Failed to save name for user_id=%s", user.id)
 
     return _build_auth_payload(response)
 
