@@ -1,7 +1,6 @@
 """Gemini Flash integration — tone calibration and session script generation."""
 import json
 
-import google.generativeai as genai
 
 from src.lib.config import settings
 from src.types.session import SessionScript
@@ -55,6 +54,7 @@ def generate_script(
     The caller (session_service) is responsible for falling back to a hardcoded template.
     """
     try:
+        import google.generativeai as genai
         genai.configure(api_key=settings.gemini_api_key)
         model = genai.GenerativeModel(settings.gemini_model)
 
