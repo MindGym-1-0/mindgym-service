@@ -1,15 +1,13 @@
-﻿# src/api/weekly_mission.py
-
 from __future__ import annotations
 import json
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta, date
-from fastapi import APIRouter, Depends, HTTPException, status
-from supabase import Client, create_client
+from fastapi import APIRouter, Depends
+from supabase import Client
 
-from src.lib import config
-from src.lib.auth_dependencies import get_current_user
+from src.lib.auth import CurrentUserId, CurrentUserToken
+from src.lib.supabase import get_supabase_user_client
 from src.types.weekly_mission import WeeklyMissionGenerateResponse, GeminiMissionOutput
 
 # Modern Google GenAI SDK imports
@@ -18,17 +16,6 @@ from google.genai import types
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-def get_supabase_client() -> Client:
-    url = config.supabase_url()
-    service_key = config.supabase_service_role_key()
-    if not url or not service_key:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Supabase infrastructure keys are missing.",
-        )
-    return create_client(url, service_key)
 
 
 def get_target_monday() -> date:
@@ -54,11 +41,7 @@ def execute_fallback_generation(user_context: dict) -> dict:
     else:
         act_1 = f"Follow up on your existing {total_applications} open applications to gauge response momentum."
 
-    perf_logs = user_context.get("performance_logs", [])
-    if perf_logs:
-        act_2 = "Review your recent session diagnostic breakdowns specifically targeting improvement in technical execution."
-    else:
-        act_2 = "Complete 2 practice mock sessions this week to initialize your competency tracking performance logs."
+    act_2 = "Complete 2 practice mock sessions this week to initialize your competency tracking."
 
     session_count = user_context.get("session_count", 0)
     if session_count < 2:
@@ -71,19 +54,15 @@ def execute_fallback_generation(user_context: dict) -> dict:
 
 @router.post("/generate", response_model=WeeklyMissionGenerateResponse)
 async def generate_weekly_mission(
-    supabase: Client = Depends(get_supabase_client),
-    current_user: dict = Depends(get_current_user),
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
+    supabase: Client = Depends(get_supabase_user_client),
 ):
-    user_id = current_user.get("id") or current_user.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid active user session.",
-        )
+    user_id = str(current_user_id)
 
-    # ----------------==========================
-    # STEP 1 ΓÇö FETCH USER CONTEXT FROM SUPABASE
-    # --------------------------------==========
+    # ------------------------------------------
+    # STEP 1 — FETCH USER CONTEXT FROM SUPABASE
+    # ------------------------------------------
     try:
         user_res = (
             supabase.table("users").select("goal, stage").eq("id", user_id).execute()
@@ -95,26 +74,17 @@ async def generate_weekly_mission(
         )
 
         jobs_res = (
-            supabase.table("applications")
+            supabase.table("jobs")
             .select("id, stage, last_moved_at")
             .eq("user_id", user_id)
             .execute()
         )
         active_jobs = jobs_res.data or []
 
-        perf_res = (
-            supabase.table("performance_logs")
-            .select("*")
-            .eq("user_id", user_id)
-            .order("created_at", descending=True)
-            .limit(4)
-            .execute()
-        )
-        performance_logs = perf_res.data or []
-
         seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
         sessions_res = (
-            supabase.table("sessions")
+            supabase.table("ai_sessions")
             .select("mood_delta")
             .eq("user_id", user_id)
             .gte("created_at", seven_days_ago)
@@ -146,25 +116,23 @@ async def generate_weekly_mission(
         logger.error(f"Error compiling user mission context parameters: {str(db_err)}")
         (
             active_jobs,
-            performance_logs,
             session_count,
             prev_completion_count,
             avg_mood_delta,
-        ) = ([], [], 0, 0, 0.0)
+        ) = ([], 0, 0, 0.0)
         user_profile = {"goal": "General Placement", "stage": "Interviewing"}
 
     context_package = {
         "user_profile": user_profile,
         "active_jobs": active_jobs,
-        "performance_logs": performance_logs,
         "session_count": session_count,
         "prev_completion_count": prev_completion_count,
         "avg_mood_delta": avg_mood_delta,
     }
 
-    # ----------------==========================
-    # STEP 2 ΓÇö BUILD THE GEMINI PROMPT
-    # --------------------------------==========
+    # ------------------------------------------
+    # STEP 2 — BUILD THE GEMINI PROMPT
+    # ------------------------------------------
     prompt = f"""
     You are an expert career performance optimization AI. Analyze the user's data to generate 3 actionable, non-generic target missions for next week.
 
@@ -172,7 +140,6 @@ async def generate_weekly_mission(
     - Career Goal: {user_profile.get('goal')}
     - Application Stage: {user_profile.get('stage')}
     - Current Active Pipeline Jobs: {json.dumps(active_jobs)}
-    - Performance Trend Data (Last 4 Records): {json.dumps(performance_logs)}
     - Activity Volume This Week: {session_count} completed sessions (Avg Mood Change: {avg_mood_delta})
     - Completed Targets from Last Week: {prev_completion_count}/3
 
@@ -184,16 +151,16 @@ async def generate_weekly_mission(
 
     generated_actions = None
 
-    # ----------------==========================
-    # STEP 3 & 4 ΓÇö CALL GEMINI WITH STRICT 4S TIMEOUT
-    # --------------------------------==========
+    # ------------------------------------------
+    # STEP 3 & 4 — CALL GEMINI WITH STRICT 4S TIMEOUT
+    # ------------------------------------------
     try:
         client = genai.Client()
 
         response = await asyncio.wait_for(
             asyncio.to_thread(
                 client.models.generate_content,
-                model="gemini-2.5-flash",
+                model="gemini-3.0-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -219,17 +186,17 @@ async def generate_weekly_mission(
 
     except (asyncio.TimeoutError, Exception) as gen_error:
         logger.error(
-            f"Gemini generation engine bypassed or timed out: {str(gen_error)}"
+            "Gemini generation engine bypassed or timed out: " + str(gen_error)
         )
         generated_actions = execute_fallback_generation(context_package)
 
-    # ----------------==========================
-    # STEP 5 ΓÇö SAVE OR UPDATE SUPABASE RECORD
-    # --------------------------------==========
+    # ------------------------------------------
+    # STEP 5 — SAVE OR UPDATE SUPABASE RECORD
+    # ------------------------------------------
     target_monday = get_target_monday()
 
     upsert_payload = {
-        "user_id": str(user_id),
+        "user_id": user_id,
         "week_start_date": target_monday.isoformat(),
         "action_1": generated_actions["action_1"],
         "action_2": generated_actions["action_2"],
@@ -260,12 +227,11 @@ async def generate_weekly_mission(
         upsert_payload["completion_count"] = 0
         res = supabase.table("weekly_mission").insert(upsert_payload).execute()
 
-    # ----------------==========================
-    # STEP 6 ΓÇö RETURN MAPPED RESPONSE RECORD
-    # --------------------------------==========
+    # ------------------------------------------
+    # STEP 6 — RETURN MAPPED RESPONSE RECORD
+    # ------------------------------------------
     record = res.data[0]
 
-    # Safely handle both standard wire strings and native date/datetime objects from unit test mocks
     raw_week_date = record["week_start_date"]
     parsed_week_date = (
         date.fromisoformat(raw_week_date)
