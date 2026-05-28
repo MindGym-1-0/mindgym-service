@@ -1,11 +1,16 @@
 import logging
 
-from fastapi import APIRouter, Cookie, Header, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
 
-from src.lib.auth import CurrentUserId
+from src.lib.auth_dependencies import (
+    _extract_bearer_token,
+    _extract_cookie_token,
+    get_current_user,
+)
 from src.lib.auth_service import (
     AuthRateLimitError,
     AuthenticationError,
+    EmailNotConfirmedError,
     InvalidSignupInputError,
     SignupDisabledError,
     UpstreamAuthServiceError,
@@ -15,10 +20,10 @@ from src.lib.auth_service import (
     signup_with_email_password,
 )
 from src.lib.config import get_settings
-from src.lib.tokens import extract_access_token_from_request
 from src.types.auth import AuthResponse, LoginRequest, LogoutResponse, SignupRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+v1_router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
@@ -64,11 +69,23 @@ def _clear_auth_cookies(response: Response) -> None:
 
 
 def _as_auth_response(auth_result: dict, message: str | None = None) -> AuthResponse:
+    session_data = auth_result.get("session") or {}
+    session = None
+    access_token = session_data.get("access_token")
+    refresh_token = session_data.get("refresh_token")
+    if access_token and refresh_token:
+        session = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": session_data.get("expires_in"),
+        }
+
     return AuthResponse.model_validate(
         {
             "authenticated": bool(auth_result.get("authenticated")),
             "user": auth_result.get("user"),
             "message": message,
+            "session": session,
         }
     )
 
@@ -126,6 +143,11 @@ async def login(payload: LoginRequest, response: Response) -> AuthResponse:
 
     try:
         auth_result = await login_with_email_password(payload.email, payload.password)
+    except EmailNotConfirmedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please confirm your email before signing in",
+        ) from exc
     except AuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -157,10 +179,7 @@ async def logout(
 ) -> LogoutResponse:
     """Clear cookies and revoke the current Supabase session when possible."""
 
-    token = extract_access_token_from_request(
-        auth_header=authorization,
-        cookies={"access_token": access_token} if access_token else {},
-    )
+    token = _extract_bearer_token(authorization) or _extract_cookie_token(access_token)
     revoked = False
     try:
         revoked = await revoke_auth_session(token, refresh_token)
@@ -182,7 +201,14 @@ async def logout(
 
 
 @router.get("/me", response_model=AuthResponse)
-async def read_me(user_id: CurrentUserId) -> AuthResponse:
+async def read_me(current_user: dict = Depends(get_current_user)) -> AuthResponse:
     """Return the authenticated user profile."""
 
-    return AuthResponse(authenticated=True, user={"id": str(user_id)})
+    return AuthResponse(authenticated=True, user=current_user)
+
+
+@v1_router.get("/me", response_model=AuthResponse)
+async def read_me_v1(current_user: dict = Depends(get_current_user)) -> AuthResponse:
+    """Example protected endpoint for downstream feature teams."""
+
+    return AuthResponse(authenticated=True, user=current_user)
