@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import json
@@ -70,10 +70,7 @@ async def generate_weekly_mission(
     # ------------------------------------------
     try:
         user_res = (
-            supabase.table("users")
-            .select("goal, stage")
-            .eq("id", user_id)
-            .execute()
+            supabase.table("users").select("goal, stage").eq("id", user_id).execute()
         )
         user_profile = (
             user_res.data[0]
@@ -89,9 +86,7 @@ async def generate_weekly_mission(
         )
         active_jobs = jobs_res.data or []
 
-        seven_days_ago = (
-            datetime.now(timezone.utc) - timedelta(days=7)
-        ).isoformat()
+        seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
         sessions_res = (
             supabase.table("ai_sessions")
@@ -119,15 +114,11 @@ async def generate_weekly_mission(
             .execute()
         )
         prev_completion_count = (
-            prev_mission_res.data[0]["completion_count"]
-            if prev_mission_res.data
-            else 0
+            prev_mission_res.data[0]["completion_count"] if prev_mission_res.data else 0
         )
 
     except Exception as db_err:
-        logger.error(
-            f"Error compiling user mission context parameters: {str(db_err)}"
-        )
+        logger.error(f"Error compiling user mission context parameters: {str(db_err)}")
         (
             active_jobs,
             session_count,
