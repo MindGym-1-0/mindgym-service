@@ -7,14 +7,17 @@ from datetime import date, datetime, timedelta, UTC
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, HTTPException, status
+
 # Upgraded to modern SDK namespace
 from google import genai
 from pydantic import BaseModel
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client
-# Reuse your streak increment logic built from Part 2 directly
-from src.types.streak import increment_user_streak
+
+# Import your real streak logic function from Part 2
+from src.api.streaks import increment_streak
+
 from src.types.daily_focus import ActionType, DailyFocusResponse, GeminiDailyFocusOutput
 
 logger = logging.getLogger(__name__)
@@ -282,7 +285,9 @@ class DailyFocusCompleteRequest(BaseModel):
 class DailyFocusCompleteResponse(BaseModel):
     success: bool
     current_streak: int
-    milestone: Optional[str] = None
+    milestone: Optional[int] = (
+        None  # Perfectly synchronized with Part 2's Optional[int] definition
+    )
 
 
 @router.post(
@@ -340,9 +345,7 @@ async def complete_daily_focus(
             .eq("user_id", user_uuid_str)
             .execute
         )
-        current_streak = (
-            streak_res.data[0]["current_streak"] if streak_res.data else 0
-        )
+        current_streak = streak_res.data[0]["current_streak"] if streak_res.data else 0
         return DailyFocusCompleteResponse(
             success=True, current_streak=current_streak, milestone=None
         )
@@ -354,10 +357,7 @@ async def complete_daily_focus(
             "updated_at": datetime.now(UTC).isoformat(),
         }
         await asyncio.to_thread(
-            sb.table("daily_focus")
-            .update(update_payload)
-            .eq("id", record_id)
-            .execute
+            sb.table("daily_focus").update(update_payload).eq("id", record_id).execute
         )
     except Exception as err:
         raise HTTPException(
@@ -367,7 +367,15 @@ async def complete_daily_focus(
 
     # 3. Reuse your streak increment logic built during Part 2
     try:
-        streak_data = await increment_user_streak(user_uuid_str, sb)
+        # Explicitly pass required contextual elements to match your custom router signature
+        streak_data = await increment_streak(
+            current_user_id=current_user_id, token=token, sb=sb
+        )
+
+        # Access attribute data directly out of your real StreakIncrementResponse Pydantic model
+        res_streak = streak_data.current_streak
+        res_milestone = streak_data.milestone
+
     except Exception as err:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -376,6 +384,6 @@ async def complete_daily_focus(
 
     return DailyFocusCompleteResponse(
         success=True,
-        current_streak=streak_data.get("current_streak", 0),
-        milestone=streak_data.get("milestone"),
+        current_streak=res_streak,
+        milestone=res_milestone,
     )
