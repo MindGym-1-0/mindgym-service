@@ -13,6 +13,7 @@ from src.types.session import (
     SessionStartResponse,
 )
 
+
 async def insert_session(user_id: str, request: SessionStartRequest, script: SessionScript) -> str | None:
     """Insert a new ai_sessions row and return the generated session id."""
     client = get_supabase_admin_client()

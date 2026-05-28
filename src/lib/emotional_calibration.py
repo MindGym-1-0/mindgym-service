@@ -10,6 +10,8 @@ _NEGATIVE_FEELINGS = {'overwhelmed', 'discouraged', 'exhausted'}
 # Energy and confidence are deliberately NOT derived: anxiety is a high-arousal state
 # (anxious people are often wired, not low-energy), and confidence is independent.
 # One honest input → one honest reading.
+
+
 def _stress_band(anxiety_level_before: int) -> str:
     if anxiety_level_before <= 3:
         return 'low'
