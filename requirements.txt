@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 fastapi==0.104.1
 uvicorn==0.24.0
 pydantic==2.5.0
@@ -11,3 +12,17 @@ google-auth==2.25.2
 google-auth-oauthlib==1.1.0
 pyjwt==2.8.0
 supabase>=2.30.0
+=======
+fastapi>=0.128.0
+uvicorn[standard]>=0.40.0
+python-dotenv>=1.2.0
+supabase>=2.30.0
+pydantic>=2.5.0
+PyJWT>=2.9.0
+httpx>=0.27.2
+pydantic-settings>=2.4.0
+pytest>=9.0.0
+pytest-asyncio>=1.3.0
+pytest-cov>=4.1.0
+google-generativeai>=0.8.0
+>>>>>>> main
