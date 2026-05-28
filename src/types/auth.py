@@ -18,10 +18,6 @@ class LoginRequest(EmailPasswordRequest):
     pass
 
 
-class SignupRequest(EmailPasswordRequest):
-    pass
-
-
 class AuthUser(BaseModel):
     id: str
     email: str | None = None

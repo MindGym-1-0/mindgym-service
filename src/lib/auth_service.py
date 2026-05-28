@@ -42,6 +42,7 @@ def _exc_code(exc: Exception) -> str:
 
 
 def _normalize_user(user: Any) -> dict[str, Any]:
+    metadata = user.user_metadata or {}
     return {
         "id": str(user.id),
         "email": user.email,

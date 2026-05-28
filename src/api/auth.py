@@ -85,7 +85,7 @@ async def signup(payload: SignupRequest, response: Response) -> AuthResponse:
 
     try:
         auth_result = await signup_with_email_password(
-            payload.email, 
+            payload.email,
             payload.password,
             payload.first_name,
             payload.last_name
