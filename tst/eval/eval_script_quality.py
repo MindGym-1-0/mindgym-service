@@ -22,6 +22,7 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 import google.generativeai as genai  # noqa: E402
 
 from src.lib.config import settings  # noqa: E402
+from src.lib.gemini_service import is_hype_in_phase1  # noqa: E402
 from src.lib.prompt_builder import build_prompt  # noqa: E402
 from src.types.session import SessionScript  # noqa: E402
 
@@ -193,6 +194,13 @@ def run_scenario(inputs: dict) -> None:
                 print(f"\n  Phase 5: {script.phase5}")
                 print("\n  !! Fallback would be used in production.")
                 return
+
+        if anxiety_level_before >= 7 and is_hype_in_phase1(script.phase1):
+            print("  !! High-anxiety hype guard FAILED:")
+            print("     phase1 contains energizing/hype language for a high-anxiety session.")
+            print(f"\n  Phase 1: {script.phase1}")
+            print("\n  !! Fallback would be used in production.")
+            return
 
         print(f"\n  [OK] Script passed all checks  (anxiety_level_before={anxiety_level_before})")
         print(f"\n  Phase 1: {script.phase1}")

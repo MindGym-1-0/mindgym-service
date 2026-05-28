@@ -27,10 +27,10 @@ _VALID_REQUEST_NO_COMPANY = SessionStartRequest(
 )
 
 _MOCK_SCRIPT = SessionScript(
-    phase1='Breathe.',
-    phase2='Ground.',
+    phase1='Close your eyes and take a slow breath.',
+    phase2='Feel the ground beneath you, steady and real.',
     phase3='Picture yourself at Stripe as a PM.',
-    phase4='Anchor.',
+    phase4='Recall a time you delivered under pressure.',
     phase5='You are ready for Stripe as a PM.',
 )
 

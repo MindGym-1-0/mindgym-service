@@ -50,11 +50,11 @@ class SessionStartRequest(BaseModel):
 
 
 class SessionScript(BaseModel):
-    phase1: str
-    phase2: str
-    phase3: str
-    phase4: str
-    phase5: str
+    phase1: str = Field(min_length=20)
+    phase2: str = Field(min_length=20)
+    phase3: str = Field(min_length=20)
+    phase4: str = Field(min_length=20)
+    phase5: str = Field(min_length=20)
 
 
 class SessionStartResponse(BaseModel):

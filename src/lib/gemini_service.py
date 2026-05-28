@@ -7,6 +7,22 @@ from src.lib.config import settings
 from src.types.session import SessionScript
 
 
+# Heuristic smoke-alarm — deliberately crude word list.
+# Fires ONLY at anxiety_level_before >= 7 to catch the worst-case failure:
+# amping up someone who needs grounding. This is not a real tone check.
+# Semantic tone and acknowledgment validation is a future LLM-judge task.
+_HIGH_ANXIETY_HYPE_WORDS = frozenset({
+    'pump', 'pumped', 'energy', 'energized', 'excited', 'hyped',
+    "let's go", 'crush it', 'fired up', 'unstoppable',
+})
+
+
+def is_hype_in_phase1(phase1: str) -> bool:
+    """Return True if phase1 contains energizing/hype language."""
+    text = phase1.lower()
+    return any(word in text for word in _HIGH_ANXIETY_HYPE_WORDS)
+
+
 def calibrate_tone(anxiety_level_before: int) -> str:
     """Map an anxiety_level_before score to a tone string for the Gemini prompt.
 
@@ -65,6 +81,9 @@ def generate_script(
             if (company.lower() not in p3 or role.lower() not in p3
                     or company.lower() not in p5 or role.lower() not in p5):
                 return None
+
+        if anxiety_level_before >= 7 and is_hype_in_phase1(script.phase1):
+            return None
 
         return script
 

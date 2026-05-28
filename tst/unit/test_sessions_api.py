@@ -15,10 +15,10 @@ from src.types.session import (
 
 _FAKE_USER = {'id': 'user-123', 'email': 'test@example.com'}
 _FAKE_SCRIPT = SessionScript(
-    phase1='Breathe.',
-    phase2='Ground.',
+    phase1='Close your eyes and take a slow breath.',
+    phase2='Feel the ground beneath you, steady and real.',
     phase3='Picture yourself at Stripe as a PM.',
-    phase4='Anchor.',
+    phase4='Recall a time you delivered under pressure.',
     phase5='You are ready for Stripe as a PM.',
 )
 _FAKE_START_RESPONSE = SessionStartResponse(
@@ -93,7 +93,7 @@ def test_start_session_returns_201_with_script(client) -> None:
     body = response.json()
     assert body['session_id'] == 'session-abc'
     assert body['mode'] == 'interview_tomorrow'
-    assert body['script']['phase1'] == 'Breathe.'
+    assert body['script']['phase1'] == 'Close your eyes and take a slow breath.'
 
 
 @pytest.mark.unit

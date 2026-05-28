@@ -4,6 +4,7 @@ from pydantic import ValidationError
 
 from src.types.session import (
     SessionCompleteRequest,
+    SessionScript,
     SessionStartRequest,
     UserUpdateRequest,
 )
@@ -197,3 +198,49 @@ def test_user_update_request_partial():
     req = UserUpdateRequest(goal='Get a senior role')
     assert req.goal == 'Get a senior role'
     assert req.stage is None
+
+
+# --- SessionScript min_length ---
+
+_VALID_PHASE = 'This is a valid phase with enough content.'
+
+
+def test_session_script_valid():
+    script = SessionScript(
+        phase1=_VALID_PHASE,
+        phase2=_VALID_PHASE,
+        phase3=_VALID_PHASE,
+        phase4=_VALID_PHASE,
+        phase5=_VALID_PHASE,
+    )
+    assert script.phase1 == _VALID_PHASE
+
+
+def test_session_script_empty_phase_fails():
+    with pytest.raises(ValidationError):
+        SessionScript(
+            phase1='',
+            phase2=_VALID_PHASE,
+            phase3=_VALID_PHASE,
+            phase4=_VALID_PHASE,
+            phase5=_VALID_PHASE,
+        )
+
+
+def test_session_script_near_empty_phase_fails():
+    with pytest.raises(ValidationError):
+        SessionScript(
+            phase1='Too short.',
+            phase2=_VALID_PHASE,
+            phase3=_VALID_PHASE,
+            phase4=_VALID_PHASE,
+            phase5=_VALID_PHASE,
+        )
+
+
+def test_session_script_all_phases_must_meet_min_length():
+    for phase_index in range(1, 6):
+        kwargs = {f'phase{i}': _VALID_PHASE for i in range(1, 6)}
+        kwargs[f'phase{phase_index}'] = 'Short.'
+        with pytest.raises(ValidationError):
+            SessionScript(**kwargs)
