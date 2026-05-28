@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import json
@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, status
+
 # Upgraded to modern SDK namespace
 from google import genai
 
@@ -60,8 +61,8 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
         except Exception:
             continue
 
-    # 3. Check for low pipeline numbers
-    applied_count = sum(1 for j in active_jobs if j.get("stage") == "Applied")
+    # 3. Check for low pipeline numbers (Fixed: schema holds stage as lowercase "applied")
+    applied_count = sum(1 for j in active_jobs if j.get("stage") == "applied")
     if applied_count < 3:
         return GeminiDailyFocusOutput(
             action_1_text="Find and apply to at least 2 new jobs today to keep your application pipeline healthy.",
@@ -90,53 +91,54 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
     sb = get_supabase_user_client(token)
     user_uuid_str = str(current_user_id)
 
-    # STEP 1: Fetch multi-table context from Supabase
+    # STEP 1: Fetch multi-table context from Supabase via non-blocking worker threads
     try:
-        user_res = (
+        user_res = await asyncio.to_thread(
             sb.table("users")
             .select("goal, stage, anxiety_level")
             .eq("id", user_uuid_str)
-            .execute()
+            .execute
         )
         user_profile = user_res.data[0] if user_res.data else {}
 
-        jobs_res = (
+        jobs_res = await asyncio.to_thread(
             sb.table("jobs")
             .select("company, role, stage, last_moved_at")
             .eq("user_id", user_uuid_str)
             .is_("outcome", "null")
             .order("last_moved_at", descending=True)
-            .execute()
+            .execute
         )
         active_jobs = jobs_res.data or []
 
-        interviews_res = (
+        interviews_res = await asyncio.to_thread(
             sb.table("interviews")
             .select("company, role, interview_date")
             .eq("user_id", user_uuid_str)
             .gte("interview_date", today_str)
             .order("interview_date", ascending=True)
             .limit(2)
-            .execute()
+            .execute
         )
         upcoming_interviews = interviews_res.data or []
 
-        sessions_res = (
+        # Fixed: selected anxiety_level_delta instead of old mood_delta field
+        sessions_res = await asyncio.to_thread(
             sb.table("ai_sessions")
-            .select("preparation_for, mood_delta, completed_at")
+            .select("preparation_for, anxiety_level_delta, completed_at")
             .eq("user_id", user_uuid_str)
             .is_("completed_at", "not.null")
             .order("completed_at", descending=True)
             .limit(3)
-            .execute()
+            .execute
         )
         recent_sessions = sessions_res.data or []
 
-        streak_res = (
+        streak_res = await asyncio.to_thread(
             sb.table("streaks")
             .select("current_streak")
             .eq("user_id", user_uuid_str)
-            .execute()
+            .execute
         )
         current_streak = (
             streak_res.data[0].get("current_streak", 0) if streak_res.data else 0
@@ -160,7 +162,7 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
 
     # STEP 2: Build the prompt
     prompt = f"""
-    You are an elite, highly personalized AI Job Search Assistant for a software engineer.
+    You are an expert, highly personalized AI Job Search Assistant for a software engineer.
     Analyze the user's specific application pipeline below and return exactly 1 or 2 actions for today.
 
     CRITICAL PRODUCT REQUIREMENT: Generic output like "apply to more jobs" or "check your status" is a defect.
@@ -177,13 +179,14 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
     --- BUSINESS RULE PRIORITY HEURISTICS ---
     1. Urgent Interview Focus: If an interview is scheduled in the next 2 days, action_1 MUST guide preparation for that specific company and role.
     2. Stagnant Applications: If an application has sat in its current stage without moving for more than 14 days, prioritize an outreach or follow-up action naming that company.
-    3. Low Pipeline Volume: If there are fewer than 3 active items in the 'Applied' stage, prioritize adding new job targets.
+    3. Low Pipeline Volume: If there are fewer than 3 active items in the 'applied' stage, prioritize adding new job targets.
     4. Feedback & Debrief Loops: If an application's stage was advanced recently but no post-session debrief was logged, prioritize a debrief logging task.
     """
 
     # STEP 3 & 4: Call Gemini with strict formatting validation and a 4-second timeout limit
     validated_output: Optional[GeminiDailyFocusOutput] = None
     try:
+
         async def call_gemini_api():
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
@@ -232,25 +235,27 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
             "updated_at": datetime.utcnow().isoformat(),
         }
 
-        existing_check = (
+        existing_check = await asyncio.to_thread(
             sb.table("daily_focus")
             .select("id")
             .eq("user_id", user_uuid_str)
             .eq("date", today_str)
-            .execute()
+            .execute
         )
 
         if existing_check.data:
             record_id = existing_check.data[0]["id"]
-            db_result = (
+            db_result = await asyncio.to_thread(
                 sb.table("daily_focus")
                 .update(focus_payload)
                 .eq("id", record_id)
-                .execute()
+                .execute
             )
         else:
             focus_payload["created_at"] = datetime.utcnow().isoformat()
-            db_result = sb.table("daily_focus").insert(focus_payload).execute()
+            db_result = await asyncio.to_thread(
+                sb.table("daily_focus").insert(focus_payload).execute
+            )
 
         return db_result.data[0]
     except Exception as save_err:
