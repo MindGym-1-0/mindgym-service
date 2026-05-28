@@ -712,3 +712,130 @@ def test_post_prep_plan_overlong_worry_input_returns_422(client):
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 422
+
+
+def test_post_checklist_success(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    interview_id = "cccccccc-cccc-cccc-cccc-ccccccccccc1"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-10T12:00:00+00:00",
+            "job_id": "job-123",
+        }
+    ]
+    tables["ai_sessions"] = [
+        {
+            "id": "s1",
+            "user_id": uid,
+            "job_id": "job-123",
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "post_score": 8,
+            "completed_at": "2026-06-09T18:00:00+00:00",
+        },
+        {
+            "id": "s2",
+            "user_id": uid,
+            "job_id": "job-123",
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "post_score": 9,
+            "completed_at": "2026-06-09T20:00:00+00:00",
+        },
+    ]
+    sb = FakeSupabase(tables)
+    gemini = {
+        "tonights_plan": [
+            {"time": "7:00 PM", "task": "Review role priorities."},
+            {"time": "8:30 PM", "task": "Practice concise answers."},
+            {"time": "9:30 PM", "task": "Do a short breathing reset."},
+        ],
+        "quote": "Calm prep tonight creates clear execution tomorrow.",
+    }
+    _mock_coach_deps(monkeypatch, sb, gemini)
+
+    resp = client.post(
+        "/api/coach/checklist",
+        json={"interview_id": interview_id},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "overall_readiness" in body
+    assert "mental_prep" in body
+    assert "logistics" in body
+    assert "tonights_plan" in body
+    assert "quote" in body
+    assert len(body["tonights_plan"]) == 3
+    assert body["quote"]
+
+
+def test_post_checklist_interview_not_found_returns_404(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    sb = FakeSupabase(_base_tables(uid))
+    _mock_coach_deps(monkeypatch, sb, {"unused": True})
+
+    resp = client.post(
+        "/api/coach/checklist",
+        json={"interview_id": "cccccccc-cccc-cccc-cccc-ccccccccccc2"},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 404
+
+
+def test_post_checklist_gemini_failure_returns_fallback(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    interview_id = "cccccccc-cccc-cccc-cccc-ccccccccccc3"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": uid,
+            "company": "Zenith",
+            "role": "Platform Engineer",
+            "interview_date": "2026-06-10T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, GeminiTimeoutError("timeout"))
+
+    resp = client.post(
+        "/api/coach/checklist",
+        json={"interview_id": interview_id},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["tonights_plan"]) == 3
+    assert "Preparation compounds confidence" in body["quote"]
+
+
+def test_post_checklist_scoped_to_authenticated_user(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    interview_id = "cccccccc-cccc-cccc-cccc-ccccccccccc4"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": "22222222-2222-2222-2222-222222222222",
+            "company": "OtherCo",
+            "role": "Other Role",
+            "interview_date": "2026-06-10T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, {"unused": True})
+
+    resp = client.post(
+        "/api/coach/checklist",
+        json={"interview_id": interview_id},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 404
