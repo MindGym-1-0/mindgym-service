@@ -3,368 +3,387 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, UTC
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, HTTPException, status
+
+# Upgraded to modern SDK namespace
+from google import genai
 from pydantic import BaseModel
-from supabase import Client
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client
-from src.types.weekly_mission import GeminiMissionOutput, WeeklyMissionGenerateResponse
 
-# Modern Google GenAI SDK imports
-from google import genai
-from google.genai import types
+# Import your real streak logic function from Part 2
+from src.api.streaks import increment_streak
+
+from src.types.daily_focus import ActionType, DailyFocusResponse, GeminiDailyFocusOutput
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-
-def get_target_monday() -> date:
-    """Calculates the target Monday.
-
-    If generated on a Sunday night, the coming Monday represents the actual
-    operational week start.
-    """
-    today = datetime.now(timezone.utc).date()
-    days_until_monday = (1 - today.isoweekday()) % 7
-    return today + timedelta(days=days_until_monday)
+# Initialize the standard Client. It picks up your GEMINI_API_KEY environment variable.
+ai_client = genai.Client()
 
 
-def execute_fallback_generation(user_context: dict) -> dict:
-    """Step 4 Fallback Engine: Explicitly builds 3 tailored actions via string
+def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
+    """Generates a highly contextual fallback response if Gemini fails or times out."""
+    logger.warning("Executing local fallback logic for daily focus generation.")
+    today = date.today()
 
-    formatting using pipeline metrics to ensure the client never encounters a
-    processing failure.
-    """
-    active_jobs = user_context.get("active_jobs", [])
-    total_applications = len(active_jobs)
+    # 1. Check for urgent interview in the next 2 days
+    upcoming_interviews = context.get("interviews", [])
+    for iv in upcoming_interviews:
+        try:
+            iv_date = datetime.strptime(
+                iv["interview_date"].split("T")[0], "%Y-%m-%d"
+            ).date()
+            if today <= iv_date <= (today + timedelta(days=2)):
+                return GeminiDailyFocusOutput(
+                    action_1_text=f"Prepare for your upcoming interview with {iv.get('company')} for the {iv.get('role')} role.",
+                    action_1_type=ActionType.PREPARE_INTERVIEW,
+                    action_2_text="Review your application details and core engineering projects.",
+                    action_2_type=ActionType.GENERIC_PIPELINE,
+                )
+        except Exception:
+            continue
 
-    if total_applications < 3:
-        act_1 = "Target and submit at least 2 new backend engineering applications to expand your baseline pipeline."
-    else:
-        act_1 = f"Follow up on your existing {total_applications} open applications to gauge response momentum."
+    # 2. Check for stagnant applications (> 14 days)
+    active_jobs = context.get("jobs", [])
+    for job in active_jobs:
+        try:
+            last_moved = datetime.strptime(
+                job["last_moved_at"].split("T")[0], "%Y-%m-%d"
+            ).date()
+            if (today - last_moved).days > 14:
+                return GeminiDailyFocusOutput(
+                    action_1_text=f"Follow up with the hiring team or recruiter at {job.get('company')} regarding your {job.get('role')} application.",
+                    action_1_type=ActionType.FOLLOW_UP,
+                    action_2_text="Keep looking for new technical opportunities to fill your pipeline.",
+                    action_2_type=ActionType.ADD_APPLICATIONS,
+                )
+        except Exception:
+            continue
 
-    act_2 = "Complete 2 practice mock sessions this week to initialize your competency tracking."
+    # 3. Check for low pipeline numbers (Fixed: schema holds stage as lowercase "applied")
+    applied_count = sum(1 for j in active_jobs if j.get("stage") == "applied")
+    if applied_count < 3:
+        return GeminiDailyFocusOutput(
+            action_1_text="Find and apply to at least 2 new jobs today to keep your application pipeline healthy.",
+            action_1_type=ActionType.ADD_APPLICATIONS,
+            action_2_text=None,
+            action_2_type=None,
+        )
 
-    session_count = user_context.get("session_count", 0)
-    if session_count < 2:
-        act_3 = "Book and complete a core system design mock study session to stabilize your weekly performance trends."
-    else:
-        act_3 = "Document post-session technical debrief notes across your upcoming interviews to protect your active tracking streak."
+    # 4. Total safe default
+    return GeminiDailyFocusOutput(
+        action_1_text="Review your open applications and plan out outreach targets for the week.",
+        action_1_type=ActionType.GENERIC_PIPELINE,
+        action_2_text=None,
+        action_2_type=None,
+    )
 
-    return {"action_1": act_1, "action_2": act_2, "action_3": act_3}
 
+@router.post(
+    "/generate",
+    response_model=DailyFocusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate daily action focus items using pipeline context",
+)
+async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUserToken):
+    today_str = date.today().strftime("%Y-%m-%d")
+    sb = get_supabase_user_client(token)
+    user_uuid_str = str(current_user_id)
 
-@router.post("/generate", response_model=WeeklyMissionGenerateResponse)
-async def generate_weekly_mission(
-    current_user_id: CurrentUserId,
-    token: CurrentUserToken,
-    supabase: Client = Depends(get_supabase_user_client),
-):
-    user_id = str(current_user_id)
-
-    # ------------------------------------------
-    # STEP 1 — FETCH USER CONTEXT FROM SUPABASE
-    # ------------------------------------------
+    # STEP 1: Fetch multi-table context from Supabase via non-blocking worker threads
     try:
-        user_res = (
-            supabase.table("users").select("goal, stage").eq("id", user_id).execute()
+        user_res = await asyncio.to_thread(
+            sb.table("users")
+            .select("goal, stage, anxiety_level")
+            .eq("id", user_uuid_str)
+            .execute
         )
-        user_profile = (
-            user_res.data[0]
-            if user_res.data
-            else {"goal": "General Placement", "stage": "Interviewing"}
-        )
+        user_profile = user_res.data[0] if user_res.data else {}
 
-        jobs_res = (
-            supabase.table("jobs")
-            .select("id, stage, last_moved_at")
-            .eq("user_id", user_id)
-            .execute()
+        jobs_res = await asyncio.to_thread(
+            sb.table("jobs")
+            .select("company, role, stage, last_moved_at")
+            .eq("user_id", user_uuid_str)
+            .is_("outcome", "null")
+            .order("last_moved_at", descending=True)
+            .execute
         )
         active_jobs = jobs_res.data or []
 
-        seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-
-        sessions_res = (
-            supabase.table("ai_sessions")
-            .select("mood_delta")
-            .eq("user_id", user_id)
-            .gte("created_at", seven_days_ago)
-            .execute()
+        interviews_res = await asyncio.to_thread(
+            sb.table("interviews")
+            .select("company, role, interview_date")
+            .eq("user_id", user_uuid_str)
+            .gte("interview_date", today_str)
+            .order("interview_date", ascending=True)
+            .limit(2)
+            .execute
         )
-        sessions_this_week = sessions_res.data or []
-        session_count = len(sessions_this_week)
+        upcoming_interviews = interviews_res.data or []
 
-        avg_mood_delta = 0.0
-        if session_count > 0:
-            avg_mood_delta = (
-                sum(s.get("mood_delta", 0.0) for s in sessions_this_week)
-                / session_count
-            )
-
-        prev_mission_res = (
-            supabase.table("weekly_mission")
-            .select("completion_count")
-            .eq("user_id", user_id)
-            .order("week_start_date", descending=True)
-            .limit(1)
-            .execute()
+        # Fixed: selected anxiety_level_delta instead of old mood_delta field
+        sessions_res = await asyncio.to_thread(
+            sb.table("ai_sessions")
+            .select("preparation_for, anxiety_level_delta, completed_at")
+            .eq("user_id", user_uuid_str)
+            .is_("completed_at", "not.null")
+            .order("completed_at", descending=True)
+            .limit(3)
+            .execute
         )
-        prev_completion_count = (
-            prev_mission_res.data[0]["completion_count"] if prev_mission_res.data else 0
-        )
+        recent_sessions = sessions_res.data or []
 
+        streak_res = await asyncio.to_thread(
+            sb.table("streaks")
+            .select("current_streak")
+            .eq("user_id", user_uuid_str)
+            .execute
+        )
+        current_streak = (
+            streak_res.data[0].get("current_streak", 0) if streak_res.data else 0
+        )
     except Exception as db_err:
-        logger.error(f"Error compiling user mission context parameters: {str(db_err)}")
-        (
-            active_jobs,
-            session_count,
-            prev_completion_count,
-            avg_mood_delta,
-        ) = ([], 0, 0, 0.0)
-        user_profile = {"goal": "General Placement", "stage": "Interviewing"}
+        logger.error(
+            f"Failed to fetch user context tables from Supabase: {str(db_err)}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to look up user metadata context.",
+        )
 
-    context_package = {
-        "user_profile": user_profile,
-        "active_jobs": active_jobs,
-        "session_count": session_count,
-        "prev_completion_count": prev_completion_count,
-        "avg_mood_delta": avg_mood_delta,
+    context = {
+        "profile": user_profile,
+        "jobs": active_jobs,
+        "interviews": upcoming_interviews,
+        "sessions": recent_sessions,
+        "streak": current_streak,
     }
 
-    # ------------------------------------------
-    # STEP 2 — BUILD THE GEMINI PROMPT
-    # ------------------------------------------
+    # STEP 2: Build the prompt
     prompt = f"""
-    You are an expert career performance optimization AI. Analyze the user's data to generate 3 actionable, non-generic target missions for next week.
+    You are an expert, highly personalized AI Job Search Assistant for a software engineer.
+    Analyze the user's specific application pipeline below and return exactly 1 or 2 actions for today.
 
-    User Context:
-    - Career Goal: {user_profile.get('goal')}
-    - Application Stage: {user_profile.get('stage')}
-    - Current Active Pipeline Jobs: {json.dumps(active_jobs)}
-    - Activity Volume This Week: {session_count} completed sessions (Avg Mood Change: {avg_mood_delta})
-    - Completed Targets from Last Week: {prev_completion_count}/3
+    CRITICAL PRODUCT REQUIREMENT: Generic output like "apply to more jobs" or "check your status" is a defect.
+    You MUST reference specific companies, roles, timeline conditions, or interview opportunities present in the raw data context.
 
-    Requirements:
-    - Focus heavily on pipeline gaps, performance gaps, or momentum drop-offs.
-    - Write highly concrete and contextually tailored strings for this individual user. Avoid generic platitudes.
-    - Return your response exclusively as valid JSON matching the required fields.
+    --- USER PIPELINE CONTEXT ---
+    User Profile: {json.dumps(user_profile)}
+    Active Applications: {json.dumps(active_jobs)}
+    Upcoming Interviews: {json.dumps(upcoming_interviews)}
+    Recent App Interaction Sessions: {json.dumps(recent_sessions)}
+    Current Daily Engagement Streak: {current_streak} days
+    Current Date: {today_str}
+
+    --- BUSINESS RULE PRIORITY HEURISTICS ---
+    1. Urgent Interview Focus: If an interview is scheduled in the next 2 days, action_1 MUST guide preparation for that specific company and role.
+    2. Stagnant Applications: If an application has sat in its current stage without moving for more than 14 days, prioritize an outreach or follow-up action naming that company.
+    3. Low Pipeline Volume: If there are fewer than 3 active items in the 'applied' stage, prioritize adding new job targets.
+    4. Feedback & Debrief Loops: If an application's stage was advanced recently but no post-session debrief was logged, prioritize a debrief logging task.
     """
 
-    generated_actions = None
-
-    # ------------------------------------------
-    # STEP 3 & 4 — CALL GEMINI WITH STRICT 4S TIMEOUT
-    # ------------------------------------------
+    # STEP 3 & 4: Call Gemini with strict formatting validation and a 4-second timeout limit
+    validated_output: Optional[GeminiDailyFocusOutput] = None
     try:
-        client = genai.Client()
 
-        response = await asyncio.wait_for(
-            asyncio.to_thread(
-                client.models.generate_content,
-                model="gemini-2.5-flash",  # Upgraded to active flash engine matching setup profiles
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=GeminiMissionOutput,
+        async def call_gemini_api():
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: ai_client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=prompt,
+                    config={
+                        "response_mime_type": "application/json",
+                        "response_schema": GeminiDailyFocusOutput,
+                    },
                 ),
-            ),
-            timeout=4.0,
-        )
-
-        raw_json = json.loads(response.text.strip())
-
-        if (
-            raw_json.get("action_1")
-            and raw_json.get("action_2")
-            and raw_json.get("action_3")
-        ):
-            generated_actions = raw_json
-        else:
-            logger.warning(
-                "Gemini structure was missing fields. Dropping to fallback handler."
             )
-            generated_actions = execute_fallback_generation(context_package)
+            return response.text
 
-    except (asyncio.TimeoutError, Exception) as gen_error:
+        raw_text = await asyncio.wait_for(call_gemini_api(), timeout=4.0)
+        parsed_json = json.loads(raw_text.strip())
+        validated_output = GeminiDailyFocusOutput(**parsed_json)
+    except (asyncio.TimeoutError, Exception) as err:
         logger.error(
-            "Gemini generation engine bypassed or timed out: " + str(gen_error)
+            f"Gemini generation failure or timeout window exceeded: {repr(err)}"
         )
-        generated_actions = execute_fallback_generation(context_package)
+        validated_output = execute_fallback_logic(context)
 
-    # ------------------------------------------
-    # STEP 5 — SAVE OR UPDATE SUPABASE RECORD
-    # ------------------------------------------
-    target_monday = get_target_monday()
+    if not validated_output or not validated_output.action_1_text:
+        validated_output = execute_fallback_logic(context)
 
-    upsert_payload = {
-        "user_id": user_id,
-        "week_start_date": target_monday.isoformat(),
-        "action_1": generated_actions["action_1"],
-        "action_2": generated_actions["action_2"],
-        "action_3": generated_actions["action_3"],
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
+    # STEP 5 & 6: Save/Upsert and Return
+    try:
+        focus_payload = {
+            "user_id": user_uuid_str,
+            "date": today_str,
+            "action_1_text": validated_output.action_1_text,
+            "action_1_type": (
+                validated_output.action_1_type.value
+                if hasattr(validated_output.action_1_type, "value")
+                else validated_output.action_1_type
+            ),
+            "action_2_text": validated_output.action_2_text,
+            "action_2_type": (
+                validated_output.action_2_type.value
+                if validated_output.action_2_type
+                and hasattr(validated_output.action_2_type, "value")
+                else validated_output.action_2_type
+            ),
+            "updated_at": datetime.utcnow().isoformat(),
+        }
 
-    existing_row = (
-        supabase.table("weekly_mission")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("week_start_date", target_monday.isoformat())
-        .execute()
-    )
-
-    if existing_row.data:
-        res = (
-            supabase.table("weekly_mission")
-            .update(upsert_payload)
-            .eq("id", existing_row.data[0]["id"])
-            .execute()
+        existing_check = await asyncio.to_thread(
+            sb.table("daily_focus")
+            .select("id")
+            .eq("user_id", user_uuid_str)
+            .eq("date", today_str)
+            .execute
         )
-    else:
-        upsert_payload["generated_at"] = datetime.now(timezone.utc).isoformat()
-        upsert_payload["action_1_completed"] = False
-        upsert_payload["action_2_completed"] = False
-        upsert_payload["action_3_completed"] = False
-        upsert_payload["completion_count"] = 0
-        res = supabase.table("weekly_mission").insert(upsert_payload).execute()
 
-    # ------------------------------------------
-    # STEP 6 — RETURN MAPPED RESPONSE RECORD
-    # ------------------------------------------
-    record = res.data[0]
+        if existing_check.data:
+            record_id = existing_check.data[0]["id"]
+            db_result = await asyncio.to_thread(
+                sb.table("daily_focus")
+                .update(focus_payload)
+                .eq("id", record_id)
+                .execute
+            )
+        else:
+            focus_payload["created_at"] = datetime.utcnow().isoformat()
+            db_result = await asyncio.to_thread(
+                sb.table("daily_focus").insert(focus_payload).execute
+            )
 
-    raw_week_date = record["week_start_date"]
-    parsed_week_date = (
-        date.fromisoformat(raw_week_date)
-        if isinstance(raw_week_date, str)
-        else raw_week_date
-    )
-
-    raw_gen_at = record["generated_at"]
-    parsed_gen_at = (
-        datetime.fromisoformat(raw_gen_at.replace("Z", "+00:00"))
-        if isinstance(raw_gen_at, str)
-        else raw_gen_at
-    )
-
-    raw_up_at = record["updated_at"]
-    parsed_up_at = (
-        datetime.fromisoformat(raw_up_at.replace("Z", "+00:00"))
-        if isinstance(raw_up_at, str)
-        else raw_up_at
-    )
-
-    return WeeklyMissionGenerateResponse(
-        id=str(record["id"]),
-        user_id=str(record["user_id"]),
-        week_start_date=parsed_week_date,
-        action_1=record["action_1"],
-        action_1_completed=record["action_1_completed"],
-        action_2=record["action_2"],
-        action_2_completed=record["action_2_completed"],
-        action_3=record["action_3"],
-        action_3_completed=record["action_3_completed"],
-        completion_count=record["completion_count"],
-        generated_at=parsed_gen_at,
-        updated_at=parsed_up_at,
-    )
+        return db_result.data[0]
+    except Exception as save_err:
+        logger.error(
+            f"Error saving daily focus context mapping record: {str(save_err)}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to persist generated focus plan record.",
+        )
 
 
 # =====================================================================
-# PART 5: COMPLETE ENDPOINTS (WEEKLY MISSION TASK TRACKING SWAP-SYSTEM)
+# PART 5: COMPLETE ENDPOINTS (DAILY FOCUS TASK TRACKING SWAP-SYSTEM)
 # =====================================================================
 
 
-class WeeklyMissionCompleteRequest(BaseModel):
-    mission_item_id: str  # Expected values: "action_1", "action_2", or "action_3"
+class DailyFocusCompleteRequest(BaseModel):
+    action_id: str  # Expected values: "action_1" or "action_2"
 
 
-class WeeklyMissionCompleteResponse(BaseModel):
+class DailyFocusCompleteResponse(BaseModel):
     success: bool
-    items_completed: int
-    total_items: int = 3
+    current_streak: int
+    milestone: Optional[int] = (
+        None  # Perfectly synchronized with Part 2's Optional[int] definition
+    )
 
 
 @router.post(
     "/complete",
-    response_model=WeeklyMissionCompleteResponse,
+    response_model=DailyFocusCompleteResponse,
     status_code=status.HTTP_200_OK,
-    summary="Mark a specific weekly mission action item as completed and increment score counter",
+    summary="Mark a specific daily focus action item as completed and update streak",
 )
-async def complete_weekly_mission(
+async def complete_daily_focus(
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
-    payload: WeeklyMissionCompleteRequest = Body(...),
-    supabase: Client = Depends(get_supabase_user_client),
+    payload: DailyFocusCompleteRequest = Body(...),
 ):
-    user_id = str(current_user_id)
-    target_monday_str = get_target_monday().isoformat()
+    sb = get_supabase_user_client(token)
+    user_uuid_str = str(current_user_id)
+    today_str = date.today().strftime("%Y-%m-%d")
 
-    if payload.mission_item_id not in ["action_1", "action_2", "action_3"]:
+    if payload.action_id not in ["action_1", "action_2"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid mission_item_id. Must be 'action_1', 'action_2', or 'action_3'.",
+            detail="Invalid action_id. Must be 'action_1' or 'action_2'.",
         )
 
-    # 1. Fetch current week's mission row to check state existence
-    existing_row = (
-        supabase.table("weekly_mission")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("week_start_date", target_monday_str)
-        .execute()
-    )
-
-    if not existing_row.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No weekly mission structure initialized for this target week block.",
-        )
-
-    record = existing_row.data[0]
-    record_id = record["id"]
-
-    target_completed_field = f"{payload.mission_item_id}_completed"
-
-    # If already marked completed, return current database count immediately without duplicate updates
-    if record.get(target_completed_field) is True:
-        return WeeklyMissionCompleteResponse(
-            success=True,
-            items_completed=record.get("completion_count", 0),
-            total_items=3,
-        )
-
-    # 2. Safely increment completion count and flip task boolean flag state
-    new_completion_count = record.get("completion_count", 0) + 1
-    if new_completion_count > 3:
-        new_completion_count = 3
-
-    update_payload = {
-        target_completed_field: True,
-        "completion_count": new_completion_count,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-    # 3. Persist modifications back to the parent table row reference
+    # 1. Fetch today's focus row to check state existence
     try:
-        supabase.table("weekly_mission").update(update_payload).eq(
-            "id", record_id
-        ).execute()
-    except Exception as save_err:
-        logger.error(
-            f"Failed writing update payload transaction parameters into mission ledger: {str(save_err)}"
+        existing_check = await asyncio.to_thread(
+            sb.table("daily_focus")
+            .select("id, action_1_completed, action_2_completed")
+            .eq("user_id", user_uuid_str)
+            .eq("date", today_str)
+            .execute
         )
+    except Exception as err:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not update weekly mission target completion counts.",
+            detail=f"Database lookup failure: {str(err)}",
         )
 
-    return WeeklyMissionCompleteResponse(
+    if not existing_check.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No daily focus action plan found for today.",
+        )
+
+    record = existing_check.data[0]
+    record_id = record["id"]
+
+    # Check if target action field is already marked true
+    target_field = f"{payload.action_id}_completed"
+    if record.get(target_field) is True:
+        # Already completed; fetch current streak status without duplicate increments
+        streak_res = await asyncio.to_thread(
+            sb.table("streaks")
+            .select("current_streak")
+            .eq("user_id", user_uuid_str)
+            .execute
+        )
+        current_streak = streak_res.data[0]["current_streak"] if streak_res.data else 0
+        return DailyFocusCompleteResponse(
+            success=True, current_streak=current_streak, milestone=None
+        )
+
+    # 2. Update the target column inside daily_focus table structure
+    try:
+        update_payload = {
+            target_field: True,
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+        await asyncio.to_thread(
+            sb.table("daily_focus").update(update_payload).eq("id", record_id).execute
+        )
+    except Exception as err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update action task completion state: {str(err)}",
+        )
+
+    # 3. Reuse your streak increment logic built during Part 2
+    try:
+        # Explicitly pass required contextual elements to match your custom router signature
+        streak_data = await increment_streak(
+            current_user_id=current_user_id, token=token, sb=sb
+        )
+
+        # Access attribute data directly out of your real StreakIncrementResponse Pydantic model
+        res_streak = streak_data.current_streak
+        res_milestone = streak_data.milestone
+
+    except Exception as err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Action completed, but streak calculation failed: {str(err)}",
+        )
+
+    return DailyFocusCompleteResponse(
         success=True,
-        items_completed=new_completion_count,
-        total_items=3,
+        current_streak=res_streak,
+        milestone=res_milestone,
     )
