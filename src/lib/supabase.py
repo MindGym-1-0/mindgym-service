@@ -26,7 +26,7 @@ def get_supabase_user_client(token: str) -> Client:
     return client
 
 
-async def insert_onboarding_record(record: dict[str, Any]) -> dict[str, Any]:
+async def insert_onboarding_record(record: dict[str, Any], user_token: str) -> dict[str, Any]:
     """Persist an onboarding record to Supabase using the REST API."""
     if not settings.supabase_url or not settings.supabase_key:
         raise RuntimeError(
@@ -36,7 +36,7 @@ async def insert_onboarding_record(record: dict[str, Any]) -> dict[str, Any]:
     url = f"{settings.supabase_url.rstrip('/')}/rest/v1/{settings.supabase_onboarding_table}"
     headers = {
         "apikey": settings.supabase_key,
-        "Authorization": f"Bearer {settings.supabase_key}",
+        "Authorization": f"Bearer {user_token}",
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
