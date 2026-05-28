@@ -368,4 +368,3 @@ async def complete_weekly_mission(
         items_completed=new_completion_count,
         total_items=3,
     )
-
