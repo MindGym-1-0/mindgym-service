@@ -387,4 +387,3 @@ async def complete_daily_focus(
         current_streak=res_streak,
         milestone=res_milestone,
     )
-
