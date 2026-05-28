@@ -97,7 +97,12 @@ async def signup(payload: SignupRequest, response: Response) -> AuthResponse:
     """Create a Supabase Auth user and persist the session when available."""
 
     try:
-        auth_result = await signup_with_email_password(payload.email, payload.password)
+        auth_result = await signup_with_email_password(
+            payload.email,
+            payload.password,
+            payload.first_name,
+            payload.last_name
+        )
     except UserAlreadyExistsError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
