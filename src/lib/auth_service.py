@@ -2,6 +2,8 @@ import asyncio
 import logging
 from typing import Any, Optional
 
+from supabase_auth.errors import AuthApiError
+
 from src.lib.supabase_client import get_supabase_admin_client, get_supabase_client, create_fresh_supabase_client
 
 logger = logging.getLogger(__name__)
@@ -9,6 +11,10 @@ logger = logging.getLogger(__name__)
 
 class AuthenticationError(Exception):
     """Raised for invalid user credentials."""
+
+
+class EmailNotConfirmedError(Exception):
+    """Raised when Supabase accepts credentials but withholds a session until email is confirmed."""
 
 
 class UpstreamAuthServiceError(Exception):
@@ -59,7 +65,6 @@ def _normalize_session(session: Any) -> dict[str, Any] | None:
         "access_token": session.access_token,
         "refresh_token": session.refresh_token,
         "expires_in": session.expires_in,
-        "token_type": session.token_type,
     }
 
 
@@ -74,6 +79,63 @@ def _build_auth_payload(response: Any) -> dict[str, Any]:
     }
 
 
+def _user_is_email_confirmed(user: Any) -> bool:
+    return bool(
+        getattr(user, "email_confirmed_at", None) or getattr(user, "confirmed_at", None)
+    )
+
+
+def _map_supabase_auth_exception(exc: Exception, email: str) -> Exception:
+    """Translate Supabase Auth errors into domain-specific exceptions."""
+
+    if isinstance(exc, AuthApiError):
+        code = (exc.code or "").lower()
+        message = (exc.message or str(exc)).lower()
+        if code == "email_not_confirmed" or "email not confirmed" in message:
+            logger.info("Login blocked for email=%s because email is not confirmed", email)
+            return EmailNotConfirmedError("Email address is not confirmed")
+        if code == "invalid_credentials" or "invalid login credentials" in message:
+            logger.info("Login failed for email=%s due to invalid credentials", email)
+            return AuthenticationError("Invalid email or password")
+
+    message = str(exc).lower()
+    if "invalid login credentials" in message or "invalid_credentials" in message:
+        logger.info("Login failed for email=%s due to invalid credentials", email)
+        return AuthenticationError("Invalid email or password")
+
+    logger.exception("Supabase authentication request failed for email=%s", email)
+    return UpstreamAuthServiceError("Authentication provider unavailable")
+
+
+def _validate_login_response(response: Any, email: str) -> None:
+    """Ensure Supabase returned a usable session after a successful token exchange."""
+
+    session = getattr(response, "session", None)
+    user = getattr(response, "user", None)
+
+    if session is not None and user is not None:
+        return
+
+    if user is not None and session is None:
+        confirmed = _user_is_email_confirmed(user)
+        logger.warning(
+            "Supabase token exchange returned user without session for email=%s "
+            "(email_confirmed=%s)",
+            email,
+            confirmed,
+        )
+        if not confirmed:
+            raise EmailNotConfirmedError("Email address is not confirmed")
+        raise UpstreamAuthServiceError(
+            "Authentication provider returned an incomplete session"
+        )
+
+    logger.warning(
+        "Supabase token exchange returned no session and no user for email=%s", email
+    )
+    raise AuthenticationError("Invalid email or password")
+
+
 async def login_with_email_password(email: str, password: str) -> dict[str, Any]:
     """Authenticate user credentials against Supabase Auth."""
 
@@ -85,20 +147,9 @@ async def login_with_email_password(email: str, password: str) -> dict[str, Any]
             {"email": email, "password": password},
         )
     except Exception as exc:
-        message = str(exc).lower()
-        if "invalid login credentials" in message or "invalid_credentials" in message:
-            logger.info("Login failed for email=%s due to invalid credentials", email)
-            raise AuthenticationError("Invalid email or password") from exc
+        raise _map_supabase_auth_exception(exc, email) from exc
 
-        logger.exception("Supabase authentication request failed for email=%s", email)
-        raise UpstreamAuthServiceError("Authentication provider unavailable") from exc
-
-    session = getattr(response, "session", None)
-    user = getattr(response, "user", None)
-    if session is None or user is None:
-        logger.info("Login failed for email=%s due to missing session/user", email)
-        raise AuthenticationError("Invalid email or password")
-
+    _validate_login_response(response, email)
     return _build_auth_payload(response)
 
 

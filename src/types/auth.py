@@ -30,10 +30,17 @@ class AuthUser(BaseModel):
     user_metadata: dict | None = None
 
 
+class AuthSession(BaseModel):
+    access_token: str
+    refresh_token: str
+    expires_in: int | None = None
+
+
 class AuthResponse(BaseModel):
     authenticated: bool
     user: AuthUser | None = None
     message: str | None = None
+    session: AuthSession | None = None
 
 
 class LogoutResponse(BaseModel):
