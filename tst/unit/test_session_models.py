@@ -14,7 +14,7 @@ from src.types.session import (
 def test_session_start_request_valid():
     req = SessionStartRequest(
         preparation_for='interview_tomorrow',
-        current_feeling='nervous',
+        current_feeling='unsure',
         desired_feeling='confident',
         time_available='10 min',
         anxiety_level_before=7,
@@ -39,7 +39,7 @@ def test_session_start_request_all_preparation_for_values():
     for value in valid_values:
         kwargs = dict(
             preparation_for=value,
-            current_feeling='okay',
+            current_feeling='unsure',
             desired_feeling='calm',
             time_available='5 min',
             anxiety_level_before=5,
@@ -55,7 +55,7 @@ def test_session_start_request_invalid_preparation_for():
     with pytest.raises(ValidationError):
         SessionStartRequest(
             preparation_for='interview_today',
-            current_feeling='nervous',
+            current_feeling='unsure',
             desired_feeling='confident',
             time_available='10 min',
             anxiety_level_before=7,
@@ -66,7 +66,7 @@ def test_session_start_request_anxiety_level_before_boundary_valid():
     for score in [1, 10]:
         req = SessionStartRequest(
             preparation_for='general_reset',
-            current_feeling='tired',
+            current_feeling='exhausted',
             desired_feeling='calm',
             time_available='5 min',
             anxiety_level_before=score,
@@ -78,7 +78,7 @@ def test_session_start_request_anxiety_level_before_too_low():
     with pytest.raises(ValidationError):
         SessionStartRequest(
             preparation_for='general_reset',
-            current_feeling='tired',
+            current_feeling='exhausted',
             desired_feeling='calm',
             time_available='5 min',
             anxiety_level_before=0,
@@ -89,7 +89,7 @@ def test_session_start_request_anxiety_level_before_too_high():
     with pytest.raises(ValidationError):
         SessionStartRequest(
             preparation_for='general_reset',
-            current_feeling='tired',
+            current_feeling='exhausted',
             desired_feeling='calm',
             time_available='5 min',
             anxiety_level_before=11,
@@ -101,7 +101,7 @@ def test_session_start_request_all_desired_feeling_values():
     for value in valid_values:
         req = SessionStartRequest(
             preparation_for='general_reset',
-            current_feeling='anxious',
+            current_feeling='anxious but hopeful',
             desired_feeling=value,
             time_available='5 min',
             anxiety_level_before=5,
@@ -113,7 +113,7 @@ def test_session_start_request_invalid_desired_feeling():
     with pytest.raises(ValidationError):
         SessionStartRequest(
             preparation_for='general_reset',
-            current_feeling='anxious',
+            current_feeling='anxious but hopeful',
             desired_feeling='happy',
             time_available='5 min',
             anxiety_level_before=5,
@@ -124,7 +124,7 @@ def test_session_start_request_all_time_available_values():
     for value in ['5 min', '10 min', '15 min']:
         req = SessionStartRequest(
             preparation_for='general_reset',
-            current_feeling='anxious',
+            current_feeling='anxious but hopeful',
             desired_feeling='calm',
             time_available=value,
             anxiety_level_before=5,
@@ -136,7 +136,7 @@ def test_session_start_request_invalid_time_available():
     with pytest.raises(ValidationError):
         SessionStartRequest(
             preparation_for='general_reset',
-            current_feeling='anxious',
+            current_feeling='anxious but hopeful',
             desired_feeling='calm',
             time_available='20 min',
             anxiety_level_before=5,
@@ -147,7 +147,7 @@ def test_session_start_request_company_and_role_required_for_mode1():
     with pytest.raises(ValidationError):
         SessionStartRequest(
             preparation_for='interview_tomorrow',
-            current_feeling='nervous',
+            current_feeling='unsure',
             desired_feeling='confident',
             time_available='10 min',
             anxiety_level_before=7,
@@ -157,7 +157,7 @@ def test_session_start_request_company_and_role_required_for_mode1():
 def test_session_start_request_company_and_role_provided():
     req = SessionStartRequest(
         preparation_for='interview_tomorrow',
-        current_feeling='nervous',
+        current_feeling='unsure',
         desired_feeling='confident',
         time_available='10 min',
         anxiety_level_before=7,

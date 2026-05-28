@@ -50,14 +50,19 @@ _MODE2_EXAMPLE = """Example output for Mode 2 (general mental health, stage="ear
 
 def _render_emotional_calibration(ec: dict) -> str:
     arc = ec['tone_arc']
+    witnessing = (
+        'phase2 MUST open with one sentence that explicitly acknowledges the weight the user '
+        'is carrying before moving into grounding — e.g. "This stretch has been heavy." or '
+        '"The last few days have asked a lot of you." Do not skip straight to grounding. '
+        'The user needs to feel seen before they can settle.'
+        if ec['acknowledge_emotion'] else
+        'Ground the user directly — no heavy acknowledgment needed at this anxiety level.'
+    )
     return f"""--- EMOTIONAL CALIBRATION ---
 Current feeling: {ec['current_feeling']}
-Current emotional score: {ec['anxiety_level_before']}/10 (1 = completely depleted/overwhelmed, 5 = neutral/uncertain, 10 = peak energy and confidence)
+Anxiety score: {ec['anxiety_level_before']}/10 (1 = calm/not anxious, 10 = extremely anxious)
 Overall tone: {ec['tone']}
 Stress level: {ec['stress_level']}
-Energy level: {ec['energy_level']}
-Confidence level: {ec['confidence_level']}
-Baseline anxiety: {ec['baseline_anxiety_level']}/10
 Desired end state: {ec['desired_feeling']}
 Primary need: {ec['primary_need']}
 
@@ -70,7 +75,7 @@ phase4: {arc['phase4']}
 phase5: {arc['phase5']}
 
 --- EMOTIONAL WITNESSING RULE ---
-When current emotional score is 3 or below AND current_feeling is discouraged, exhausted, or overwhelmed: phase2 MUST open with one sentence that explicitly acknowledges the weight the user is carrying before moving into grounding — e.g. "This stretch has been heavy." or "The last few days have asked a lot of you." Do not skip straight to grounding. The user needs to feel seen before they can settle.
+{witnessing}
 
 --- NAME RULE ---
 If the user's first name is provided, use it at most once and only where it feels natural. Do not open every phase with their name."""

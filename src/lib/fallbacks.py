@@ -3,24 +3,21 @@ from src.types.session import SessionScript
 
 _COMPANY_DEFAULT = 'this company'
 _ROLE_DEFAULT = 'this role'
-_GOAL_DEFAULT = 'your next opportunity'
 
 
 def get_fallback_script(
     preparation_for: str,
     company: str | None,
     role: str | None,
-    goal: str | None,
 ) -> SessionScript:
     """Return a hardcoded 5-phase SessionScript for the given preparation_for value.
 
     Called by session_service when Gemini times out or returns an invalid response.
-    Injects company and role for event-specific templates, goal for general templates.
+    Injects company and role for event-specific templates.
     Raises ValueError for unrecognised preparation_for values.
     """
     c = company or _COMPANY_DEFAULT
     r = role or _ROLE_DEFAULT
-    g = goal or _GOAL_DEFAULT
 
     templates = {
         'general_reset': SessionScript(
@@ -35,10 +32,10 @@ def get_fallback_script(
                 "Let each part of your body soften. You are safe. You are reset."
             ),
             phase3=(
-                f"Bring to mind where you are headed — {g}. "
+                "Bring to mind where you are headed. "
                 "Not the noise, not the doubt — just the direction. "
                 "Picture yourself making steady progress, one day at a time. "
-                f"You do not need to have it all figured out. You just need to keep moving toward {g}. "
+                "You do not need to have it all figured out. You just need to keep moving forward. "
                 "That is exactly what you are doing."
             ),
             phase4=(
@@ -47,7 +44,7 @@ def get_fallback_script(
                 "You are more capable than you give yourself credit for."
             ),
             phase5=(
-                f"You are reset. You are clear. You are still moving toward {g}. "
+                "You are reset. You are clear. You are still moving forward. "
                 "Take that with you into the rest of your day."
             ),
         ),
@@ -63,10 +60,10 @@ def get_fallback_script(
                 "Everything you have learned so far comes with you."
             ),
             phase3=(
-                f"Picture yourself actively back in the search, moving confidently toward {g}. "
+                "Picture yourself actively back in the search, moving confidently toward your next role. "
                 "Your applications are going out. Your conversations are happening. "
                 "You are showing up consistently, one step at a time. "
-                f"Each action you take brings you closer to {g}. "
+                "Each action you take brings you closer to what is ahead. "
                 "You are not behind. You are exactly where you need to be right now."
             ),
             phase4=(
@@ -75,7 +72,7 @@ def get_fallback_script(
                 "That same capability is here with you now — ready to go."
             ),
             phase5=(
-                f"You are restarting with clarity and purpose, moving toward {g}. "
+                "You are restarting with clarity and purpose. "
                 "One action today. Then another tomorrow. You are already on your way."
             ),
         ),
@@ -91,7 +88,6 @@ def get_fallback_script(
                 "You are safe. This moment is hard, but it is not the end of your story."
             ),
             phase3=(
-                f"You are on a journey to {g}. "
                 "This rejection is one closed door on a path that has many more ahead. "
                 "Think about what you learned from this process — the conversations, the preparation, the growth. "
                 "None of that disappears with a no. You are more ready now than you were before you started. "
@@ -103,7 +99,7 @@ def get_fallback_script(
                 "Rejection is not a reflection of your worth. It is just part of the process."
             ),
             phase5=(
-                f"You are still in it. You are still moving toward {g}. "
+                "You are still in it. You are still moving forward. "
                 "Rest today. Come back stronger tomorrow."
             ),
         ),

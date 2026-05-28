@@ -2,15 +2,15 @@
 
 from src.lib.gemini_service import calibrate_tone
 
-# anxiety_level_before bands → stress / energy / confidence
-_INTENSITY_BANDS: dict[str, tuple[str, str, str]] = {
-    'low': ('high', 'low', 'low'),
-    'moderate': ('moderate', 'moderate', 'moderate'),
-    'high': ('low', 'high', 'high'),
-}
+# Feelings that carry emotional weight requiring acknowledgment before grounding.
+_NEGATIVE_FEELINGS = {'overwhelmed', 'discouraged', 'exhausted'}
 
-
-def _intensity_band(anxiety_level_before: int) -> str:
+# anxiety_level_before is the user's anxiety score (1 = calm, 10 = extremely anxious).
+# High anxiety → high stress → grounding tone. We only derive stress from this number.
+# Energy and confidence are deliberately NOT derived: anxiety is a high-arousal state
+# (anxious people are often wired, not low-energy), and confidence is independent.
+# One honest input → one honest reading.
+def _stress_band(anxiety_level_before: int) -> str:
     if anxiety_level_before <= 3:
         return 'low'
     if anxiety_level_before <= 6:
@@ -84,24 +84,25 @@ def build_emotional_calibration(
     current_feeling: str,
     desired_feeling: str,
     anxiety_level_before: int,
-    baseline_anxiety_level: int,
 ) -> dict:
     """Build an emotional calibration object from session inputs.
 
-    Combines anxiety_level_before intensity, current_feeling shape, and desired_feeling
+    Combines anxiety_level_before stress band, current_feeling shape, and desired_feeling
     destination into a structured object for the system prompt.
+
+    acknowledge_emotion fires when anxiety is high (>=7) AND the feeling is negative —
+    the negative emotion is the real trigger; anxiety is the gate.
 
     Raises ValueError for unrecognised current_feeling values.
     """
     if not 1 <= anxiety_level_before <= 10:
         raise ValueError(f'anxiety_level_before out of range: {anxiety_level_before}. Must be 1–10.')
 
+    # No unknown-key guard needed — current_feeling is a validated Literal at the API boundary.
     key = current_feeling.strip().lower()
-    if key not in _FEELING_ARCS:
-        raise ValueError(f'Unknown current_feeling: {current_feeling!r}')
 
-    band = _intensity_band(anxiety_level_before)
-    stress_level, energy_level, confidence_level = _INTENSITY_BANDS[band]
+    stress_level = _stress_band(anxiety_level_before)
+    acknowledge_emotion = anxiety_level_before >= 7 and key in _NEGATIVE_FEELINGS
 
     arc_def = _FEELING_ARCS[key]
     tone_arc = {**arc_def['tone_arc']}
@@ -111,10 +112,8 @@ def build_emotional_calibration(
         'current_feeling': current_feeling,
         'desired_feeling': desired_feeling,
         'anxiety_level_before': anxiety_level_before,
-        'baseline_anxiety_level': baseline_anxiety_level,
         'stress_level': stress_level,
-        'energy_level': energy_level,
-        'confidence_level': confidence_level,
+        'acknowledge_emotion': acknowledge_emotion,
         'primary_need': arc_def['primary_need'],
         'tone': calibrate_tone(anxiety_level_before),
         'tone_arc': tone_arc,

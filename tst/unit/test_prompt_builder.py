@@ -1,11 +1,9 @@
 """Unit tests for the prompt builder."""
 import pytest
+from pydantic import ValidationError
 
 from src.lib.prompt_builder import build_prompt
-
-
-_USER_CONTEXT = {'goal': 'Land a PM role', 'stage': 'active'}
-_USER_CONTEXT_WITH_NAME = {**_USER_CONTEXT, 'first_name': 'Claire'}
+from src.types.session import SessionStartRequest
 
 
 @pytest.mark.unit
@@ -19,7 +17,6 @@ def test_build_prompt_mode1_contains_company_and_role() -> None:
         anxiety_level_before=2,
         company='Stripe',
         role='PM',
-        user_context=_USER_CONTEXT,
     )
 
     assert 'Stripe' in prompt
@@ -37,7 +34,6 @@ def test_build_prompt_mode1_contains_critical_rules() -> None:
         anxiety_level_before=2,
         company='Stripe',
         role='PM',
-        user_context=_USER_CONTEXT,
     )
 
     assert 'CRITICAL' in prompt
@@ -54,30 +50,10 @@ def test_build_prompt_mode2_omits_company_and_role_sections() -> None:
         anxiety_level_before=5,
         company=None,
         role=None,
-        user_context=_USER_CONTEXT,
     )
 
     assert 'Company:' not in prompt
     assert 'use the actual names' not in prompt
-
-
-@pytest.mark.unit
-def test_build_prompt_contains_user_context_fields() -> None:
-    """Prompt must include the user context fields: goal and stage."""
-    prompt = build_prompt(
-        preparation_for='interview_tomorrow',
-        current_feeling='overwhelmed',
-        desired_feeling='confident',
-        time_available='10 min',
-        anxiety_level_before=2,
-        company=None,
-        role=None,
-        user_context=_USER_CONTEXT,
-    )
-
-    assert 'Land a PM role' in prompt
-    assert 'active' in prompt
-    assert '2' in prompt
 
 
 @pytest.mark.unit
@@ -91,7 +67,6 @@ def test_build_prompt_contains_session_inputs() -> None:
         anxiety_level_before=6,
         company=None,
         role=None,
-        user_context=_USER_CONTEXT,
     )
 
     assert 'salary_negotiation' in prompt
@@ -111,7 +86,6 @@ def test_build_prompt_contains_maya_persona() -> None:
         anxiety_level_before=2,
         company=None,
         role=None,
-        user_context=_USER_CONTEXT,
     )
 
     assert 'Maya' in prompt
@@ -128,7 +102,6 @@ def test_build_prompt_contains_phase_structure() -> None:
         anxiety_level_before=2,
         company=None,
         role=None,
-        user_context=_USER_CONTEXT,
     )
 
     assert 'phase1' in prompt
@@ -146,7 +119,6 @@ def test_build_prompt_contains_json_output_instruction() -> None:
         anxiety_level_before=2,
         company=None,
         role=None,
-        user_context=_USER_CONTEXT,
     )
 
     assert 'JSON' in prompt
@@ -163,7 +135,6 @@ def test_build_prompt_contains_emotional_calibration() -> None:
         anxiety_level_before=2,
         company=None,
         role=None,
-        user_context=_USER_CONTEXT,
     )
 
     assert 'EMOTIONAL CALIBRATION' in prompt
@@ -172,8 +143,8 @@ def test_build_prompt_contains_emotional_calibration() -> None:
 
 
 @pytest.mark.unit
-def test_build_prompt_includes_first_name_when_provided() -> None:
-    """Prompt must include the user's first name when present in user_context."""
+def test_feeling_note_appears_in_prompt_when_provided() -> None:
+    """feeling_note must appear in the user prompt as extra context for Gemini."""
     prompt = build_prompt(
         preparation_for='interview_tomorrow',
         current_feeling='overwhelmed',
@@ -182,7 +153,46 @@ def test_build_prompt_includes_first_name_when_provided() -> None:
         anxiety_level_before=2,
         company=None,
         role=None,
-        user_context=_USER_CONTEXT_WITH_NAME,
+        feeling_note='I think I might throw up from nerves',
     )
+    assert 'I think I might throw up from nerves' in prompt
 
-    assert 'Claire' in prompt
+
+@pytest.mark.unit
+def test_feeling_note_does_not_change_calibration() -> None:
+    """Calibration is driven by the chip (current_feeling), not feeling_note."""
+    prompt_without_note = build_prompt(
+        preparation_for='general_reset',
+        current_feeling='unsure',
+        desired_feeling='calm',
+        time_available='5 min',
+        anxiety_level_before=4,
+        company=None,
+        role=None,
+        feeling_note=None,
+    )
+    prompt_with_note = build_prompt(
+        preparation_for='general_reset',
+        current_feeling='unsure',
+        desired_feeling='calm',
+        time_available='5 min',
+        anxiety_level_before=4,
+        company=None,
+        role=None,
+        feeling_note='I have no idea what I am doing',
+    )
+    assert 'clarity and steady direction' in prompt_without_note
+    assert 'clarity and steady direction' in prompt_with_note
+
+
+@pytest.mark.unit
+def test_invalid_current_feeling_rejected_at_request_boundary() -> None:
+    """SessionStartRequest must reject an unknown current_feeling with a ValidationError."""
+    with pytest.raises(ValidationError):
+        SessionStartRequest(
+            preparation_for='general_reset',
+            current_feeling='a bit nervous',
+            desired_feeling='calm',
+            time_available='5 min',
+            anxiety_level_before=5,
+        )

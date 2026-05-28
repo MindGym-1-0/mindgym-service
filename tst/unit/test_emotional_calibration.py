@@ -4,34 +4,88 @@ import pytest
 from src.lib.emotional_calibration import build_emotional_calibration
 
 
-# --- anxiety_level_before → stress/energy/confidence bands ---
+# --- anxiety_level_before → stress band ---
+# Scale: 1 = calm, 10 = extremely anxious. High anxiety → high stress.
 
 @pytest.mark.unit
-@pytest.mark.parametrize('anxiety_level_before,expected', [
-    (1, ('high', 'low', 'low')),
-    (2, ('high', 'low', 'low')),
-    (3, ('high', 'low', 'low')),
-    (4, ('moderate', 'moderate', 'moderate')),
-    (5, ('moderate', 'moderate', 'moderate')),
-    (6, ('moderate', 'moderate', 'moderate')),
-    (7, ('low', 'high', 'high')),
-    (8, ('low', 'high', 'high')),
-    (9, ('low', 'high', 'high')),
-    (10, ('low', 'high', 'high')),
+@pytest.mark.parametrize('anxiety_level_before,expected_stress', [
+    (1, 'low'),
+    (2, 'low'),
+    (3, 'low'),
+    (4, 'moderate'),
+    (5, 'moderate'),
+    (6, 'moderate'),
+    (7, 'high'),
+    (8, 'high'),
+    (9, 'high'),
+    (10, 'high'),
 ])
-def test_intensity_bands_from_anxiety_level_before(
-    anxiety_level_before: int, expected: tuple[str, str, str]
+def test_stress_band_from_anxiety_level_before(
+    anxiety_level_before: int, expected_stress: str
 ) -> None:
-    """anxiety_level_before must map to correct stress/energy/confidence levels."""
+    """anxiety_level_before must map to the correct stress band."""
     result = build_emotional_calibration(
         current_feeling='unsure',
         desired_feeling='confident',
         anxiety_level_before=anxiety_level_before,
-        baseline_anxiety_level=5,
     )
-    assert result['stress_level'] == expected[0]
-    assert result['energy_level'] == expected[1]
-    assert result['confidence_level'] == expected[2]
+    assert result['stress_level'] == expected_stress
+
+
+@pytest.mark.unit
+def test_energy_and_confidence_not_in_result() -> None:
+    """energy_level and confidence_level must not be present — they are not derived."""
+    result = build_emotional_calibration(
+        current_feeling='unsure',
+        desired_feeling='confident',
+        anxiety_level_before=5,
+    )
+    assert 'energy_level' not in result
+    assert 'confidence_level' not in result
+
+
+# --- acknowledge_emotion ---
+# Fires when anxiety >= 7 AND feeling is overwhelmed/discouraged/exhausted.
+# The negative emotion is the real trigger; anxiety is just the gate.
+
+@pytest.mark.unit
+@pytest.mark.parametrize('current_feeling', ['overwhelmed', 'discouraged', 'exhausted'])
+def test_acknowledge_emotion_fires_on_high_anxiety_and_negative_feeling(
+    current_feeling: str,
+) -> None:
+    """acknowledge_emotion must be True when anxiety >= 7 and feeling is negative."""
+    result = build_emotional_calibration(
+        current_feeling=current_feeling,
+        desired_feeling='confident',
+        anxiety_level_before=7,
+    )
+    assert result['acknowledge_emotion'] is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('current_feeling', ['overwhelmed', 'discouraged', 'exhausted'])
+def test_acknowledge_emotion_does_not_fire_on_low_anxiety(current_feeling: str) -> None:
+    """acknowledge_emotion must be False when anxiety < 7, even with a negative feeling."""
+    result = build_emotional_calibration(
+        current_feeling=current_feeling,
+        desired_feeling='confident',
+        anxiety_level_before=6,
+    )
+    assert result['acknowledge_emotion'] is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('current_feeling', ['unsure', 'anxious but hopeful'])
+def test_acknowledge_emotion_does_not_fire_on_non_negative_feelings(
+    current_feeling: str,
+) -> None:
+    """acknowledge_emotion must be False for non-negative feelings even at high anxiety."""
+    result = build_emotional_calibration(
+        current_feeling=current_feeling,
+        desired_feeling='confident',
+        anxiety_level_before=9,
+    )
+    assert result['acknowledge_emotion'] is False
 
 
 # --- current_feeling → primary_need and tone_arc ---
@@ -52,7 +106,6 @@ def test_primary_need_from_current_feeling(
         current_feeling=current_feeling,
         desired_feeling='confident',
         anxiety_level_before=3,
-        baseline_anxiety_level=5,
     )
     assert result['primary_need'] == expected_primary_need
 
@@ -64,7 +117,6 @@ def test_tone_arc_overwhelmed() -> None:
         current_feeling='overwhelmed',
         desired_feeling='confident',
         anxiety_level_before=2,
-        baseline_anxiety_level=5,
     )
     arc = result['tone_arc']
     assert arc['phase1'] == 'very slow, calming, body-first'
@@ -80,7 +132,6 @@ def test_tone_arc_anxious_but_hopeful() -> None:
         current_feeling='anxious but hopeful',
         desired_feeling='confident',
         anxiety_level_before=6,
-        baseline_anxiety_level=5,
     )
     arc = result['tone_arc']
     assert arc['phase1'] == 'steady breath, not too slow'
@@ -106,7 +157,6 @@ def test_desired_feeling_shapes_phase5_landing(
         current_feeling='unsure',
         desired_feeling=desired_feeling,
         anxiety_level_before=4,
-        baseline_anxiety_level=5,
     )
     assert result['tone_arc']['phase5'] == expected_phase5
 
@@ -120,22 +170,13 @@ def test_passthrough_fields_are_present() -> None:
         current_feeling='overwhelmed',
         desired_feeling='confident',
         anxiety_level_before=2,
-        baseline_anxiety_level=7,
     )
     assert result['current_feeling'] == 'overwhelmed'
     assert result['desired_feeling'] == 'confident'
     assert result['anxiety_level_before'] == 2
-    assert result['baseline_anxiety_level'] == 7
-    assert result['tone'] == 'slow and calming'
+    assert result['tone'] == 'affirming, peak-performance priming'
+    assert 'baseline_anxiety_level' not in result
+    assert 'energy_level' not in result
+    assert 'confidence_level' not in result
 
 
-@pytest.mark.unit
-def test_unknown_current_feeling_raises() -> None:
-    """An unrecognised current_feeling must raise ValueError."""
-    with pytest.raises(ValueError, match='Unknown current_feeling'):
-        build_emotional_calibration(
-            current_feeling='totally_fine',
-            desired_feeling='confident',
-            anxiety_level_before=5,
-            baseline_anxiety_level=5,
-        )

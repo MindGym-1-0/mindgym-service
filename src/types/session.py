@@ -14,7 +14,16 @@ class SessionStartRequest(BaseModel):
         'restarting_search',
         'general_reset',
     ]
-    current_feeling: str  # chip selection or free text from the user
+    # Structured calibration key — must be one of the 5 known chips.
+    # Free-text context lives in feeling_note (separate field, prompt-only).
+    current_feeling: Literal[
+        'overwhelmed',
+        'discouraged',
+        'exhausted',
+        'unsure',
+        'anxious but hopeful',
+    ]
+    feeling_note: str | None = Field(None, max_length=500)
     desired_feeling: Literal[
         'calm',
         'grounded',
@@ -85,6 +94,7 @@ class SessionDetail(BaseModel):
     time_available: str
     company: str | None = None
     role: str | None = None
+    feeling_note: str | None = None
     anxiety_level_before: int
     anxiety_level_after: int | None
     anxiety_level_delta: int | None

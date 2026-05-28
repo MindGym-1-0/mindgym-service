@@ -13,22 +13,6 @@ from src.types.session import (
     SessionStartResponse,
 )
 
-_USER_CONTEXT_DEFAULTS = {'goal': '', 'stage': ''}
-
-
-async def fetch_user_context(user_id: str) -> dict:
-    """Fetch goal and stage from the users table."""
-    client = get_supabase_admin_client()
-    result = await asyncio.to_thread(
-        lambda: client.table('users')
-        .select('goal, stage')
-        .eq('id', user_id)
-        .maybe_single()
-        .execute()
-    )
-    return getattr(result, 'data', None) or {}
-
-
 async def insert_session(user_id: str, request: SessionStartRequest, script: SessionScript) -> str | None:
     """Insert a new ai_sessions row and return the generated session id."""
     client = get_supabase_admin_client()
@@ -40,6 +24,7 @@ async def insert_session(user_id: str, request: SessionStartRequest, script: Ses
         'time_available': request.time_available,
         'company': request.company,
         'role': request.role,
+        'feeling_note': request.feeling_note,
         'anxiety_level_before': request.anxiety_level_before,
         'phase1': script.phase1,
         'phase2': script.phase2,
@@ -86,13 +71,10 @@ async def update_session(session_id: str, anxiety_level_after: int, anxiety_leve
 
 
 async def start_session(user_id: str, request: SessionStartRequest) -> SessionStartResponse:
-    """Orchestrate session generation — fetch user context, call Gemini, fall back if needed, persist, return.
+    """Orchestrate session generation — call Gemini, fall back if needed, persist, return.
 
     Raises RuntimeError if both Gemini and the fallback fail, or if the DB insert returns no id.
     """
-    raw_context = await fetch_user_context(user_id)
-    user_context = {**_USER_CONTEXT_DEFAULTS, **{k: v for k, v in raw_context.items() if v is not None}}
-
     script = generate_script(
         preparation_for=request.preparation_for,
         current_feeling=request.current_feeling,
@@ -101,7 +83,7 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
         anxiety_level_before=request.anxiety_level_before,
         company=request.company,
         role=request.role,
-        user_context=user_context,
+        feeling_note=request.feeling_note,
     )
 
     if script is None:
@@ -110,7 +92,6 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
                 preparation_for=request.preparation_for,
                 company=request.company,
                 role=request.role,
-                goal=user_context.get('goal'),
             )
         except ValueError as exc:
             raise RuntimeError(f'Session generation failed and no fallback exists: {exc}') from exc
@@ -150,7 +131,7 @@ async def fetch_session_detail(user_id: str, session_id: str) -> dict:
         lambda: client.table('ai_sessions')
         .select(
             'id, preparation_for, current_feeling, desired_feeling, time_available, '
-            'company, role, anxiety_level_before, anxiety_level_after, anxiety_level_delta, '
+            'company, role, feeling_note, anxiety_level_before, anxiety_level_after, anxiety_level_delta, '
             'phase1, phase2, phase3, phase4, phase5, '
             'completed_at, created_at, user_id'
         )
@@ -172,6 +153,7 @@ async def fetch_session_detail(user_id: str, session_id: str) -> dict:
         'time_available': row['time_available'],
         'company': row.get('company'),
         'role': row.get('role'),
+        'feeling_note': row.get('feeling_note'),
         'anxiety_level_before': row['anxiety_level_before'],
         'anxiety_level_after': row.get('anxiety_level_after'),
         'anxiety_level_delta': row.get('anxiety_level_delta'),

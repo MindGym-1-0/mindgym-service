@@ -1,6 +1,6 @@
 """Unit tests for session_service — start_session and complete_session."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from src.lib.session_service import complete_session, start_session
 from src.types.session import SessionCompleteRequest, SessionScript, SessionStartRequest
@@ -34,11 +34,6 @@ _MOCK_SCRIPT = SessionScript(
     phase5='You are ready for Stripe as a PM.',
 )
 
-_MOCK_USER_ROW = {
-    'goal': 'Land a PM role',
-    'stage': 'active',
-}
-
 _MOCK_SESSION_ROW = {
     'id': 'session-abc',
     'anxiety_level_before': 2,
@@ -54,8 +49,7 @@ _MOCK_SESSION_ROW = {
 @pytest.mark.asyncio
 async def test_start_session_returns_response_on_gemini_success() -> None:
     """start_session must return a SessionStartResponse when Gemini succeeds."""
-    with patch('src.lib.session_service.fetch_user_context', new_callable=AsyncMock, return_value=_MOCK_USER_ROW), \
-         patch('src.lib.session_service.generate_script', return_value=_MOCK_SCRIPT), \
+    with patch('src.lib.session_service.generate_script', return_value=_MOCK_SCRIPT), \
          patch('src.lib.session_service.insert_session', new_callable=AsyncMock, return_value='session-abc'):
 
         response = await start_session(user_id=_USER_ID, request=_VALID_REQUEST)
@@ -73,8 +67,7 @@ async def test_start_session_returns_response_on_gemini_success() -> None:
 @pytest.mark.asyncio
 async def test_start_session_uses_fallback_when_gemini_returns_none() -> None:
     """start_session must use the fallback script when Gemini returns None."""
-    with patch('src.lib.session_service.fetch_user_context', new_callable=AsyncMock, return_value=_MOCK_USER_ROW), \
-         patch('src.lib.session_service.generate_script', return_value=None), \
+    with patch('src.lib.session_service.generate_script', return_value=None), \
          patch('src.lib.session_service.get_fallback_script', return_value=_MOCK_SCRIPT) as mock_fallback, \
          patch('src.lib.session_service.insert_session', new_callable=AsyncMock, return_value='session-abc'):
 
@@ -85,23 +78,6 @@ async def test_start_session_uses_fallback_when_gemini_returns_none() -> None:
 
 
 # ---------------------------------------------------------------------------
-# start_session — user context safe defaults
-# ---------------------------------------------------------------------------
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_start_session_uses_safe_defaults_when_user_profile_missing() -> None:
-    """start_session must still work when user profile fields are absent."""
-    with patch('src.lib.session_service.fetch_user_context', new_callable=AsyncMock, return_value={}), \
-         patch('src.lib.session_service.generate_script', return_value=_MOCK_SCRIPT), \
-         patch('src.lib.session_service.insert_session', new_callable=AsyncMock, return_value='session-abc'):
-
-        response = await start_session(user_id=_USER_ID, request=_VALID_REQUEST_NO_COMPANY)
-
-    assert response.session_id == 'session-abc'
-
-
-# ---------------------------------------------------------------------------
 # start_session — fallback raises ValueError
 # ---------------------------------------------------------------------------
 
@@ -109,8 +85,7 @@ async def test_start_session_uses_safe_defaults_when_user_profile_missing() -> N
 @pytest.mark.asyncio
 async def test_start_session_raises_when_fallback_fails() -> None:
     """start_session must raise a RuntimeError when both Gemini and fallback fail."""
-    with patch('src.lib.session_service.fetch_user_context', new_callable=AsyncMock, return_value=_MOCK_USER_ROW), \
-         patch('src.lib.session_service.generate_script', return_value=None), \
+    with patch('src.lib.session_service.generate_script', return_value=None), \
          patch('src.lib.session_service.get_fallback_script', side_effect=ValueError('Unknown')):
 
         with pytest.raises(RuntimeError):
@@ -125,8 +100,7 @@ async def test_start_session_raises_when_fallback_fails() -> None:
 @pytest.mark.asyncio
 async def test_start_session_raises_when_insert_returns_no_id() -> None:
     """start_session must raise a RuntimeError when the DB insert returns no session id."""
-    with patch('src.lib.session_service.fetch_user_context', new_callable=AsyncMock, return_value=_MOCK_USER_ROW), \
-         patch('src.lib.session_service.generate_script', return_value=_MOCK_SCRIPT), \
+    with patch('src.lib.session_service.generate_script', return_value=_MOCK_SCRIPT), \
          patch('src.lib.session_service.insert_session', new_callable=AsyncMock, return_value=None):
 
         with pytest.raises(RuntimeError):

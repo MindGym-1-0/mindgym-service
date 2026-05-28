@@ -22,7 +22,6 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 import google.generativeai as genai  # noqa: E402
 
 from src.lib.config import settings  # noqa: E402
-from src.lib.gemini_service import derive_anxiety_level_before  # noqa: E402
 from src.lib.prompt_builder import build_prompt  # noqa: E402
 from src.types.session import SessionScript  # noqa: E402
 
@@ -103,20 +102,24 @@ def collect_inputs() -> dict:
         company = _prompt_optional("company")
         role = _prompt_optional("role")
 
-    goal = _prompt_optional("user goal (e.g. 'Land a senior PM role')")
-    stage = _prompt_optional("user stage (e.g. 'interviewing')")
+    while True:
+        raw = input("\nanxiety_level_before (1=calm … 10=extremely anxious): ").strip()
+        if raw.isdigit() and 1 <= int(raw) <= 10:
+            anxiety_level_before = int(raw)
+            break
+        print("  Invalid — enter a number from 1 to 10.")
+
+    feeling_note = _prompt_optional("feeling_note (user's own words, optional)")
 
     return {
         "preparation_for": preparation_for,
         "current_feeling": current_feeling,
         "desired_feeling": desired_feeling,
         "time_available": time_available,
+        "anxiety_level_before": anxiety_level_before,
         "company": company,
         "role": role,
-        "user_context": {
-            "goal": goal or "",
-            "stage": stage or "",
-        },
+        "feeling_note": feeling_note,
     }
 
 
@@ -143,13 +146,12 @@ def run_scenario(inputs: dict) -> None:
 
     company = inputs.get("company")
     role = inputs.get("role")
-    user_context = inputs["user_context"]
+    anxiety_level_before = inputs["anxiety_level_before"]
 
     try:
         genai.configure(api_key=settings.gemini_api_key)
         model = genai.GenerativeModel(settings.gemini_model)
 
-        anxiety_level_before = derive_anxiety_level_before(inputs["current_feeling"])
         prompt = build_prompt(
             preparation_for=inputs["preparation_for"],
             current_feeling=inputs["current_feeling"],
@@ -158,7 +160,7 @@ def run_scenario(inputs: dict) -> None:
             anxiety_level_before=anxiety_level_before,
             company=company,
             role=role,
-            user_context=user_context,
+            feeling_note=inputs.get("feeling_note"),
         )
 
         response = model.generate_content(prompt)

@@ -3,33 +3,12 @@ import pytest
 
 from unittest.mock import MagicMock, patch
 
-from src.lib.gemini_service import calibrate_tone, derive_anxiety_level_before, generate_script
+from src.lib.gemini_service import calibrate_tone, generate_script
 from src.types.session import SessionScript
 
 
-@pytest.mark.unit
-@pytest.mark.parametrize('current_feeling,expected_score', [
-    ('overwhelmed', 2),
-    ('discouraged', 3),
-    ('exhausted', 3),
-    ('unsure', 5),
-    ('anxious but hopeful', 6),
-])
-def test_derive_anxiety_level_before_all_chips(current_feeling: str, expected_score: int) -> None:
-    """All 5 feeling chips must map to the correct anxiety_level_before."""
-    assert derive_anxiety_level_before(current_feeling) == expected_score
-
-
-@pytest.mark.unit
-def test_derive_anxiety_level_before_unknown_chip_raises_value_error() -> None:
-    """An unrecognised chip must raise ValueError."""
-    with pytest.raises(ValueError, match='Unknown current_feeling'):
-        derive_anxiety_level_before('completely_fine')
-
 
 _VALID_GEMINI_RESPONSE = '{"phase1": "Breathe.", "phase2": "Ground.", "phase3": "Picture yourself at Stripe for your PM role.", "phase4": "Anchor.", "phase5": "You are ready for Stripe as a PM."}'
-
-_USER_CONTEXT = {'goal': 'Land a PM role', 'stage': 'active'}
 
 
 @pytest.mark.unit
@@ -49,7 +28,6 @@ def test_generate_script_returns_session_script_on_success() -> None:
             anxiety_level_before=2,
             company='Stripe',
             role='PM',
-            user_context=_USER_CONTEXT,
         )
 
     assert isinstance(result, SessionScript)
@@ -71,7 +49,6 @@ def test_generate_script_returns_none_on_timeout() -> None:
             anxiety_level_before=2,
             company='Stripe',
             role='PM',
-            user_context=_USER_CONTEXT,
         )
 
     assert result is None
@@ -94,7 +71,6 @@ def test_generate_script_returns_none_when_company_and_role_missing_from_mode1_o
             anxiety_level_before=2,
             company='Stripe',
             role='PM',
-            user_context=_USER_CONTEXT,
         )
 
     assert result is None
@@ -117,7 +93,6 @@ def test_generate_script_returns_none_when_role_missing_from_mode1_output() -> N
             anxiety_level_before=2,
             company='Stripe',
             role='PM',
-            user_context=_USER_CONTEXT,
         )
 
     assert result is None
@@ -140,7 +115,6 @@ def test_generate_script_returns_none_on_invalid_json() -> None:
             anxiety_level_before=2,
             company='Stripe',
             role='PM',
-            user_context=_USER_CONTEXT,
         )
 
     assert result is None
@@ -167,7 +141,6 @@ def test_generate_script_uses_configured_model_name() -> None:
             anxiety_level_before=2,
             company='Stripe',
             role='PM',
-            user_context=_USER_CONTEXT,
         )
 
     mock_genai.GenerativeModel.assert_called_once_with('gemini-2.0-flash')
@@ -175,16 +148,16 @@ def test_generate_script_uses_configured_model_name() -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize('anxiety_level_before,expected_tone', [
-    (1, 'slow and calming'),
-    (2, 'slow and calming'),
-    (3, 'slow and calming'),
-    (4, 'balanced and steady'),
-    (5, 'balanced and steady'),
-    (6, 'balanced and steady'),
-    (7, 'confident and energetic'),
-    (8, 'confident and energetic'),
-    (9, 'confident and energetic'),
-    (10, 'confident and energetic'),
+    (1, 'affirming, peak-performance priming'),
+    (2, 'affirming, peak-performance priming'),
+    (3, 'affirming, peak-performance priming'),
+    (4, 'steady and focusing; normalize the nerves'),
+    (5, 'steady and focusing; normalize the nerves'),
+    (6, 'steady and focusing; normalize the nerves'),
+    (7, 'slow, grounding, present-tense regulation'),
+    (8, 'slow, grounding, present-tense regulation'),
+    (9, 'slow, grounding, present-tense regulation'),
+    (10, 'slow, grounding, present-tense regulation'),
 ])
 def test_tone_calibration_boundary_values(anxiety_level_before: int, expected_tone: str) -> None:
     """Tone calibration must return the correct tone for all boundary values."""

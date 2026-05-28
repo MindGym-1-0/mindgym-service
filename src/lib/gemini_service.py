@@ -6,38 +6,21 @@ import google.generativeai as genai
 from src.lib.config import settings
 from src.types.session import SessionScript
 
-_CHIP_TO_ANXIETY_LEVEL: dict[str, int] = {
-    'overwhelmed': 2,
-    'discouraged': 3,
-    'exhausted': 3,
-    'unsure': 5,
-    'anxious but hopeful': 6,
-}
-
-
-def derive_anxiety_level_before(current_feeling: str) -> int:
-    """Convert a feeling chip string to an anxiety_level_before score (1–10).
-
-    Raises ValueError for unrecognised chip values.
-    """
-    key = current_feeling.strip().lower()
-    if key not in _CHIP_TO_ANXIETY_LEVEL:
-        raise ValueError(f'Unknown current_feeling: {current_feeling!r}')
-    return _CHIP_TO_ANXIETY_LEVEL[key]
-
 
 def calibrate_tone(anxiety_level_before: int) -> str:
     """Map an anxiety_level_before score to a tone string for the Gemini prompt.
 
+    Scale: 1 = calm/not anxious, 10 = extremely anxious.
+    High anxiety → grounding tone; low anxiety → affirming/priming tone.
     Raises ValueError if the score is outside the valid 1–10 range.
     """
     if not 1 <= anxiety_level_before <= 10:
         raise ValueError(f'anxiety_level_before out of range: {anxiety_level_before}')
     if anxiety_level_before <= 3:
-        return 'slow and calming'
+        return 'affirming, peak-performance priming'
     if anxiety_level_before <= 6:
-        return 'balanced and steady'
-    return 'confident and energetic'
+        return 'steady and focusing; normalize the nerves'
+    return 'slow, grounding, present-tense regulation'
 
 
 def generate_script(
@@ -48,7 +31,7 @@ def generate_script(
     anxiety_level_before: int,
     company: str | None,
     role: str | None,
-    user_context: dict,
+    feeling_note: str | None = None,
 ) -> SessionScript | None:
     """Call Gemini Flash and return a SessionScript, or None if the call fails.
 
@@ -68,7 +51,7 @@ def generate_script(
             anxiety_level_before=anxiety_level_before,
             company=company,
             role=role,
-            user_context=user_context,
+            feeling_note=feeling_note,
         )
 
         response = model.generate_content(prompt)

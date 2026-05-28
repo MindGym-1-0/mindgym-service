@@ -36,7 +36,6 @@ def test_all_preparation_for_values_return_a_script(preparation_for: str) -> Non
         preparation_for=preparation_for,
         company='Acme',
         role='Engineer',
-        goal='Land my next role',
     )
     assert isinstance(script, SessionScript)
     assert script.phase1
@@ -56,7 +55,6 @@ def test_event_specific_templates_contain_company_and_role(preparation_for: str)
         preparation_for=preparation_for,
         company=company,
         role=role,
-        goal=None,
     )
     full_text = ' '.join([script.phase1, script.phase2, script.phase3, script.phase4, script.phase5])
     assert company in full_text, f'company "{company}" missing from {preparation_for} template'
@@ -65,17 +63,15 @@ def test_event_specific_templates_contain_company_and_role(preparation_for: str)
 
 @pytest.mark.unit
 @pytest.mark.parametrize('preparation_for', GENERAL_VALUES)
-def test_general_templates_contain_goal(preparation_for: str) -> None:
-    """General templates must inject the user's goal somewhere in the output."""
-    goal = 'land a senior engineering role'
+def test_general_templates_return_script_without_company_and_role(preparation_for: str) -> None:
+    """General templates must return a valid script when company and role are not provided."""
     script = get_fallback_script(
         preparation_for=preparation_for,
         company=None,
         role=None,
-        goal=goal,
     )
-    full_text = ' '.join([script.phase1, script.phase2, script.phase3, script.phase4, script.phase5])
-    assert goal in full_text, f'goal "{goal}" missing from {preparation_for} template'
+    assert isinstance(script, SessionScript)
+    assert all([script.phase1, script.phase2, script.phase3, script.phase4, script.phase5])
 
 
 @pytest.mark.unit
@@ -88,7 +84,6 @@ def test_event_specific_templates_do_not_crash_when_company_and_role_are_none(
         preparation_for=preparation_for,
         company=None,
         role=None,
-        goal=None,
     )
     assert isinstance(script, SessionScript)
     assert all([script.phase1, script.phase2, script.phase3, script.phase4, script.phase5])
@@ -102,5 +97,4 @@ def test_unknown_preparation_for_raises_value_error() -> None:
             preparation_for='completely_invalid_value',
             company=None,
             role=None,
-            goal=None,
         )
