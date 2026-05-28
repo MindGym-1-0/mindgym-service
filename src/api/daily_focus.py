@@ -7,12 +7,14 @@ from datetime import date, datetime, timedelta, UTC
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, HTTPException, status
+
 # Upgraded to modern SDK namespace
 from google import genai
 from pydantic import BaseModel
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client
+
 # Reuse your streak increment logic built from Part 2 directly
 from src.lib.streaks import increment_user_streak
 from src.types.daily_focus import ActionType, DailyFocusResponse, GeminiDailyFocusOutput
@@ -340,9 +342,7 @@ async def complete_daily_focus(
             .eq("user_id", user_uuid_str)
             .execute
         )
-        current_streak = (
-            streak_res.data[0]["current_streak"] if streak_res.data else 0
-        )
+        current_streak = streak_res.data[0]["current_streak"] if streak_res.data else 0
         return DailyFocusCompleteResponse(
             success=True, current_streak=current_streak, milestone=None
         )
@@ -354,10 +354,7 @@ async def complete_daily_focus(
             "updated_at": datetime.now(UTC).isoformat(),
         }
         await asyncio.to_thread(
-            sb.table("daily_focus")
-            .update(update_payload)
-            .eq("id", record_id)
-            .execute
+            sb.table("daily_focus").update(update_payload).eq("id", record_id).execute
         )
     except Exception as err:
         raise HTTPException(
