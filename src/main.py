@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager  # Added for modern lifespan handling
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,8 +13,8 @@ from src.api.auth import v1_router as auth_v1_router
 from src.api.onboarding import router as onboarding_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
-
-# 1. IMPORT YOUR NEW STREAKS ROUTER HERE
+from src.api.sessions import router as sessions_router
+from src.api.sessions import users_router as users_router
 from src.api.streaks import router as streaks_router
 from src.lib import config
 from src.lib.config import settings
@@ -74,7 +74,11 @@ def create_app() -> FastAPI:
     app.include_router(jobs_router, prefix="/api/applications", tags=["jobs"])
     app.include_router(jobs_id_router, prefix="/api/applications", tags=["jobs"])
 
-    # 2. MOUNT THE STREAKS ROUTER WITH THE REQUIRED PREFIX AND TAGS
+    # Session and user profile routes
+    app.include_router(sessions_router)
+    app.include_router(users_router)
+
+    # Streaks router
     app.include_router(streaks_router, prefix="/api/streaks", tags=["streaks"])
 
     @app.get("/")
