@@ -1,4 +1,4 @@
-﻿# src/main.py
+# src/main.py
 
 """FastAPI application factory and main entry point"""
 
