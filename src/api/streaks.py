@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta, UTC
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, HTTPException, status
+
 # Upgraded to modern SDK namespace
 from google import genai
 from pydantic import BaseModel
@@ -284,7 +285,9 @@ class DailyFocusCompleteRequest(BaseModel):
 class DailyFocusCompleteResponse(BaseModel):
     success: bool
     current_streak: int
-    milestone: Optional[int] = None  # Perfectly synchronized with Part 2's Optional[int] definition
+    milestone: Optional[int] = (
+        None  # Perfectly synchronized with Part 2's Optional[int] definition
+    )
 
 
 @router.post(
@@ -342,9 +345,7 @@ async def complete_daily_focus(
             .eq("user_id", user_uuid_str)
             .execute
         )
-        current_streak = (
-            streak_res.data[0]["current_streak"] if streak_res.data else 0
-        )
+        current_streak = streak_res.data[0]["current_streak"] if streak_res.data else 0
         return DailyFocusCompleteResponse(
             success=True, current_streak=current_streak, milestone=None
         )
@@ -356,10 +357,7 @@ async def complete_daily_focus(
             "updated_at": datetime.now(UTC).isoformat(),
         }
         await asyncio.to_thread(
-            sb.table("daily_focus")
-            .update(update_payload)
-            .eq("id", record_id)
-            .execute
+            sb.table("daily_focus").update(update_payload).eq("id", record_id).execute
         )
     except Exception as err:
         raise HTTPException(
@@ -389,4 +387,3 @@ async def complete_daily_focus(
         current_streak=res_streak,
         milestone=res_milestone,
     )
-    
