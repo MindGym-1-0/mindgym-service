@@ -55,12 +55,13 @@ async def get_current_user(
 
     if settings.resolved_supabase_jwt_secret:
         try:
-            jwt.decode(
+            decoded = jwt.decode(
                 token,
                 settings.resolved_supabase_jwt_secret,
                 algorithms=["HS256"],
                 options={"verify_aud": False},
             )
+            return {"id": decoded["sub"], "email": decoded.get("email")}
         except jwt.PyJWTError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
