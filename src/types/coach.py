@@ -82,3 +82,45 @@ class SavedCoachPrepPlanResponse(BaseModel):
     recommended_first_session: RecommendedFirstSession
     coach_note: str = Field(..., min_length=1)
     created_at: datetime
+
+
+class ChecklistRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    interview_id: UUID
+
+
+class ChecklistItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(..., min_length=1)
+    label: str = Field(..., min_length=1)
+    checked: bool
+    metadata: dict = Field(default_factory=dict)
+
+
+class TonightsPlanTask(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    time: str = Field(..., min_length=1)
+    task: str = Field(..., min_length=1)
+
+
+class OverallReadiness(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    score: int
+    total_items: int
+    label: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1)
+    confidence_baseline: float
+
+
+class InterviewChecklistResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    overall_readiness: OverallReadiness
+    mental_prep: list[ChecklistItem]
+    logistics: list[ChecklistItem]
+    tonights_plan: list[TonightsPlanTask]
+    quote: str = Field(..., min_length=1)

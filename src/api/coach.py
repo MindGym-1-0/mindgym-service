@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -13,7 +13,9 @@ from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.gemini import GeminiServiceError, generate_gemini_flash_json
 from src.lib.supabase import get_supabase_user_client
 from src.types.coach import (
+    ChecklistRequest,
     CoachHomeResponse,
+    InterviewChecklistResponse,
     CoachPrepPlanRequest,
     CoachPrepPlanResponse,
     SavedCoachPrepPlanResponse,
@@ -369,6 +371,89 @@ def _validate_gemini_prep_plan_payload(
     return model
 
 
+def _build_checklist_prompt(
+    *,
+    company: str,
+    role: str,
+    interview_date: str,
+    session_count: int,
+    confidence_baseline: float,
+    readiness_score: int,
+    readiness_label: str,
+) -> str:
+    return (
+        "You are Maya, an empathetic interview mindset coach.\n"
+        "Return ONLY valid JSON. No markdown. No backticks. No explanation.\n\n"
+        "Generate tonight's focused prep plan as exactly 3 tasks and one motivational quote.\n\n"
+        "Required JSON shape:\n"
+        "{\n"
+        '  "tonights_plan": [\n'
+        '    {"time": "7:00 PM", "task": "..."},\n'
+        '    {"time": "8:30 PM", "task": "..."},\n'
+        '    {"time": "9:30 PM", "task": "..."}\n'
+        "  ],\n"
+        '  "quote": "..."\n'
+        "}\n\n"
+        "Hard constraints:\n"
+        "- tonights_plan must contain exactly 3 items.\n"
+        "- each tonights_plan item must include non-empty time and task.\n"
+        "- quote must be a single non-empty sentence.\n\n"
+        "Interview context:\n"
+        f"- company: {company}\n"
+        f"- role: {role}\n"
+        f"- interview_date: {interview_date}\n\n"
+        "User prep context:\n"
+        f"- completed_sessions_for_this_interview: {session_count}\n"
+        f"- confidence_baseline: {confidence_baseline:.2f}/10\n"
+        f"- readiness_score: {readiness_score}/10\n"
+        f"- readiness_label: {readiness_label}\n"
+    )
+
+
+def _validate_checklist_gemini_payload(payload: Any) -> tuple[list[dict[str, str]], str] | None:
+    if not isinstance(payload, dict):
+        return None
+
+    tonights_plan = payload.get("tonights_plan")
+    quote = payload.get("quote")
+    if not isinstance(tonights_plan, list) or len(tonights_plan) != 3:
+        return None
+    if not isinstance(quote, str) or not quote.strip():
+        return None
+
+    validated_plan: list[dict[str, str]] = []
+    for item in tonights_plan:
+        if not isinstance(item, dict):
+            return None
+        time_value = str(item.get("time") or "").strip()
+        task_value = str(item.get("task") or "").strip()
+        if not time_value or not task_value:
+            return None
+        validated_plan.append({"time": time_value, "task": task_value})
+
+    return validated_plan, quote.strip()
+
+
+def _fallback_checklist_plan(company: str, role: str) -> tuple[list[dict[str, str]], str]:
+    return (
+        [
+            {
+                "time": "7:00 PM",
+                "task": f"Review your top stories and examples for the {role} interview at {company}.",
+            },
+            {
+                "time": "8:30 PM",
+                "task": "Confirm your interview setup, questions to ask, and opening introduction.",
+            },
+            {
+                "time": "9:30 PM",
+                "task": "Do a short breathing reset, then disconnect and rest for tomorrow.",
+            },
+        ],
+        "Preparation compounds confidence. Trust the work you've done and bring calm focus into your interview.",
+    )
+
+
 def _coerce_saved_prep_plan_response(row: dict[str, Any]) -> SavedCoachPrepPlanResponse:
     plan_raw = row.get("plan")
     coach_note = str(row.get("coach_note") or "").strip()
@@ -410,6 +495,200 @@ def _coerce_saved_prep_plan_response(row: dict[str, Any]) -> SavedCoachPrepPlanR
             "recommended_first_session": recommended_first_session,
             "coach_note": coach_note,
             "created_at": created_at_raw,
+        }
+    )
+
+
+@router.post("/checklist", response_model=InterviewChecklistResponse)
+async def get_or_create_interview_checklist(
+    body: ChecklistRequest,
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
+) -> InterviewChecklistResponse:
+    try:
+        sb = get_supabase_user_client(token)
+    except Exception:
+        logger.exception("Failed to initialize Supabase client for checklist.")
+        raise HTTPException(status_code=500, detail="Unable to initialize data client.") from None
+
+    user_id = str(current_user_id)
+    interview_id = str(body.interview_id)
+
+    try:
+        interview_res = await asyncio.to_thread(
+            sb.table("interviews")
+            .select("id,company,role,interview_date,job_id")
+            .eq("id", interview_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute
+        )
+    except Exception:
+        logger.exception("Failed to fetch interview for checklist.")
+        raise HTTPException(status_code=500, detail="Unable to fetch interview context.") from None
+
+    interview_rows = interview_res.data or []
+    if not interview_rows:
+        raise HTTPException(status_code=404, detail="Interview not found.")
+
+    interview = interview_rows[0]
+    company = str(interview.get("company") or "your target company").strip()
+    role = str(interview.get("role") or "your target role").strip()
+    interview_date = str(interview.get("interview_date") or "").strip()
+    interview_dt = _parse_iso_datetime(interview_date)
+    job_id = interview.get("job_id")
+
+    completed_rows: list[dict[str, Any]] = []
+    if job_id:
+        try:
+            sessions_by_job = await asyncio.to_thread(
+                sb.table("ai_sessions")
+                .select("id,post_score,completed_at")
+                .eq("user_id", user_id)
+                .eq("job_id", job_id)
+                .not_.is_("completed_at", "null")
+                .order("completed_at", desc=True)
+                .limit(MAX_SESSION_HISTORY_FOR_PREP)
+                .execute
+            )
+            completed_rows.extend(sessions_by_job.data or [])
+        except Exception:
+            logger.exception("Checklist ai_sessions job query failed; falling back to company+role query.")
+
+    try:
+        sessions_by_company_role = await asyncio.to_thread(
+            sb.table("ai_sessions")
+            .select("id,post_score,completed_at")
+            .eq("user_id", user_id)
+            .eq("company", company)
+            .eq("role", role)
+            .not_.is_("completed_at", "null")
+            .order("completed_at", desc=True)
+            .limit(MAX_SESSION_HISTORY_FOR_PREP)
+            .execute
+        )
+        completed_rows.extend(sessions_by_company_role.data or [])
+    except Exception:
+        logger.exception("Checklist ai_sessions company+role query failed.")
+
+    deduped_rows: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for row in completed_rows:
+        row_id = str(row.get("id") or "")
+        if row_id and row_id in seen_ids:
+            continue
+        if row_id:
+            seen_ids.add(row_id)
+        deduped_rows.append(row)
+    completed_rows = deduped_rows
+
+    now = datetime.now(timezone.utc)
+    one_day_ago = now.timestamp() - 24 * 60 * 60
+    completed_today = False
+    completed_last_24h = False
+    post_scores: list[float] = []
+
+    for row in completed_rows:
+        completed_at = _parse_iso_datetime(str(row.get("completed_at") or ""))
+        if completed_at:
+            completed_today = completed_today or completed_at.date() == now.date()
+            completed_last_24h = completed_last_24h or completed_at.timestamp() >= one_day_ago
+        score = row.get("post_score")
+        if isinstance(score, (int, float)):
+            post_scores.append(float(score))
+
+    session_count = len(completed_rows)
+    coaching_checked = session_count >= 5
+    breathing_checked = completed_last_24h
+    confidence_baseline = sum(post_scores) / len(post_scores) if post_scores else 0.0
+
+    is_tomorrow = interview_dt is not None and interview_dt.date() == (now + timedelta(days=1)).date()
+    grounding_checked = completed_today
+    grounding_metadata: dict[str, Any] = {}
+    if is_tomorrow and not completed_today:
+        grounding_metadata = {"recommended_time": "9 PM"}
+
+    mental_prep = [
+        {
+            "id": "completed_coaching",
+            "label": "Completed coaching sessions",
+            "checked": coaching_checked,
+            "metadata": {"session_count": session_count},
+        },
+        {
+            "id": "breathing_last_night",
+            "label": "Breathing session done last night",
+            "checked": breathing_checked,
+            "metadata": {},
+        },
+        {
+            "id": "grounding_tonight",
+            "label": "Final grounding session tonight",
+            "checked": grounding_checked,
+            "metadata": grounding_metadata,
+        },
+    ]
+
+    logistics = [
+        {"id": "interview_confirmed", "label": "Interview confirmed", "checked": False, "metadata": {}},
+        {"id": "questions_prepared", "label": "Questions to ask prepared", "checked": False, "metadata": {}},
+        {"id": "quiet_space", "label": "Quiet space confirmed", "checked": False, "metadata": {}},
+        {"id": "breathing_session", "label": "Breathing session done last night", "checked": False, "metadata": {}},
+    ]
+
+    total_items = 10
+    checked_count = (
+        sum(1 for item in mental_prep if item["checked"])
+        + sum(1 for item in logistics if item["checked"])
+    )
+    if checked_count >= 8:
+        readiness_label = "well prepared"
+        readiness_message = (
+            f"Looking strong! Only {total_items - checked_count} items remaining to be completely ready."
+        )
+    elif checked_count >= 5:
+        readiness_label = "good progress"
+        readiness_message = "Making solid headway. Keep knocking out items on your checklist."
+    else:
+        readiness_label = "needs attention"
+        readiness_message = "Still have a few key target areas left. Let's focus on crossing these off."
+
+    overall_readiness = {
+        "score": checked_count,
+        "total_items": total_items,
+        "label": readiness_label,
+        "message": readiness_message,
+        "confidence_baseline": round(confidence_baseline, 2),
+    }
+
+    prompt = _build_checklist_prompt(
+        company=company,
+        role=role,
+        interview_date=interview_date,
+        session_count=session_count,
+        confidence_baseline=confidence_baseline,
+        readiness_score=checked_count,
+        readiness_label=readiness_label,
+    )
+
+    tonights_plan, quote = _fallback_checklist_plan(company, role)
+    try:
+        gemini_payload = await generate_gemini_flash_json(prompt, timeout_seconds=4.0)
+        validated = _validate_checklist_gemini_payload(gemini_payload)
+        if validated is None:
+            logger.warning("Checklist Gemini payload invalid; using fallback tonight plan.")
+        else:
+            tonights_plan, quote = validated
+    except GeminiServiceError:
+        logger.exception("Checklist Gemini generation failed; using fallback tonight plan.")
+
+    return InterviewChecklistResponse.model_validate(
+        {
+            "overall_readiness": overall_readiness,
+            "mental_prep": mental_prep,
+            "logistics": logistics,
+            "tonights_plan": tonights_plan,
+            "quote": quote,
         }
     )
 
