@@ -39,7 +39,6 @@ async def onboard(request: OnboardingRequest) -> OnboardingResponse:
         record = {
             "goal": request.job_goal,
             "stage": request.job_search_stage.value,
-            "anxiety_level": request.anxiety_level,
         }
 
         persisted = {}
