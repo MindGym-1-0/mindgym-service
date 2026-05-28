@@ -1,12 +1,8 @@
 import logging
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Header, HTTPException, Response, status
 
-from src.lib.auth_dependencies import (
-    _extract_bearer_token,
-    _extract_cookie_token,
-    get_current_user,
-)
+from src.lib.auth import CurrentUserId
 from src.lib.auth_service import (
     AuthRateLimitError,
     AuthenticationError,
@@ -19,10 +15,10 @@ from src.lib.auth_service import (
     signup_with_email_password,
 )
 from src.lib.config import get_settings
+from src.lib.tokens import extract_access_token_from_request
 from src.types.auth import AuthResponse, LoginRequest, LogoutResponse, SignupRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-v1_router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
@@ -161,7 +157,10 @@ async def logout(
 ) -> LogoutResponse:
     """Clear cookies and revoke the current Supabase session when possible."""
 
-    token = _extract_bearer_token(authorization) or _extract_cookie_token(access_token)
+    token = extract_access_token_from_request(
+        auth_header=authorization,
+        cookies={"access_token": access_token} if access_token else {},
+    )
     revoked = False
     try:
         revoked = await revoke_auth_session(token, refresh_token)
@@ -183,14 +182,7 @@ async def logout(
 
 
 @router.get("/me", response_model=AuthResponse)
-async def read_me(current_user: dict = Depends(get_current_user)) -> AuthResponse:
+async def read_me(user_id: CurrentUserId) -> AuthResponse:
     """Return the authenticated user profile."""
 
-    return AuthResponse(authenticated=True, user=current_user)
-
-
-@v1_router.get("/me", response_model=AuthResponse)
-async def read_me_v1(current_user: dict = Depends(get_current_user)) -> AuthResponse:
-    """Example protected endpoint for downstream feature teams."""
-
-    return AuthResponse(authenticated=True, user=current_user)
+    return AuthResponse(authenticated=True, user={"id": str(user_id)})
