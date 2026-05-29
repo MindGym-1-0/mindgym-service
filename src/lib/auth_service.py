@@ -240,24 +240,23 @@ async def signup_with_email_password(
         logger.exception("Supabase signup response missing user for email=%s", email)
         raise UpstreamAuthServiceError("Authentication provider unavailable")
 
-    user = getattr(response, "user", None)
-    if user is None:
-        logger.exception("Supabase signup response missing user for email=%s", email)
-        raise UpstreamAuthServiceError("Authentication provider unavailable")
-
     admin_client = get_supabase_admin_client()
-    if admin_client and user and (first_name or last_name):
+    if admin_client and user:
         try:
             await asyncio.to_thread(
-                lambda: admin_client.table("users").upset({
-                    'ID': str(user.id),
-                    "first_name": first_name,
-                    "last_name": last_name,
-                })
-                .execute()
+                lambda: admin_client.table("users").upsert({
+                    "id": str(user.id),
+                    "goal": "",
+                    "stage": "exploring",
+                    "anxiety_level": 5,
+                }).execute()
             )
+            logger.info("Created profile for user_id=%s", user.id)
         except Exception:
-            logger.exception("Failed to save name for user_id=%s", user.id)
+            logger.warning(
+                "Failed to create profile for user_id=%s — session start may fail",
+                user.id,
+            )
 
     return _build_auth_payload(response)
 
