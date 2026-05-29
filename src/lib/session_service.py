@@ -3,8 +3,6 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-logger = logging.getLogger(__name__)
-
 from src.lib.fallbacks import get_fallback_script
 from src.lib.gemini_service import generate_script
 from src.lib.supabase_client import get_supabase_admin_client
@@ -15,6 +13,8 @@ from src.types.session import (
     SessionStartRequest,
     SessionStartResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def _ensure_user_profile(user_id: str) -> None:
