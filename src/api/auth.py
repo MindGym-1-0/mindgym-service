@@ -10,6 +10,7 @@ from src.lib.auth_dependencies import (
 from src.lib.auth_service import (
     AuthRateLimitError,
     AuthenticationError,
+    EmailNotConfirmedError,
     InvalidSignupInputError,
     SignupDisabledError,
     UpstreamAuthServiceError,
@@ -68,11 +69,23 @@ def _clear_auth_cookies(response: Response) -> None:
 
 
 def _as_auth_response(auth_result: dict, message: str | None = None) -> AuthResponse:
+    session_data = auth_result.get("session") or {}
+    session = None
+    access_token = session_data.get("access_token")
+    refresh_token = session_data.get("refresh_token")
+    if access_token and refresh_token:
+        session = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": session_data.get("expires_in"),
+        }
+
     return AuthResponse.model_validate(
         {
             "authenticated": bool(auth_result.get("authenticated")),
             "user": auth_result.get("user"),
             "message": message,
+            "session": session,
         }
     )
 
@@ -84,7 +97,12 @@ async def signup(payload: SignupRequest, response: Response) -> AuthResponse:
     """Create a Supabase Auth user and persist the session when available."""
 
     try:
-        auth_result = await signup_with_email_password(payload.email, payload.password)
+        auth_result = await signup_with_email_password(
+            payload.email,
+            payload.password,
+            payload.first_name,
+            payload.last_name
+        )
     except UserAlreadyExistsError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -130,6 +148,11 @@ async def login(payload: LoginRequest, response: Response) -> AuthResponse:
 
     try:
         auth_result = await login_with_email_password(payload.email, payload.password)
+    except EmailNotConfirmedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please confirm your email before signing in",
+        ) from exc
     except AuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
