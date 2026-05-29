@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from fastapi import APIRouter, Body, HTTPException, status
+from fastapi import APIRouter, Body, HTTPException
 from pydantic import ValidationError
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
