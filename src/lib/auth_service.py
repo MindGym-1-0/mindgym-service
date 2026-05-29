@@ -249,8 +249,6 @@ async def signup_with_email_password(
                     "goal": "",
                     "stage": "exploring",
                     "anxiety_level": 5,
-                    "first_name": first_name,
-                    "last_name": last_name,
                 }).execute()
             )
             logger.info("Created profile for user_id=%s", user.id)
