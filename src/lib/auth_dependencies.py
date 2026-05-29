@@ -40,6 +40,7 @@ async def get_current_user(
 
     token = _extract_bearer_token(authorization) or _extract_cookie_token(access_token)
     if not token:
+        logger.warning("get_current_user: no token in request (header=%s, cookie=%s)", bool(authorization), bool(access_token))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
@@ -62,6 +63,7 @@ async def get_current_user(
                 options={"verify_aud": False},
             )
         except jwt.PyJWTError as exc:
+            logger.warning("get_current_user: JWT decode failed: %s", exc)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token",
@@ -73,6 +75,7 @@ async def get_current_user(
 
     user = await fetch_authenticated_user(token)
     if not user:
+        logger.warning("get_current_user: fetch_authenticated_user returned None for token prefix=%s", token[:12] if token else "none")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized user",

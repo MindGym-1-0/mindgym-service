@@ -249,8 +249,8 @@ async def signup_with_email_password(
     if admin_client and user and (first_name or last_name):
         try:
             await asyncio.to_thread(
-                lambda: admin_client.table("users").upset({
-                    'ID': str(user.id),
+                lambda: admin_client.table("users").upsert({
+                    'id': str(user.id),
                     "first_name": first_name,
                     "last_name": last_name,
                 })
