@@ -92,3 +92,128 @@ def generate_script(
 
     except Exception:
         return None
+
+
+def analyze_onboarding(employment_status: str,
+    unemployed_duration: str,
+    job_timeline: str,
+    target_role_category: str,
+    target_role_note: str | None = None,
+    company_types: list[str] | None = None,
+    applications_sent_min: int | None = None,
+    applications_sent_max: int | None = None,
+    recruiter_contacts: int | None = None,
+    first_round_interviews: int | None = None,
+    final_round_interviews: int | None = None,
+    offers: int | None = None,
+    emotional_challenge: str | None = None,
+    baseline_anxiety: int | None = None,
+    preparation_for: str | None = None
+) -> dict | None:
+    """Analyze onboarding answers and decide the first session.
+
+    Sends all user answers to Gemini and returns a dict with:
+    - preparation_for: which session type to run first
+    - session_title: title shown on the summary card
+    - session_description: 2-sentence description for the card
+    - session_tags: chip labels for the card
+    - mindset_gap: label for the mindset gap
+    - mindset_gap_detail: one sentence detail
+    - hunting_gap: label for the hunting gap (or None)
+    - hunting_gap_detail: one sentence detail (or None)
+    - baseline_anxiety_note: what Maya will do with the score
+
+    Returns None if Gemini fails.
+    """
+    try:
+        genai.configure(api_key=settings.gemini_api_key)
+        model = genai.GenerativeModel(settings.gemini_model)
+
+
+        from src.lib.prompt_builder import build_onboarding_prompt
+        prompt = build_onboarding_prompt(
+            employment_status=employment_status,
+            unemployed_duration=unemployed_duration,
+            job_timeline=job_timeline,
+            target_role_category=target_role_category,
+            target_role_note=target_role_note,
+            company_types=company_types,
+            applications_sent_min=applications_sent_min,
+            applications_sent_max=applications_sent_max,
+            recruiter_contacts=recruiter_contacts,
+            first_round_interviews=first_round_interviews,
+            final_round_interviews=final_round_interviews,
+            offers=offers,
+            emotional_challenge=emotional_challenge,
+            baseline_anxiety=baseline_anxiety,
+            preparation_for=preparation_for
+        )
+
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(max_output_tokens=600),
+        )
+
+        raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
+        data = json.loads(raw)
+        return data
+
+    except Exception:
+        return None
+
+def generate_onboarding_script(employment_status: str,
+    unemployed_duration: str,
+    job_timeline: str,
+    target_role_category: str,
+    target_role_note: str | None = None,
+    company_types: list[str] | None = None,
+    applications_sent_min: int | None = None,
+    applications_sent_max: int | None = None,
+    recruiter_contacts: int | None = None,
+    first_round_interviews: int | None = None,
+    final_round_interviews: int | None = None,
+    offers: int | None = None,
+    emotional_challenge: str | None = None,
+    baseline_anxiety: int | None = None,
+    preparation_for: str | None = None
+) -> SessionScript | None:
+    """Call Gemini Flash and return a SessionScript, or None if the call fails.
+
+    Returns None on timeout, invalid JSON.
+    """
+    try:
+        genai.configure(api_key=settings.gemini_api_key)
+        model = genai.GenerativeModel(settings.gemini_model)
+
+        from src.lib.prompt_builder import build_onboarding_script_prompt
+        prompt = build_onboarding_script_prompt(
+            employment_status=employment_status,
+            unemployed_duration=unemployed_duration,
+            job_timeline=job_timeline,
+            target_role_category=target_role_category,
+            target_role_note=target_role_note,
+            company_types=company_types,
+            applications_sent_min=applications_sent_min,
+            applications_sent_max=applications_sent_max,
+            recruiter_contacts=recruiter_contacts,
+            first_round_interviews=first_round_interviews,
+            final_round_interviews=final_round_interviews,
+            offers=offers,
+            emotional_challenge=emotional_challenge,
+            baseline_anxiety=baseline_anxiety,
+            preparation_for=preparation_for
+        )
+
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(max_output_tokens=600),
+        )
+
+        raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
+        data = json.loads(raw)
+        script = SessionScript(**data)
+
+        return script
+
+    except Exception:
+        return None

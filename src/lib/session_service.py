@@ -247,3 +247,29 @@ async def complete_session(user_id: str, request: SessionCompleteRequest) -> Ses
         anxiety_level_delta=anxiety_level_delta,
         message=f'Session complete. Anxiety shifted by {anxiety_level_delta:+d}.',
     )
+
+
+async def insert_onboarding_session(user_id: str,
+    preparation_for: str,
+    baseline_anxiety: int,
+    script: SessionScript,
+) -> str | None:
+    """Insert the first session created during onboarding."""
+    await _ensure_user_profile(user_id)
+    client = get_supabase_admin_client()
+    payload = {
+        'user_id': user_id,
+        'preparation_for': preparation_for,
+        'anxiety_level_before': baseline_anxiety,
+        'phase1': script.phase1,
+        'phase2': script.phase2,
+        'phase3': script.phase3,
+        'phase4': script.phase4,
+        'phase5': script.phase5,
+    }
+    result = await asyncio.to_thread(
+        lambda: client.table('ai_sessions').insert(payload).execute()
+    )
+    if not result.data:
+        return None
+    return result.data[0].get('id')
