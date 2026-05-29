@@ -216,7 +216,7 @@ async def log_job_outcome(
         .update(
             {
                 "outcome": outcome_val,
-                "status": JobStatus.CLOSED.value,
+                "status": "closed",
                 "last_moved_at": now_iso,
             }
         )
