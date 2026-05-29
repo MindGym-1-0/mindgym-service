@@ -249,7 +249,8 @@ async def complete_session(user_id: str, request: SessionCompleteRequest) -> Ses
     )
 
 
-async def insert_onboarding_session(user_id: str,
+async def insert_onboarding_session(
+    user_id: str,
     preparation_for: str,
     baseline_anxiety: int,
     script: SessionScript,

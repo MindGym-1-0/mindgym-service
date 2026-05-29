@@ -58,7 +58,8 @@ def derive_preparation_for(
         return "general_reset"
 
 
-def build_onboarding_prompt(employment_status: str,
+def build_onboarding_prompt(
+    employment_status: str,
     unemployed_duration: str,
     job_timeline: str,
     target_role_category: str,
@@ -105,7 +106,9 @@ def build_onboarding_prompt(employment_status: str,
         "baseline_anxiety_note": "short note about what Maya will do with this score"
     }}"""
 
-def build_onboarding_script_prompt(employment_status: str,
+
+def build_onboarding_script_prompt(
+    employment_status: str,
     unemployed_duration: str,
     job_timeline: str,
     target_role_category: str,

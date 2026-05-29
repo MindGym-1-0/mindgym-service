@@ -94,7 +94,8 @@ def generate_script(
         return None
 
 
-def analyze_onboarding(employment_status: str,
+def analyze_onboarding(
+    employment_status: str,
     unemployed_duration: str,
     job_timeline: str,
     target_role_category: str,
@@ -161,7 +162,9 @@ def analyze_onboarding(employment_status: str,
     except Exception:
         return None
 
-def generate_onboarding_script(employment_status: str,
+
+def generate_onboarding_script(
+    employment_status: str,
     unemployed_duration: str,
     job_timeline: str,
     target_role_category: str,

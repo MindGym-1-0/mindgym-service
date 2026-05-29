@@ -72,7 +72,8 @@ async def onboard(
         )
 
         gap_analysis = await asyncio.to_thred(
-            lambda: analyze_onboarding(employment_status=request.employment_status,
+            lambda: analyze_onboarding(
+                        employment_status=request.employment_status,
                         unemployed_duration=request.unemployed_duration,
                         job_timeline=request.job_timeline,
                         target_role_category=request.target_role_category,
@@ -90,7 +91,8 @@ async def onboard(
                     )
         )
         onboarding_session = await asyncio.to_thred(
-            lambda: generate_onboarding_script(employment_status=request.employment_status,
+            lambda: generate_onboarding_script(
+                        employment_status=request.employment_status,
                         unemployed_duration=request.unemployed_duration,
                         job_timeline=request.job_timeline,
                         target_role_category=request.target_role_category,
@@ -105,10 +107,11 @@ async def onboard(
                         emotional_challenge=request.emotional_challenge,
                         baseline_anxiety=request.baseline_anxiety,
                         preparation_for=preparation_for
-                        )
+                    )
         )
 
-        session_id = await insert_onboarding_session(user_id=user_id,
+        session_id = await insert_onboarding_session(
+            user_id=user_id,
             preparation_for=preparation_for,
             baseline_anxiety=request.baseline_anxiety,
             script=onboarding_session,
