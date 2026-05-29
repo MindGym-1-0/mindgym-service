@@ -17,6 +17,31 @@ class JobStatus(str, Enum):
     CLOSED = "closed"
 
 
+class JobOutcome(str, Enum):
+    REJECTED = "rejected"
+    OFFER = "offer"
+    GHOSTED = "ghosted"
+    WITHDRAWN = "withdrawn"
+
+
+class StageAdvance(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    new_stage: JobStatus = Field(
+        ...,
+        description="The target pipeline stage to move the job application into.",
+    )
+
+
+class OutcomeUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    outcome: JobOutcome = Field(
+        ...,
+        description="The terminal outcome status when closing out an application loop.",
+    )
+
+
 class JobCreate(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
