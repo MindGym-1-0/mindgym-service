@@ -47,7 +47,7 @@ async def onboard(
             )
 
         await asyncio.to_thread(
-            lambda: client.table("users").insert(record).execute()
+            lambda: client.table("users").upsert(record, on_conflict="id").execute()
         )
 
         return OnboardingResponse(
