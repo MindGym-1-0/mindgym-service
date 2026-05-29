@@ -130,7 +130,6 @@ def analyze_onboarding(
         genai.configure(api_key=settings.gemini_api_key)
         model = genai.GenerativeModel(settings.gemini_model)
 
-
         from src.lib.prompt_builder import build_onboarding_prompt
         prompt = build_onboarding_prompt(
             employment_status=employment_status,

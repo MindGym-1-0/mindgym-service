@@ -1,10 +1,11 @@
 """Pydantic models for request and response validation"""
 
 from enum import Enum
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from typing import Literal
 from pydantic import model_validator
 from src.types.session import SessionScript
+
 
 class JobSearchStage(str, Enum):
     """Current stage in the job search process"""
@@ -48,8 +49,7 @@ class OnboardingRequest(BaseModel):
     final_round_interviews: int | None = None
     offers: int | None = None
     emotional_challenge: Literal["rejection_silence", "interview_anxiety", "imposter_syndrome", "burnout", "uncertainty", "financial_pressure"]
-    baseline_anxiety: int = Field(ge=1, le=10, description="Current anxiety level on a 1-10 scale"
-    )
+    baseline_anxiety: int = Field(ge=1, le=10, description="Current anxiety level on a 1-10 scale")
 
     @model_validator(mode="after")
     def check_unemployed_duration(self):
@@ -58,25 +58,26 @@ class OnboardingRequest(BaseModel):
         return self
 
     model_config = {
-    "json_schema_extra": {
-        "example": {
-            "employment_status": "unemployed",
-            "unemployed_duration": "3m",
-            "job_timeline": "asap",
-            "target_role_category": "product_management",
-            "target_role_note": "Senior PM in fintech",
-            "company_types": ["startup", "scale_up"],
-            "applications_sent_min": 10,
-            "applications_sent_max": 15,
-            "recruiter_contacts": 3,
-            "first_round_interviews": 2,
-            "final_round_interviews": 1,
-            "offers": 0,
-            "emotional_challenge": "rejection_silence",
-            "baseline_anxiety": 7,
+        "json_schema_extra": {
+            "example": {
+                "employment_status": "unemployed",
+                "unemployed_duration": "3m",
+                "job_timeline": "asap",
+                "target_role_category": "product_management",
+                "target_role_note": "Senior PM in fintech",
+                "company_types": ["startup", "scale_up"],
+                "applications_sent_min": 10,
+                "applications_sent_max": 15,
+                "recruiter_contacts": 3,
+                "first_round_interviews": 2,
+                "final_round_interviews": 1,
+                "offers": 0,
+                "emotional_challenge": "rejection_silence",
+                "baseline_anxiety": 7,
+            }
         }
     }
-    }
+
 
 class OnboardingGapAnalysis(BaseModel):
     mindset_gap: str

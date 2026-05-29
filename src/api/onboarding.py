@@ -73,40 +73,40 @@ async def onboard(
 
         gap_analysis = await asyncio.to_thred(
             lambda: analyze_onboarding(
-                        employment_status=request.employment_status,
-                        unemployed_duration=request.unemployed_duration,
-                        job_timeline=request.job_timeline,
-                        target_role_category=request.target_role_category,
-                        target_role_note=request.target_role_note,
-                        company_types=request.company_types,
-                        applications_sent_min=request.applications_sent_min,
-                        applications_sent_max=request.applications_sent_max,
-                        recruiter_contacts=request.recruiter_contacts,
-                        first_round_interviews=request.first_round_interviews,
-                        final_round_interviews=request.final_round_interviews,
-                        offers=request.offers,
-                        emotional_challenge=request.emotional_challenge,
-                        baseline_anxiety=request.baseline_anxiety,
-                        preparation_for=preparation_for
+                    employment_status=request.employment_status,
+                    unemployed_duration=request.unemployed_duration,
+                    job_timeline=request.job_timeline,
+                    target_role_category=request.target_role_category,
+                    target_role_note=request.target_role_note,
+                    company_types=request.company_types,
+                    applications_sent_min=request.applications_sent_min,
+                    applications_sent_max=request.applications_sent_max,
+                    recruiter_contacts=request.recruiter_contacts,
+                    first_round_interviews=request.first_round_interviews,
+                    final_round_interviews=request.final_round_interviews,
+                    offers=request.offers,
+                    emotional_challenge=request.emotional_challenge,
+                    baseline_anxiety=request.baseline_anxiety,
+                    preparation_for=preparation_for
                     )
         )
         onboarding_session = await asyncio.to_thred(
             lambda: generate_onboarding_script(
-                        employment_status=request.employment_status,
-                        unemployed_duration=request.unemployed_duration,
-                        job_timeline=request.job_timeline,
-                        target_role_category=request.target_role_category,
-                        target_role_note=request.target_role_note,
-                        company_types=request.company_types,
-                        applications_sent_min=request.applications_sent_min,
-                        applications_sent_max=request.applications_sent_max,
-                        recruiter_contacts=request.recruiter_contacts,
-                        first_round_interviews=request.first_round_interviews,
-                        final_round_interviews=request.final_round_interviews,
-                        offers=request.offers,
-                        emotional_challenge=request.emotional_challenge,
-                        baseline_anxiety=request.baseline_anxiety,
-                        preparation_for=preparation_for
+                    employment_status=request.employment_status,
+                    unemployed_duration=request.unemployed_duration,
+                    job_timeline=request.job_timeline,
+                    target_role_category=request.target_role_category,
+                    target_role_note=request.target_role_note,
+                    company_types=request.company_types,
+                    applications_sent_min=request.applications_sent_min,
+                    applications_sent_max=request.applications_sent_max,
+                    recruiter_contacts=request.recruiter_contacts,
+                    first_round_interviews=request.first_round_interviews,
+                    final_round_interviews=request.final_round_interviews,
+                    offers=request.offers,
+                    emotional_challenge=request.emotional_challenge,
+                    baseline_anxiety=request.baseline_anxiety,
+                    preparation_for=preparation_for
                     )
         )
 
