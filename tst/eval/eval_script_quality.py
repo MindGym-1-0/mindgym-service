@@ -111,6 +111,7 @@ def collect_inputs() -> dict:
         print("  Invalid — enter a number from 1 to 10.")
 
     feeling_note = _prompt_optional("feeling_note (user's own words, optional)")
+    first_name = _prompt_optional("first_name (optional — leave blank to use 'This person')")
 
     return {
         "preparation_for": preparation_for,
@@ -121,6 +122,7 @@ def collect_inputs() -> dict:
         "company": company,
         "role": role,
         "feeling_note": feeling_note,
+        "first_name": first_name,
     }
 
 
@@ -162,6 +164,7 @@ def run_scenario(inputs: dict) -> None:
             company=company,
             role=role,
             feeling_note=inputs.get("feeling_note"),
+            first_name=inputs.get("first_name"),
         )
 
         response = model.generate_content(prompt)

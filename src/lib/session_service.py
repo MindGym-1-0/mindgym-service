@@ -111,6 +111,8 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
 
     Raises RuntimeError if both Gemini and the fallback fail, or if the DB insert returns no id.
     """
+    import time
+    _t0 = time.monotonic()
     try:
         script = await asyncio.wait_for(
             asyncio.to_thread(
@@ -124,9 +126,11 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
                 role=request.role,
                 feeling_note=request.feeling_note,
             ),
-            timeout=10.0,
+            timeout=30.0,
         )
+        logger.info("Gemini completed in %.1fs", time.monotonic() - _t0)
     except asyncio.TimeoutError:
+        logger.warning("Gemini timed out after %.1fs — using fallback", time.monotonic() - _t0)
         script = None
 
     if script is None:
