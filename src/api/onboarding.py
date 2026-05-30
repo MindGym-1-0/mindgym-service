@@ -1,15 +1,16 @@
 """Onboarding endpoints for user setup"""
 
-import uuid
+import asyncio
+import logging
 
-import httpx
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.lib.config import settings
-from src.lib.supabase import insert_onboarding_record
+from src.lib.auth_dependencies import get_current_user
+from src.lib.supabase_client import get_supabase_admin_client
 from src.types.models import OnboardingRequest, OnboardingResponse
 
 router = APIRouter(prefix="/api", tags=["onboarding"])
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -19,51 +20,46 @@ router = APIRouter(prefix="/api", tags=["onboarding"])
     summary="Complete user onboarding",
     description="Receives user's job goal, job search stage, and anxiety level to personalize their experience",
 )
-async def onboard(request: OnboardingRequest) -> OnboardingResponse:
+async def onboard(
+    request: OnboardingRequest,
+    current_user: dict = Depends(get_current_user),
+) -> OnboardingResponse:
     """
     Complete the onboarding process for a new user.
 
-    This endpoint collects three pieces of information used to personalize the user's daily sessions,
-    meditation recommendations, and action suggestions.
-
-    Args:
-        request: OnboardingRequest containing job_goal, job_search_stage, and anxiety_level
-
-    Returns:
-        OnboardingResponse with success status and user_id
-
-    Raises:
-        HTTPException: If onboarding data is invalid or the persistence layer fails
+    Inserts a row into public.users with the authenticated user's id,
+    job goal, job search stage, and anxiety level.
     """
+    user_id = current_user["id"]
+    record = {
+        "id": user_id,
+        "goal": request.job_goal,
+        "stage": request.job_search_stage.value,
+        "anxiety_level": request.anxiety_level,
+    }
+
     try:
-        record = {
-            "goal": request.job_goal,
-            "stage": request.job_search_stage.value,
-        }
+        client = get_supabase_admin_client()
+        if client is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database client not available — SUPABASE_SERVICE_ROLE_KEY is missing",
+            )
 
-        persisted = {}
-        if settings.supabase_url and settings.supabase_key:
-            persisted = await insert_onboarding_record(record)
-
-        user_id = persisted.get("user_id") or persisted.get("id") or str(uuid.uuid4())
+        await asyncio.to_thread(
+            lambda: client.table("users").upsert(record, on_conflict="id").execute()
+        )
 
         return OnboardingResponse(
             success=True,
             message="Onboarding completed successfully",
             user_id=user_id,
         )
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Supabase returned {e.response.status_code}: {e.response.text}",
-        )
-    except httpx.RequestError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Supabase request failed: {str(e)}",
-        )
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Onboarding failed for user_id=%s", user_id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Onboarding failed: {str(e)}",
-        )
+            detail=f"Onboarding failed: {exc}",
+        ) from exc

@@ -18,10 +18,6 @@ class LoginRequest(EmailPasswordRequest):
     pass
 
 
-class SignupRequest(EmailPasswordRequest):
-    pass
-
-
 class AuthUser(BaseModel):
     id: str
     email: str | None = None
@@ -46,3 +42,8 @@ class AuthResponse(BaseModel):
 class LogoutResponse(BaseModel):
     authenticated: bool = False
     message: str = "Signed out"
+
+
+class SignupRequest(EmailPasswordRequest):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)

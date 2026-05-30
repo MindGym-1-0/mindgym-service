@@ -1,5 +1,6 @@
 """Session service — orchestrates session generation and completion."""
 import asyncio
+import logging
 from datetime import datetime, timezone
 
 from src.lib.fallbacks import get_fallback_script
@@ -13,9 +14,42 @@ from src.types.session import (
     SessionStartResponse,
 )
 
+logger = logging.getLogger(__name__)
+
+
+async def _ensure_user_profile(user_id: str) -> None:
+    """Upsert a minimal users row so the ai_sessions FK is never violated.
+
+    Uses ignore_duplicates=True so existing rows are untouched — only missing rows
+    get created. Required for users created before the signup fix was deployed.
+    """
+    client = get_supabase_admin_client()
+    if client is None:
+        return
+    try:
+        await asyncio.to_thread(
+            lambda: client.table("users")
+            .upsert(
+                {
+                    "id": user_id,
+                    "goal": "",
+                    "stage": "exploring",
+                    "anxiety_level": 5,
+                },
+                on_conflict="id",
+                ignore_duplicates=True,
+            )
+            .execute()
+        )
+    except Exception:
+        logger.warning(
+            "Failed to ensure users row for user_id=%s — session insert may fail", user_id
+        )
+
 
 async def insert_session(user_id: str, request: SessionStartRequest, script: SessionScript) -> str | None:
     """Insert a new ai_sessions row and return the generated session id."""
+    await _ensure_user_profile(user_id)
     client = get_supabase_admin_client()
     payload = {
         'user_id': user_id,
@@ -76,16 +110,23 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
 
     Raises RuntimeError if both Gemini and the fallback fail, or if the DB insert returns no id.
     """
-    script = generate_script(
-        preparation_for=request.preparation_for,
-        current_feeling=request.current_feeling,
-        desired_feeling=request.desired_feeling,
-        time_available=request.time_available,
-        anxiety_level_before=request.anxiety_level_before,
-        company=request.company,
-        role=request.role,
-        feeling_note=request.feeling_note,
-    )
+    try:
+        script = await asyncio.wait_for(
+            asyncio.to_thread(
+                generate_script,
+                preparation_for=request.preparation_for,
+                current_feeling=request.current_feeling,
+                desired_feeling=request.desired_feeling,
+                time_available=request.time_available,
+                anxiety_level_before=request.anxiety_level_before,
+                company=request.company,
+                role=request.role,
+                feeling_note=request.feeling_note,
+            ),
+            timeout=10.0,
+        )
+    except asyncio.TimeoutError:
+        script = None
 
     if script is None:
         try:

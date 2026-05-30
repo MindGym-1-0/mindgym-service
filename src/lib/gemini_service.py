@@ -70,7 +70,10 @@ def generate_script(
             feeling_note=feeling_note,
         )
 
-        response = model.generate_content(prompt)
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(max_output_tokens=600),
+        )
         raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
         data = json.loads(raw)
         script = SessionScript(**data)
