@@ -95,7 +95,7 @@ async def onboard(
             timeout=30.0
         )
         onboarding_session = await asyncio.wait_for(
-            lambda: generate_onboarding_script(
+            asyncio.to_thread(lambda: generate_onboarding_script(
                 employment_status=request.employment_status,
                 unemployed_duration=request.unemployed_duration,
                 job_timeline=request.job_timeline,
