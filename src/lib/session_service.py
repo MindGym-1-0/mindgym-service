@@ -2,6 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from fastapi import HTTPException
 
 from src.lib.fallbacks import get_fallback_script
 from src.lib.gemini_service import generate_script
@@ -272,5 +273,8 @@ async def insert_onboarding_session(
         lambda: client.table('ai_sessions').insert(payload).execute()
     )
     if not result.data:
-        return None
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to save session, please retry.",
+        )
     return result.data[0].get('id')

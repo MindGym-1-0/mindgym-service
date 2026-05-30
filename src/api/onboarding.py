@@ -12,6 +12,8 @@ from src.lib.prompt_builder import derive_preparation_for
 from src.types.models import OnboardingGapAnalysis, OnboardingFirstSession
 from src.lib.session_service import insert_onboarding_session
 from src.lib.gemini_service import analyze_onboarding, generate_onboarding_script
+from src.lib.fallbacks import get_fallback_script
+from datetime import datetime
 
 router = APIRouter(prefix="/api", tags=["onboarding"])
 logger = logging.getLogger(__name__)
@@ -50,7 +52,8 @@ async def onboard(
         "final_round_interviews": request.final_round_interviews,
         "offers": request.offers,
         "emotional_challenge": request.emotional_challenge,
-        "baseline_anxiety": request.baseline_anxiety
+        "baseline_anxiety": request.baseline_anxiety,
+        "onboarding_completed_at": datetime.utcnow().isoformat(),
     }
 
     try:
@@ -71,8 +74,8 @@ async def onboard(
             job_timeline=request.job_timeline,
         )
 
-        gap_analysis = await asyncio.to_thred(
-            lambda: analyze_onboarding(
+        gap_analysis = await asyncio.wait_for(
+            asyncio.to_thread(lambda: analyze_onboarding(
                 employment_status=request.employment_status,
                 unemployed_duration=request.unemployed_duration,
                 job_timeline=request.job_timeline,
@@ -88,9 +91,10 @@ async def onboard(
                 emotional_challenge=request.emotional_challenge,
                 baseline_anxiety=request.baseline_anxiety,
                 preparation_for=preparation_for
-            )
+            )),
+            timeout=30.0
         )
-        onboarding_session = await asyncio.to_thred(
+        onboarding_session = await asyncio.wait_for(
             lambda: generate_onboarding_script(
                 employment_status=request.employment_status,
                 unemployed_duration=request.unemployed_duration,
@@ -107,8 +111,12 @@ async def onboard(
                 emotional_challenge=request.emotional_challenge,
                 baseline_anxiety=request.baseline_anxiety,
                 preparation_for=preparation_for
-            )
+            )),
+            timeout=30.0
         )
+
+        if onboarding_session is None:
+            onboarding_session = get_fallback_script(request.preparation_for)
 
         session_id = await insert_onboarding_session(
             user_id=user_id,
