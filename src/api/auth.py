@@ -2,6 +2,7 @@ import logging
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
 
+from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.auth_dependencies import (
     _extract_bearer_token,
     _extract_cookie_token,
@@ -242,10 +243,14 @@ async def refresh_session(
 
 
 @router.get("/me", response_model=AuthResponse)
-async def read_me(current_user: dict = Depends(get_current_user)) -> AuthResponse:
+async def read_me(
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
+) -> AuthResponse:
     """Return the authenticated user profile."""
 
-    return AuthResponse(authenticated=True, user=current_user)
+    _ = token
+    return AuthResponse(authenticated=True, user={"id": str(current_user_id)})
 
 
 @v1_router.get("/me", response_model=AuthResponse)
