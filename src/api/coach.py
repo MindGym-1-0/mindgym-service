@@ -180,7 +180,7 @@ def _build_gemini_prompt(
     sessions_block = (
         "\n".join(
             [
-                f"{idx}. preparation_for={s.get('preparation_for')}, mood_delta={s.get('mood_delta')}, completed_at={s.get('completed_at')}"
+                f"{idx}. preparation_for={s.get('preparation_for')}, anxiety_level_delta={s.get('anxiety_level_delta')}, completed_at={s.get('completed_at')}"
                 for idx, s in enumerate(recent_sessions, start=1)
             ]
         )
@@ -335,7 +335,7 @@ def _build_prep_plan_prompt(
         f"- stage: {stage}\n"
         f"- anxiety_level: {anxiety_level}\n"
         f"- sessions_done_for_this_interview: {sessions_done_count}\n"
-        f"- avg_confidence_boost_mood_delta: {avg_delta_text}\n\n"
+        f"- avg_confidence_boost_anxiety_level_delta: {avg_delta_text}\n\n"
         "Primary worry_input:\n"
         f"- {worry_input}\n"
     )
@@ -742,7 +742,7 @@ async def get_coach_home(
 
         sessions_res = await asyncio.to_thread(
             sb.table("ai_sessions")
-            .select("preparation_for,mood_delta,completed_at")
+            .select("preparation_for,anxiety_level_delta,completed_at")
             .eq("user_id", user_id)
             .not_.is_("completed_at", "null")
             .order("completed_at", desc=True)
@@ -868,7 +868,7 @@ async def create_coach_prep_plan(
         try:
             sessions_by_job = await asyncio.to_thread(
                 sb.table("ai_sessions")
-                .select("mood_delta,completed_at")
+                .select("anxiety_level_delta,completed_at")
                 .eq("user_id", user_id)
                 .eq("job_id", job_id)
                 .not_.is_("completed_at", "null")
@@ -886,7 +886,7 @@ async def create_coach_prep_plan(
         try:
             sessions_by_company_role = await asyncio.to_thread(
                 sb.table("ai_sessions")
-                .select("mood_delta,completed_at")
+                .select("anxiety_level_delta,completed_at")
                 .eq("user_id", user_id)
                 .eq("company", company)
                 .eq("role", role)
@@ -903,9 +903,9 @@ async def create_coach_prep_plan(
     sessions_done_count = len(completed_rows)
     deltas: list[float] = []
     for row in completed_rows:
-        mood_delta = row.get("mood_delta")
-        if isinstance(mood_delta, (int, float)):
-            deltas.append(float(mood_delta))
+        anxiety_level_delta = row.get("anxiety_level_delta")
+        if isinstance(anxiety_level_delta, (int, float)):
+            deltas.append(float(anxiety_level_delta))
     if deltas:
         avg_delta = sum(deltas) / len(deltas)
 

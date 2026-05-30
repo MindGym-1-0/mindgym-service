@@ -193,7 +193,7 @@ def test_get_coach_home_success(client, fake_user_id: UUID, monkeypatch):
         }
     ]
     tables["ai_sessions"] = [
-        {"user_id": uid, "preparation_for": "interview_tomorrow", "mood_delta": 2, "completed_at": "2026-05-24T10:00:00+00:00"}
+        {"user_id": uid, "preparation_for": "interview_tomorrow", "anxiety_level_delta": 2, "completed_at": "2026-05-24T10:00:00+00:00"}
     ]
     sb = FakeSupabase(tables)
 
