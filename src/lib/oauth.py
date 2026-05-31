@@ -1,11 +1,27 @@
 """Google OAuth utilities and token management"""
+import asyncio
+import urllib.parse
 from typing import Optional
 import httpx
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 from src.lib.config import settings
+
+
+def get_google_auth_url() -> str:
+    """Generate the Google OAuth2 consent screen URL."""
+    base_url = "https://accounts.google.com/o/oauth2/v2/auth"
+    params = {
+        "client_id": settings.google_client_id,
+        "redirect_uri": settings.google_redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "consent",
+    }
+    return f"{base_url}?{urllib.parse.urlencode(params)}"
 
 
 async def exchange_auth_code_for_token(code: str) -> dict:
@@ -43,7 +59,7 @@ async def exchange_auth_code_for_token(code: str) -> dict:
         return response.json()
 
 
-def verify_google_token(id_token: str) -> dict:
+async def verify_google_token(id_token: str) -> dict:
     """
     Verify and decode Google ID token using Google's public keys
 
@@ -60,7 +76,8 @@ def verify_google_token(id_token: str) -> dict:
         ValueError: If token verification fails (invalid signature, expired, wrong audience, etc.)
     """
     try:
-        decoded = google_id_token.verify_oauth2_token(
+        decoded = await asyncio.to_thread(
+            google_id_token.verify_oauth2_token,
             id_token,
             google_requests.Request(),
             audience=settings.google_client_id,
@@ -85,13 +102,14 @@ def create_jwt_token(user_id: str, email: str, expires_delta: Optional[timedelta
     if expires_delta is None:
         expires_delta = timedelta(hours=24)
 
-    expire = datetime.utcnow() + expires_delta
+    now = datetime.now(timezone.utc)
+    expire = now + expires_delta
 
     payload = {
         "user_id": user_id,
         "email": email,
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": now,
     }
 
     token = jwt.encode(
