@@ -127,6 +127,8 @@ def analyze_onboarding(
     Returns None if Gemini fails.
     """
     try:
+        import google.generativeai as genai
+
         genai.configure(api_key=settings.gemini_api_key)
         model = genai.GenerativeModel(settings.gemini_model)
 
@@ -184,6 +186,8 @@ def generate_onboarding_script(
     Returns None on timeout, invalid JSON.
     """
     try:
+        import google.generativeai as genai
+
         genai.configure(api_key=settings.gemini_api_key)
         model = genai.GenerativeModel(settings.gemini_model)
 
