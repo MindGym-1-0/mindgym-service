@@ -94,6 +94,10 @@ async def onboard(
             )),
             timeout=30.0
         )
+
+        if gap_analysis is None:
+            raise HTTPException(status_code=503, detail="Gap analysis unavailable, please try again.")
+
         onboarding_session = await asyncio.wait_for(
             asyncio.to_thread(lambda: generate_onboarding_script(
                 employment_status=request.employment_status,
@@ -116,7 +120,7 @@ async def onboard(
         )
 
         if onboarding_session is None:
-            onboarding_session = get_fallback_script(request.preparation_for)
+            onboarding_session = get_fallback_script(preparation_for)
 
         session_id = await insert_onboarding_session(
             user_id=user_id,
