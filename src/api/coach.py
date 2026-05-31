@@ -160,6 +160,20 @@ def _build_gemini_prompt(
     recent_sessions: list[dict[str, Any]],
     current_streak: int,
 ) -> str:
+    goal = str(user_context.get("goal") or "Not provided")
+    stage = str(user_context.get("stage") or "Not provided")
+    anxiety_level = user_context.get("anxiety_level")
+    anxiety_level_text = (
+        str(anxiety_level) if anxiety_level is not None else "Not provided"
+    )
+    employment_status = str(user_context.get("employment_status") or "Not provided")
+    target_role_category = str(user_context.get("target_role_category") or "Not provided")
+    emotional_challenge = str(user_context.get("emotional_challenge") or "Not provided")
+    baseline_anxiety = user_context.get("baseline_anxiety")
+    baseline_anxiety_text = (
+        str(baseline_anxiety) if baseline_anxiety is not None else "Not provided"
+    )
+
     now = datetime.now(timezone.utc)
     interview_lines: list[str] = []
     for idx, interview in enumerate(upcoming_interviews, start=1):
@@ -209,9 +223,13 @@ def _build_gemini_prompt(
         "- session_type values must be one of: general_reset, interview_tomorrow, recruiter_call, networking, salary_negotiation, rejection_recovery, restarting_search.\n"
         "- recommendations should use the user's data and recent patterns from ai_sessions.\n\n"
         f"User context:\n"
-        f"- goal: {user_context.get('goal')}\n"
-        f"- stage: {user_context.get('stage')}\n"
-        f"- anxiety_level: {user_context.get('anxiety_level')}\n"
+        f"- goal: {goal}\n"
+        f"- stage: {stage}\n"
+        f"- anxiety_level: {anxiety_level_text}\n"
+        f"- employment_status: {employment_status}\n"
+        f"- target_role_category: {target_role_category}\n"
+        f"- emotional_challenge: {emotional_challenge}\n"
+        f"- baseline_anxiety: {baseline_anxiety_text}\n"
         f"- current_streak: {current_streak}\n\n"
         "Upcoming interviews (next 2):\n"
         f"{interview_block}\n\n"
@@ -301,10 +319,17 @@ def _build_prep_plan_prompt(
     goal: str | None,
     stage: str | None,
     anxiety_level: int | None,
+    employment_status: str,
+    target_role_category: str,
+    emotional_challenge: str,
+    baseline_anxiety: str,
     sessions_done_count: int,
     avg_delta: float | None,
     worry_input: str,
 ) -> str:
+    goal_text = str(goal or "Not provided")
+    stage_text = str(stage or "Not provided")
+    anxiety_level_text = str(anxiety_level) if anxiety_level is not None else "Not provided"
     avg_delta_text = "not available" if avg_delta is None else f"{avg_delta:.2f}"
     return (
         "You are Maya, an emotionally intelligent interview coach.\n"
@@ -331,9 +356,13 @@ def _build_prep_plan_prompt(
         f"- interview_date: {interview_date}\n"
         f"- days_until_interview: {days_until}\n\n"
         "User context:\n"
-        f"- goal: {goal}\n"
-        f"- stage: {stage}\n"
-        f"- anxiety_level: {anxiety_level}\n"
+        f"- goal: {goal_text}\n"
+        f"- stage: {stage_text}\n"
+        f"- anxiety_level: {anxiety_level_text}\n"
+        f"- employment_status: {employment_status}\n"
+        f"- target_role_category: {target_role_category}\n"
+        f"- emotional_challenge: {emotional_challenge}\n"
+        f"- baseline_anxiety: {baseline_anxiety}\n"
         f"- sessions_done_for_this_interview: {sessions_done_count}\n"
         f"- avg_confidence_boost_anxiety_level_delta: {avg_delta_text}\n\n"
         "Primary worry_input:\n"
@@ -721,7 +750,9 @@ async def get_coach_home(
     try:
         users_res = await asyncio.to_thread(
             sb.table("users")
-            .select("goal,stage,anxiety_level")
+            .select(
+                "goal,stage,anxiety_level,employment_status,target_role_category,emotional_challenge,baseline_anxiety"
+            )
             .eq("id", user_id)
             .limit(1)
             .execute
@@ -850,7 +881,9 @@ async def create_coach_prep_plan(
     try:
         users_res = await asyncio.to_thread(
             sb.table("users")
-            .select("goal,stage,anxiety_level")
+            .select(
+                "goal,stage,anxiety_level,employment_status,target_role_category,emotional_challenge,baseline_anxiety"
+            )
             .eq("id", user_id)
             .limit(1)
             .execute
@@ -918,6 +951,14 @@ async def create_coach_prep_plan(
         goal=user_context.get("goal"),
         stage=user_context.get("stage"),
         anxiety_level=user_context.get("anxiety_level"),
+        employment_status=str(user_context.get("employment_status") or "Not provided"),
+        target_role_category=str(user_context.get("target_role_category") or "Not provided"),
+        emotional_challenge=str(user_context.get("emotional_challenge") or "Not provided"),
+        baseline_anxiety=(
+            str(user_context.get("baseline_anxiety"))
+            if user_context.get("baseline_anxiety") is not None
+            else "Not provided"
+        ),
         sessions_done_count=sessions_done_count,
         avg_delta=avg_delta,
         worry_input=body.worry_input,
