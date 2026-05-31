@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MindGym Model Benchmark</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f3; color: #1a1a1a; font-size: 15px; line-height: 1.6; }
+  .page { max-width: 1400px; margin: 0 auto; padding: 24px 20px; }
+
+  /* instruction banner */
+  .instruction { background: #fffbeb; border: 1px solid #f59e0b; border-radius: 10px; padding: 14px 18px; margin-bottom: 24px; font-size: 14px; color: #78350f; }
+  .instruction strong { display: block; margin-bottom: 4px; }
+
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 24px; }
+
+  /* summary cards */
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 28px; }
+  .card { background: #fff; border-radius: 12px; padding: 18px; border: 2px solid #e5e5e5; }
+  .card-name { font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+  .card-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat { font-size: 12px; color: #666; }
+  .stat span { display: block; font-size: 18px; font-weight: 700; color: #1a1a1a; line-height: 1.2; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .badge-green { background: #d1fae5; color: #065f46; }
+  .badge-yellow { background: #fef3c7; color: #92400e; }
+  .badge-red { background: #fee2e2; color: #991b1b; }
+  .badge-pass { background: #d1fae5; color: #065f46; }
+  .badge-fail { background: #fee2e2; color: #991b1b; }
+
+  /* scenario tabs */
+  .tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+  .tab:hover { background: #f0f0ee; }
+  .tab.active { background: #0c6b58; color: #fff; border-color: #0c6b58; }
+
+  /* scenario pane */
+  .scenario-pane { display: none; }
+  .scenario-pane.active { display: block; }
+  .scenario-meta { font-size: 12px; color: #888; margin-bottom: 14px; }
+  .scenario-meta strong { color: #333; }
+
+  /* 3-column layout */
+  .columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .col { background: #fff; border-radius: 12px; border: 1.5px solid #e5e5e5; overflow: hidden; }
+  .col.low-voice { border-color: #fca5a5; }
+  .col-header { padding: 14px 16px; background: #fafafa; border-bottom: 1px solid #e5e5e5; }
+  .col-model { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .col-ops { display: flex; gap: 10px; font-size: 12px; color: #666; }
+  .col-body { padding: 16px; }
+
+  /* phase text */
+  .phases { margin-bottom: 16px; }
+  .phase-block { margin-bottom: 14px; }
+  .phase-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #0c6b58; margin-bottom: 5px; }
+  .phase-text { font-size: 15px; line-height: 1.7; color: #222; white-space: pre-wrap; }
+
+  /* scores */
+  .scores { border-top: 1px solid #f0f0f0; padding-top: 12px; margin-bottom: 12px; }
+  .scores-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .score-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+  .score-avg { font-size: 12px; font-weight: 700; color: #333; margin-left: auto; }
+  .rationales { display: none; }
+  .rationales.open { display: block; }
+  .rationale-row { font-size: 12px; color: #555; padding: 3px 0; border-bottom: 1px dashed #f0f0f0; }
+  .rationale-row:last-child { border-bottom: none; }
+  .rationale-dim { font-weight: 600; color: #333; }
+  .toggle-btn { font-size: 11px; color: #0c6b58; cursor: pointer; background: none; border: none; padding: 0; text-decoration: underline; }
+
+  /* human rating */
+  .human-rating { border-top: 1px solid #f0f0f0; padding-top: 12px; }
+  .rating-label { font-size: 12px; font-weight: 600; color: #333; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .rating-value { font-size: 18px; font-weight: 700; color: #0c6b58; min-width: 24px; text-align: right; }
+  input[type=range] { width: 100%; accent-color: #0c6b58; }
+  .rating-scale { display: flex; justify-content: space-between; font-size: 10px; color: #aaa; margin-top: 2px; }
+
+  /* summary table */
+  .summary-section { margin-top: 32px; background: #fff; border-radius: 12px; border: 1px solid #e5e5e5; overflow: hidden; }
+  .summary-title { padding: 16px 20px; font-size: 15px; font-weight: 700; border-bottom: 1px solid #e5e5e5; display: flex; justify-content: space-between; align-items: center; }
+  .recommendation { font-size: 12px; font-weight: 400; color: #666; }
+  .recommendation strong { color: #0c6b58; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 10px 14px; text-align: left; background: #fafafa; border-bottom: 1px solid #e5e5e5; font-weight: 600; color: #555; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 10px 14px; border-bottom: 1px solid #f5f5f5; }
+  tr:last-child td { border-bottom: none; background: #f9fafb; font-weight: 700; }
+  .na { color: #bbb; font-style: italic; }
+
+  @media (max-width: 900px) {
+    .columns { grid-template-columns: 1fr; }
+    .cards { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="instruction">
+    <strong>How to read this</strong>
+    Read each script as if you're a job seeker the night before an interview. For each model, rate 1–7: would you send this to a friend?
+    (1 = generic / unhelpful &nbsp;·&nbsp; 4 = fine but forgettable &nbsp;·&nbsp; 7 = genuinely moved me)
+  </div>
+
+  <h1>MindGym Model Benchmark</h1>
+  <p class="subtitle">Judge: claude-opus-4-8 &nbsp;·&nbsp; 4 scenarios &nbsp;·&nbsp; All models received identical prompts</p>
+
+  <div class="cards" id="cards"></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="panes"></div>
+  <div class="summary-section">
+    <div class="summary-title">
+      Summary
+      <span class="recommendation" id="recommendation">Fill in human ratings to see recommendation.</span>
+    </div>
+    <table id="summary-table">
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Gemini (judge)</th><th>Gemini (human)</th>
+          <th>Haiku (judge)</th><th>Haiku (human)</th>
+          <th>GPT-4o-mini (judge)</th><th>GPT-4o-mini (human)</th>
+        </tr>
+      </thead>
+      <tbody id="summary-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const PHASES = [
+  {key:'phase1', label:'Phase 1 · Breathe'},
+  {key:'phase2', label:'Phase 2 · Ground'},
+  {key:'phase3', label:'Phase 3 · Rehearse'},
+  {key:'phase4', label:'Phase 4 · Anchor'},
+  {key:'phase5', label:'Phase 5 · Close'},
+];
+
+const MODELS = ['gemini-2.5-flash','claude-haiku-4-5','gpt-4o-mini'];
+const MODEL_LABELS = {
+  'gemini-2.5-flash': 'Gemini 2.5 Flash',
+  'claude-haiku-4-5': 'Claude Haiku 4.5',
+  'gpt-4o-mini': 'GPT-4o Mini',
+};
+
+const SCENARIOS = [
+  {id:'high_anxiety_mode1', label:'High-anxiety Interview', meta:'interview_tomorrow · Google PM · anxiety 8 · overwhelmed → calm'},
+  {id:'low_anxiety_mode1',  label:'Low-anxiety Recruiter', meta:'recruiter_call · Stripe SWE · anxiety 3 · anxious but hopeful → confident'},
+  {id:'heavy_mode2',        label:'Rejection Recovery',    meta:'rejection_recovery · no company · anxiety 6 · discouraged → grounded'},
+  {id:'open_mode2',         label:'General Reset',         meta:'general_reset · no company · anxiety 4 · unsure → clear_minded'},
+];
+
+const DATA = {
+  "high_anxiety_mode1__gemini-2.5-flash": {
+    phases:{
+      phase1:"You're feeling overwhelmed right now, and an eight out of ten is a lot to carry. Just for these next few moments, give yourself permission to simply be still. Breathe in slowly through your nose... and out even slower through your mouth. No need to change anything, no need to perform. Just let the breath find its own gentle rhythm. In... and out. That's all for now.",
+      phase2:"This heavy feeling you're carrying, this overwhelm, it's real. Now, without judgment, just feel your feet on the floor beneath you. Notice the simple contact. Feel the chair supporting your body, the weight of yourself held in this space. You don't need to do anything else right now but notice these anchors. You are right here, held, in this moment.",
+      phase3:"Now, let's turn your attention gently to tomorrow. Picture yourself at Google, in the interview room. You're settling into your seat, grounded. There's that brief, quiet moment before the first question is even asked – that beat of calm before it all begins. It's not empty; it's full of your steady presence. You take a breath. Then the question comes. And you do what a great Product Manager does: you pause, you clarify the core problem, you think out loud with clarity, showing your process. Not performing, just solving, with that same clear thinking you bring to your best work every day.",
+      phase4:"Think back to a time – it could be from a past project, a challenging presentation, or even a personal situation – when you had to navigate complexity, when you felt the pressure, and yet you held your focus. You stayed clear, you articulated your thoughts, and you saw it through. Remember how that felt, that steady capability, that deep knowing you could handle it. That same inner strength, that same clarity, is available to you tomorrow at Google.",
+      phase5:"Tomorrow, you walk into Google as the Product Manager you already are. You engage with clarity, you share your story, and you demonstrate your true capabilities. That's all you need to do."
+    },
+    latency:11.25, cost:0.000316, det_pass:true,
+    judge:{avg:3.6, scores:{specificity:{score:4,rationale:"Names the interview room, the beat before the first question, and concrete PM behaviors like clarifying the problem."},embodiment:{score:4,rationale:"Feet on floor, chair supporting weight, breath through nose and mouth give solid sensory anchors."},voice:{score:3,rationale:"Warm but leans on soft coaching cliches like 'held in this space' and 'gentle rhythm.'"},restraint:{score:3,rationale:"Mostly steady but stacks reassurance phrases and slightly over-explains the empty/full pause."},arc_fit:{score:4,rationale:"Phases are distinct, though locate blurs into embodiment somewhat."}}}
+  },
+  "high_anxiety_mode1__claude-haiku-4-5": {
+    phases:{
+      phase1:"Close your eyes. You're carrying a lot right now — that eight out of ten is real. Let it be there. Now breathe in slow through your nose, and out slower through your mouth. In slow. Out slower. Again. Your body knows how to do this. One more breath, and feel yourself land.",
+      phase2:"You've been running toward this moment, and that effort is heavy. Before we go anywhere else, I want you to know that's being seen. Now feel where you're sitting. Feel your feet on the ground. You are here, not in tomorrow yet. You are safe right now. That matters.",
+      phase3:"Now picture it. You walk into the Google office tomorrow. You sit down across from the product team. There's a pause before the first question — that small, quiet beat before anyone speaks. That beat is yours. Don't rush it. Then the question comes, and you do the thing you actually do well as a Product Manager: you slow down, you ask what problem you're really solving, you think out loud. Not performing. Just thinking. The way you would on any normal Tuesday. You're not trying to be perfect. You're just being clear.",
+      phase4:"Think back to a time you were trusted with something that mattered — a project, a decision, a moment where someone believed in your thinking and you came through. You didn't have to be extraordinary. You just had to be steady and honest. You did that. The same clarity that carried you then walks into Google tomorrow.",
+      phase5:"You are ready for Google. Tomorrow you will sit down as a Product Manager and think clearly out loud. That is enough. That is what they're listening for."
+    },
+    latency:5.41, cost:0.003531, det_pass:true,
+    judge:{avg:4.6, scores:{specificity:{score:5,rationale:"Google office, product team, the beat before the question, 'any normal Tuesday' all land concretely."},embodiment:{score:4,rationale:"Breath cadence, feet on ground, 'feel yourself land' provide tactile holds."},voice:{score:5,rationale:"Clipped, varied rhythm, sounds like a real human coach with no filler."},restraint:{score:4,rationale:"Largely restrained; 'that's being seen' is slightly therapy-speak but brief."},arc_fit:{score:5,rationale:"Each phase does its job cleanly with a clear consolidate and release."}}}
+  },
+  "high_anxiety_mode1__gpt-4o-mini": {
+    phases:{
+      phase1:"Close your eyes. Take a deep breath in, and let it out even slower. Allow your shoulders to drop, and feel the weight of your body pressing down. One more time. You are here now, and that is enough.",
+      phase2:"The last few days have asked a lot of you. You are carrying that weight of overwhelm. Notice how your body feels, and let yourself be here in this moment. You are grounded. You are present. You are ready.",
+      phase3:"Now picture it. You walk into Google tomorrow. You sit down across from the panel, and there's a pause before the first question — that small, quiet beat. You let that moment be yours. Then the question comes, and you do the thing you excel at as a Product Manager: you slow down, you take a breath, you articulate your thoughts clearly about the problem you're solving, just as you would at any normal meeting.",
+      phase4:"Think of the last time you walked into a space filled with uncertainty — maybe it was a tricky project at work or an important conversation. You stood your ground. Your insights connected with others. The same part of you that navigated that moment will guide you through your interview at Google tomorrow.",
+      phase5:"You are prepared for Google. You will articulate your vision as a Product Manager clearly. Walk in tomorrow and share what you know."
+    },
+    latency:5.42, cost:0.000515, det_pass:true,
+    judge:{avg:2.6, scores:{specificity:{score:3,rationale:"Has the pause-before-question moment but stays vaguer on PM specifics."},embodiment:{score:3,rationale:"Shoulders drop and weight pressing down, but body cues thin out after phase 1."},voice:{score:2,rationale:"Relies on stacked declaratives like 'You are grounded. You are present. You are ready.'"},restraint:{score:2,rationale:"Triple affirmations and 'that is enough' lean into fake-positivity stacking."},arc_fit:{score:3,rationale:"Phases present but locate and embody collapse together; thin throughout."}}}
+  },
+  "low_anxiety_mode1__gemini-2.5-flash": {
+    phases:{
+      phase1:"Close your eyes, if that feels comfortable. Take a slow, steady breath in through your nose, feeling it fill your chest. Hold for a moment, then exhale slowly through your mouth, letting any tension soften. Repeat that, finding a natural rhythm. This is your foundation.",
+      phase2:"You're feeling that familiar hum of nervous energy, paired with a clear sense of what's possible. Let both feelings be here. Notice the subtle rhythm of your body, the solid ground beneath you. You are present, right here, ready to shape what's next.",
+      phase3:"Now, let's step into the call itself. Picture the precise moment you connect—you hear their voice, you offer a clear, confident 'Hello.' There's a brief, natural pause. In that pause, you feel your focus sharpen. Then, you begin to articulate, simply and directly, why becoming a Software Engineer at Stripe is the right next step for you. It's your story, told with warmth and conviction. You speak to the impact you want to make, connecting your skills not just to the role, but to Stripe's mission, clearly and concisely. You’re not performing; you’re sharing.",
+      phase4:"Think of a time when you clearly articulated a complex idea to someone unfamiliar with it, and they truly grasped it. Or a moment when you met someone new and effortlessly built a genuine connection, leaving them with a strong, positive impression of you. Recall that feeling of being understood, of making your point with both clarity and warmth. That precise capability – the ability to connect and be heard – is deep within you. It’s a part of you, ready to surface.",
+      phase5:"You pick up. You share your story. You show Stripe why you are the Software Engineer they need to speak with again."
+    },
+    latency:10.46, cost:0.000293, det_pass:true,
+    judge:{avg:3.4, scores:{specificity:{score:4,rationale:"Names the connect moment, the 'Hello,' Stripe's mission, the natural pause."},embodiment:{score:3,rationale:"Breath fills chest and tension softens, but body anchoring fades quickly."},voice:{score:3,rationale:"Competent but polished-corporate in places like 'shape what's next.'"},restraint:{score:3,rationale:"Mostly controlled though phase 4 over-explains the recalled capability."},arc_fit:{score:4,rationale:"Clear phase separation with a crisp release line."}}}
+  },
+  "low_anxiety_mode1__claude-haiku-4-5": {
+    phases:{
+      phase1:"Close your eyes. Breathe in slow through your nose, hold for a beat, then out slower through your mouth. Again. In slow, out slower. Let your shoulders fall away from your ears. You're exactly where you need to be right now.",
+      phase2:"Feel your feet on the ground. Notice the chair holding you. You're carrying a little nervous energy—that's good. It means you care. That energy is fuel, not a warning. You're here, you're present, and you're ready to show up as yourself.",
+      phase3:"Now picture it. You're on the call with the Stripe recruiter tomorrow. There's that first moment—after the hello, before they launch into their pitch. That pause. In that pause, you breathe. Then they ask: tell us about yourself, or why Stripe interests you. And you do what you actually do well as a Software Engineer: you speak clearly about a problem you've solved, something you shipped, something you learned building it. Not polished. Just honest and direct. You don't oversell. You let your work speak.",
+      phase4:"Think back to a time you explained something technical to someone who didn't know you yet—a peer, a manager, a new team—and they got it. They saw what you were saying. They trusted it. That clarity you brought then, that same directness and care, walks into the Stripe call tomorrow. You've done this before. Your voice carries weight.",
+      phase5:"You pick up tomorrow, you listen, you tell them what matters to you as a Software Engineer and why Stripe is the place. You leave them wanting to move forward. That's enough."
+    },
+    latency:6.05, cost:0.003490, det_pass:true,
+    judge:{avg:4.6, scores:{specificity:{score:5,rationale:"The pause after hello before the pitch, 'something you shipped,' concrete and specific."},embodiment:{score:4,rationale:"Shoulders falling, feet on ground, chair holding you anchor the body well."},voice:{score:5,rationale:"Natural rhythm, 'energy is fuel, not a warning' sounds like a real coach."},restraint:{score:5,rationale:"Resists overselling deliberately; 'You don't oversell' mirrors the restraint."},arc_fit:{score:4,rationale:"Strong phase work; release is solid if slightly outcome-focused."}}}
+  },
+  "low_anxiety_mode1__gpt-4o-mini": {
+    phases:{
+      phase1:"Close your eyes. Inhale deeply for four counts, feeling the breath fill your lungs. Hold for two. Now exhale slowly for six counts, allowing any tension to drift away. Once more: in for four, hold for two, out for six. You are here, present in this moment.",
+      phase2:"Feel the surface beneath you — the chair supporting your back, your feet touching the ground. You are anchored in this space. Notice the calm that's already present. You are ready to connect.",
+      phase3:"Now picture yourself on the call with the recruiter from Stripe. There's a moment before the conversation begins, and you take a breath, feeling the anticipation in the air. When the call starts, you express why this role as a Software Engineer excites you, speaking clearly and with warmth. You share your story concisely, weaving in your passion for technology and your experience. You’re there, and it feels natural. You engage with curiosity, asking insightful questions that show your interest and readiness.",
+      phase4:"Think back to a time when you connected easily with someone new, perhaps in a discussion about a project you loved or a collaboration that brought you joy. Remember the clarity you had in your voice, how you listened, how energized both of you were by the conversation. That moment of ease and presence? It's part of you as you step into the call with Stripe.",
+      phase5:"You are ready for your call with the recruiter at Stripe. You’ll share your journey as a Software Engineer with confidence and clarity. Take a deep breath and step into that conversation knowing you are prepared and capable."
+    },
+    latency:6.84, cost:0.000538, det_pass:true,
+    judge:{avg:2.6, scores:{specificity:{score:3,rationale:"Counts breaths and the moment before the call, but role details stay generic."},embodiment:{score:3,rationale:"Chair and feet anchors plus structured breath count, fades after."},voice:{score:2,rationale:"Generic warmth, 'engage with curiosity' and 'weaving in your passion' read chatbot."},restraint:{score:2,rationale:"Stacks 'confidence and clarity,' 'prepared and capable' affirmations."},arc_fit:{score:3,rationale:"Phases present but rehearse blurs into a list of nice qualities."}}}
+  },
+  "heavy_mode2__gemini-2.5-flash": {
+    phases:{
+      phase1:"Let's just take a breath. Close your eyes, or soften your gaze. Feel your breath come in slow, and release it even slower. There’s a natural rhythm to it. Right now, just let yourself be here with that rhythm. The weight of discouragement can be heavy, but for these next few moments, we'll just allow it to settle, and breathe through it. Just in slow, out slower. That's it.",
+      phase2:"Feel the chair beneath you, the ground under your feet. Steady. You're feeling discouraged, and that's a natural, human response when things don't go as hoped. It's okay for those feelings to be present. They don't define your path forward, they're just part of today. You are still here, and you are still capable.",
+      phase3:"This outcome, this specific result, is one data point in a much larger journey. It feels significant right now, of course, and that's understandable. But it's not the verdict on you, or your worth, or your ability. Picture this: the search continues. Not the whole mountain, just the next small, steady step. Maybe it’s opening the job board and scanning one listing. Maybe it's sending one message. Or simply taking one hour to yourself. Just one clear, deliberate action that re-engages you with your path, gently. You’re not starting over, you’re simply continuing forward.",
+      phase4:"Now, think back. Remember a time when something didn't go your way, a setback that felt significant. And yet, you picked yourself up. You kept going. You found a way to navigate it, to learn from it, or simply to move past it. That resilience, that quiet strength to continue even when it's hard – that’s deeply etched into who you are. Access that feeling now. It's not new; it's a part of your blueprint.",
+      phase5:"You’ve processed this moment. Your strength is in your persistence, not just your pace. The search continues. You choose the next small step, and you take it. Steady. Forward."
+    },
+    latency:11.99, cost:0.000311, det_pass:true,
+    judge:{avg:3.4, scores:{specificity:{score:4,rationale:"Concrete next steps: open the job board, send one message, one hour to yourself."},embodiment:{score:3,rationale:"Chair and ground anchors plus breath, but mostly conceptual after."},voice:{score:3,rationale:"Caring but uses cliches like 'etched into your blueprint' and 'one data point.'"},restraint:{score:3,rationale:"Largely measured though over-explains the 'not the verdict on you' reassurance."},arc_fit:{score:4,rationale:"Phases distinct, release line 'Steady. Forward.' lands cleanly."}}}
+  },
+  "heavy_mode2__claude-haiku-4-5": {
+    phases:{
+      phase1:"Close your eyes. Breathe in slow. Hold it. Now out slower — let the air leave completely. Again. In slow, out slower. You just took hard news. Your nervous system knows it. Let it settle for a moment. One more breath. That's all you need to do right now.",
+      phase2:"You are here. The rejection is real, and so are you. This one outcome — this single result — is not the verdict on you. It is data. One company, one moment, one decision that was not yours to make. You are still whole. You are still moving.",
+      phase3:"Picture this: tomorrow morning, or the day after, whenever you are ready. You do one small thing. You open the search again. You read one job posting. You send one message. You do not need to feel ready. You do not need to feel brave. You just do the next small action, the way you have done hard things before. That small step — just that one — is enough. The search continues. You continue.",
+      phase4:"Think of a time you came back from something that stung. A failure, a setback, a moment you wanted to quit. And you didn't. You showed up anyway. You kept going. That resilience — the part of you that does not stop — that is still in you right now. It did not leave when this rejection came. It is the same engine that keeps you moving forward.",
+      phase5:"This rejection does not define your next move. Your next move does. You are grounded. You are still in the search. Rest today. Tomorrow, you take the next step."
+    },
+    latency:7.18, cost:0.003378, det_pass:true,
+    judge:{avg:4.6, scores:{specificity:{score:4,rationale:"One job posting, one message, 'one company, one moment' are concrete though step is generic."},embodiment:{score:4,rationale:"Nervous system, air leaving completely, settling give visceral physical holds."},voice:{score:5,rationale:"Tight, varied, human; 'It is data' and 'the same engine' avoid filler."},restraint:{score:5,rationale:"Disciplined; permits rest without stacking false positivity."},arc_fit:{score:5,rationale:"Each phase clearly distinct; release separates rest-today from act-tomorrow."}}}
+  },
+  "heavy_mode2__gpt-4o-mini": {
+    phases:{
+      phase1:"Close your eyes and breathe. In for a slow count of four, and out for a longer count of six. Let the weight of today rest on your shoulders for just a moment. One more time. You are here, breathing, present.",
+      phase2:"Notice the surface beneath you, holding you steady. You may feel a sense of discouragement, and that's valid. It’s okay to feel this way. This moment feels heavy, but it is not the end of your journey. You are still here, and that matters.",
+      phase3:"Imagine the path ahead of you, one that continues despite this setback. Picture your next small step — perhaps it’s a single application or a brief moment of reconnecting with your network. Visualize the action: you take a deep breath, ready yourself, and reach out. This is just a step, not the entire road. You can see the next move clearly.",
+      phase4:"Think back to a time when you faced something difficult, like a failed project or a personal challenge, and you didn’t stop there. Remember how you found your way through that moment. You picked yourself up, learned, and continued on a stronger path. That resilience is still inside you, ready for this moment.",
+      phase5:"You’re still moving forward, even after this rejection. Tomorrow, you'll take that small step, and that is enough. You are not defined by this moment. Take a breath, ground yourself, and remind yourself that the journey continues."
+    },
+    latency:5.04, cost:0.000511, det_pass:true,
+    judge:{avg:2.8, scores:{specificity:{score:3,rationale:"Single application and reconnecting with network, but mostly soft abstractions."},embodiment:{score:3,rationale:"Surface holding you and breath counts, but 'weight on shoulders' is abstract."},voice:{score:2,rationale:"Reads template-coach with 'that's valid' and 'the journey continues.'"},restraint:{score:3,rationale:"Fairly contained though repeats reassurances about not being defined."},arc_fit:{score:3,rationale:"Phases present but release restates earlier lines rather than landing fresh."}}}
+  },
+  "open_mode2__gemini-2.5-flash": {
+    phases:{
+      phase1:"Right now, just bring your attention to your breath. A slow, steady inhale, then a slightly longer, softer exhale. Not trying to change anything, just noticing the rhythm. Feel the gentle rise and fall. Let it quiet the edges of any uncertainty you're carrying. One more deep, slow breath in, and release, letting whatever doesn't serve you right now simply drift away. You are just breathing, here.",
+      phase2:"Feel your feet on the floor, solid beneath you. Notice the weight of your body, held and supported. This moment, right here, is steady. Even with questions swirling, there is a quiet strength available to you. You are present. You are here, now.",
+      phase3:"Now, let's look ahead. Picture your next few days, not as a blur of tasks, but as a path you walk with intention. See yourself waking up, choosing a small, clear action for the day – perhaps a single focused hour of work, a thoughtful message sent, or simply taking a moment to plan without pressure. This isn't about solving everything at once. It's about taking one steady step, then the next. See that first clear step, feel the grounded decision behind it. You’re not rushing. You're simply moving forward, deliberately, creating clarity as you go.",
+      phase4:"Recall a time when you felt uncertain, perhaps at the beginning of a challenging project or a new learning curve, yet you kept showing up. You leaned into the process, gathered information, found your footing, and ultimately, you made progress. That deep capability to move through the unknown, to find your way to clarity, is who you are. That quiet resolve lives within you, ready to guide your next steps.",
+      phase5:"The path ahead clarifies with each step. You have everything you need to find your steady direction. Go, choose your next clear action."
+    },
+    latency:11.96, cost:0.000292, det_pass:true,
+    judge:{avg:3.2, scores:{specificity:{score:3,rationale:"A focused hour or thoughtful message, but stays mostly in intention-language."},embodiment:{score:3,rationale:"Feet on floor and body weight anchor early, then drifts conceptual."},voice:{score:3,rationale:"Smooth but 'letting whatever doesn't serve you drift away' is yoga-cliche."},restraint:{score:3,rationale:"Mostly steady though 'quiet strength' and 'quiet resolve' repeat softly."},arc_fit:{score:4,rationale:"Phases distinct with a clean directive release."}}}
+  },
+  "open_mode2__claude-haiku-4-5": {
+    phases:{
+      phase1:"Close your eyes. Breathe in slowly through your nose for a count of four. Hold for two. Out through your mouth for six. Feel that rhythm. Do it again. In for four, hold for two, out for six. Let the unsureness sit there without needing to fix it yet. One more breath. You are steady enough to be here.",
+      phase2:"Notice what is true right now: you are here. Your body is solid. The ground holds you. The uncertainty you're carrying is real, but it is not the same as danger. It is a signal that something needs attention. Not panic. Attention. You can do this.",
+      phase3:"Picture yourself moving through the next few days. Not the whole mountain — just the shape of it. You wake. You move through one clear thing: maybe it is one conversation, one piece of work, one decision you make without waiting for permission. You do it steadily. It does not have to be perfect. It just has to be real. You feel the ground under your feet as you do it. That is enough. That is the only thing in front of you right now.",
+      phase4:"Remember a time you came through something hard — a project you restarted, a skill you built from confusion, a day when you had no idea what came next but you showed up anyway and figured out the first step. You did not need everything to be clear. You just needed to move. That same person is here now. You have done this before.",
+      phase5:"You are clearing. The unsureness does not disappear, but it loses its grip. Take today steady. Take tomorrow one step at a time. You know how to do this."
+    },
+    latency:5.41, cost:0.003434, det_pass:true,
+    judge:{avg:4.6, scores:{specificity:{score:4,rationale:"One conversation, one decision without permission, 'just the shape of it' are concrete."},embodiment:{score:4,rationale:"Structured breath, ground holding, feet under you while you act anchor well."},voice:{score:5,rationale:"Crisp, distinctive; 'Not panic. Attention.' has real coach cadence."},restraint:{score:5,rationale:"Reframes uncertainty without false cheer; 'loses its grip' is honest."},arc_fit:{score:5,rationale:"Phases clearly distinct; release admits the unsureness persists."}}}
+  },
+  "open_mode2__gpt-4o-mini": {
+    phases:{
+      phase1:"Close your eyes for a moment. Take a deep breath in, filling your lungs, and then exhale slowly, letting your shoulders drop. Just breathe in, and let it go. One more time. Each breath settles you a little deeper into this moment.",
+      phase2:"Notice where you are right now. Feel the weight of your body against the surface you’re resting on. The ground is there to support you, steady and reliable. In this moment, you are safe to feel unsure, but you don’t have to rush into clarity. You can take your time.",
+      phase3:"Now, picture your day ahead. Imagine how it unfolds — small moments that draw you forward. Visualize a calm morning where you start with a simple task. Maybe it's enjoying the warmth of your coffee or listing one thing you want to achieve today. See yourself moving through the day, steady and collected, focusing on each task as it comes. You can meet the present with curiosity — no pressure to solve everything at once.",
+      phase4:"Think back to a moment when you faced uncertainty but navigated it successfully. Perhaps it was a time when you felt unsure of your choices, yet you still took a step forward and things came together. Picture how you leaned into the discomfort and emerged clearer, wiser. That same ability to engage with uncertainty is in you now.",
+      phase5:"This is your moment to reset. You move through today with intention, engaging with each step at your own pace. Clarity will come as you show up, and you’ll find it in the moments you take for yourself."
+    },
+    latency:5.02, cost:0.000524, det_pass:true,
+    judge:{avg:2.8, scores:{specificity:{score:3,rationale:"Coffee warmth and listing one thing give some concreteness, mostly vague."},embodiment:{score:3,rationale:"Body weight against surface and shoulders dropping, thin after phase 1."},voice:{score:2,rationale:"Soft and generic with 'meet the present with curiosity' filler."},restraint:{score:3,rationale:"Calmer than other gpt scripts but still trades in pleasant abstraction."},arc_fit:{score:3,rationale:"Phases present but embody and rehearse blur into the same calm-day image."}}}
+  }
+};
+
+// ---- human ratings (localStorage) ----
+function ratingKey(sid, mid) { return `hr_${sid}_${mid}`; }
+function getHuman(sid, mid) {
+  const v = localStorage.getItem(ratingKey(sid, mid));
+  return v !== null ? parseInt(v) : null;
+}
+function setHuman(sid, mid, val) {
+  localStorage.setItem(ratingKey(sid, mid), val);
+}
+
+// ---- helpers ----
+function scoreBadge(score) {
+  const cls = score >= 4 ? 'badge-green' : score >= 3 ? 'badge-yellow' : 'badge-red';
+  return `<span class="score-badge ${cls}" style="cursor:default">${score}/5</span>`;
+}
+function avgBadge(avg) {
+  const cls = avg >= 4 ? 'badge-green' : avg >= 3 ? 'badge-yellow' : 'badge-red';
+  return `<span class="badge ${cls}">${avg}</span>`;
+}
+function dataKey(sid, mid) {
+  return `${sid}__${mid}`;
+}
+
+// ---- build summary cards ----
+function buildCards() {
+  const container = document.getElementById('cards');
+  MODELS.forEach(mid => {
+    const results = SCENARIOS.map(s => DATA[dataKey(s.id, mid)]).filter(Boolean);
+    const avgLatency = (results.reduce((a,r)=>a+r.latency,0)/results.length).toFixed(1);
+    const avgCost = (results.reduce((a,r)=>a+r.cost,0)/results.length).toFixed(6);
+    const judgeAvg = (results.reduce((a,r)=>a+r.judge.avg,0)/results.length).toFixed(1);
+    const detPass = results.every(r=>r.det_pass);
+    const cls = judgeAvg >= 4 ? 'badge-green' : judgeAvg >= 3 ? 'badge-yellow' : 'badge-red';
+    container.innerHTML += `
+      <div class="card">
+        <div class="card-name">${MODEL_LABELS[mid]}</div>
+        <div class="card-stats">
+          <div class="stat">Judge avg<span>${avgBadge(judgeAvg)}</span></div>
+          <div class="stat">Avg latency<span>${avgLatency}s</span></div>
+          <div class="stat">Cost/call<span>$${avgCost}</span></div>
+          <div class="stat">Det. checks<span><span class="badge ${detPass?'badge-pass':'badge-fail'}">${detPass?'All pass':'Fails'}</span></span></div>
+        </div>
+      </div>`;
+  });
+}
+
+// ---- build tabs + panes ----
+function buildScenarios() {
+  const tabs = document.getElementById('tabs');
+  const panes = document.getElementById('panes');
+  SCENARIOS.forEach((sc, i) => {
+    tabs.innerHTML += `<div class="tab ${i===0?'active':''}" data-idx="${i}">${sc.label}</div>`;
+    panes.innerHTML += `<div class="scenario-pane ${i===0?'active':''}" id="pane-${i}">${buildPane(sc)}</div>`;
+  });
+  tabs.addEventListener('click', e => {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    const idx = tab.dataset.idx;
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.scenario-pane').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`pane-${idx}`).classList.add('active');
+  });
+}
+
+function buildPane(sc) {
+  const cols = MODELS.map(mid => {
+    const r = DATA[dataKey(sc.id, mid)];
+    if (!r) return `<div class="col"><div class="col-body">No data</div></div>`;
+    const voiceLow = r.judge.scores.voice.score <= 2;
+    const humanVal = getHuman(sc.id, mid);
+    const dimKeys = ['specificity','embodiment','voice','restraint','arc_fit'];
+    const badges = dimKeys.map(d => scoreBadge(r.judge.scores[d].score)).join('');
+    const rationales = dimKeys.map(d => `
+      <div class="rationale-row">
+        <span class="rationale-dim">${d}</span> (${r.judge.scores[d].score}/5): ${r.judge.scores[d].rationale}
+      </div>`).join('');
+    const phases = PHASES.map(p => `
+      <div class="phase-block">
+        <div class="phase-label">${p.label}</div>
+        <div class="phase-text">${escHtml(r.phases[p.key])}</div>
+      </div>`).join('');
+    return `
+      <div class="col${voiceLow?' low-voice':''}">
+        <div class="col-header">
+          <div class="col-model">${MODEL_LABELS[mid]}</div>
+          <div class="col-ops">
+            <span>⏱ ${r.latency}s</span>
+            <span>💰 $${r.cost}</span>
+            <span>${r.det_pass ? '✅ checks pass' : '❌ checks fail'}</span>
+          </div>
+        </div>
+        <div class="col-body">
+          <div class="phases">${phases}</div>
+          <div class="scores">
+            <div class="scores-row">
+              ${badges}
+              <span class="score-avg">avg ${avgBadge(r.judge.avg)}</span>
+            </div>
+            <button class="toggle-btn" onclick="toggleRationales(this)">Show judge rationales ▾</button>
+            <div class="rationales">${rationales}</div>
+          </div>
+          <div class="human-rating">
+            <div class="rating-label">
+              Human rating
+              <span class="rating-value" id="rv-${sc.id}-${mid}">${humanVal !== null ? humanVal : '—'}</span>
+            </div>
+            <input type="range" min="1" max="7" value="${humanVal !== null ? humanVal : 4}"
+              oninput="updateRating('${sc.id}','${mid}',this.value)"
+              ${humanVal === null ? 'style="opacity:0.4"' : ''}>
+            <div class="rating-scale"><span>1 generic</span><span>4 fine</span><span>7 moved me</span></div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+  return `
+    <p class="scenario-meta"><strong>${sc.label}</strong> &nbsp;·&nbsp; ${sc.meta}</p>
+    <div class="columns">${cols}</div>`;
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function toggleRationales(btn) {
+  const box = btn.nextElementSibling;
+  const open = box.classList.toggle('open');
+  btn.textContent = open ? 'Hide judge rationales ▴' : 'Show judge rationales ▾';
+}
+
+function updateRating(sid, mid, val) {
+  setHuman(sid, mid, parseInt(val));
+  const el = document.getElementById(`rv-${sid}-${mid}`);
+  if (el) el.textContent = val;
+  const slider = el.closest('.human-rating').querySelector('input[type=range]');
+  if (slider) slider.style.opacity = '1';
+  buildSummaryTable();
+}
+
+// ---- summary table ----
+function buildSummaryTable() {
+  const tbody = document.getElementById('summary-body');
+  let rows = '';
+  const totals = {gemini:{judge:0,human:0,hc:0},haiku:{judge:0,human:0,hc:0},gpt:{judge:0,human:0,hc:0}};
+  SCENARIOS.forEach(sc => {
+    const g = DATA[dataKey(sc.id,'gemini-2.5-flash')];
+    const h = DATA[dataKey(sc.id,'claude-haiku-4-5')];
+    const o = DATA[dataKey(sc.id,'gpt-4o-mini')];
+    const gh = getHuman(sc.id,'gemini-2.5-flash');
+    const hh = getHuman(sc.id,'claude-haiku-4-5');
+    const oh = getHuman(sc.id,'gpt-4o-mini');
+    totals.gemini.judge += g ? g.judge.avg : 0;
+    totals.haiku.judge += h ? h.judge.avg : 0;
+    totals.gpt.judge += o ? o.judge.avg : 0;
+    if (gh !== null) { totals.gemini.human += gh; totals.gemini.hc++; }
+    if (hh !== null) { totals.haiku.human += hh; totals.haiku.hc++; }
+    if (oh !== null) { totals.gpt.human += oh; totals.gpt.hc++; }
+    rows += `<tr>
+      <td>${sc.label}</td>
+      <td>${g ? avgBadge(g.judge.avg) : '—'}</td>
+      <td>${gh !== null ? gh : '<span class="na">—</span>'}</td>
+      <td>${h ? avgBadge(h.judge.avg) : '—'}</td>
+      <td>${hh !== null ? hh : '<span class="na">—</span>'}</td>
+      <td>${o ? avgBadge(o.judge.avg) : '—'}</td>
+      <td>${oh !== null ? oh : '<span class="na">—</span>'}</td>
+    </tr>`;
+  });
+  const n = SCENARIOS.length;
+  const gja = (totals.gemini.judge/n).toFixed(1);
+  const hja = (totals.haiku.judge/n).toFixed(1);
+  const oja = (totals.gpt.judge/n).toFixed(1);
+  const gha = totals.gemini.hc ? (totals.gemini.human/totals.gemini.hc).toFixed(1) : null;
+  const hha = totals.haiku.hc ? (totals.haiku.human/totals.haiku.hc).toFixed(1) : null;
+  const oha = totals.gpt.hc ? (totals.gpt.human/totals.gpt.hc).toFixed(1) : null;
+  rows += `<tr>
+    <td>Average</td>
+    <td>${avgBadge(gja)}</td><td>${gha !== null ? gha : '<span class="na">—</span>'}</td>
+    <td>${avgBadge(hja)}</td><td>${hha !== null ? hha : '<span class="na">—</span>'}</td>
+    <td>${avgBadge(oja)}</td><td>${oha !== null ? oha : '<span class="na">—</span>'}</td>
+  </tr>`;
+  tbody.innerHTML = rows;
+
+  // recommendation
+  const judgeWinner = [
+    {label:'Gemini 2.5 Flash', v:parseFloat(gja)},
+    {label:'Claude Haiku 4.5', v:parseFloat(hja)},
+    {label:'GPT-4o Mini', v:parseFloat(oja)},
+  ].sort((a,b)=>b.v-a.v)[0].label;
+
+  let humanLine = 'Fill in human ratings to see recommendation.';
+  const humanVals = [[gha,'Gemini 2.5 Flash'],[hha,'Claude Haiku 4.5'],[oha,'GPT-4o Mini']].filter(x=>x[0]!==null);
+  if (humanVals.length === 3) {
+    const humanWinner = humanVals.sort((a,b)=>parseFloat(b[0])-parseFloat(a[0]))[0][1];
+    humanLine = `Based on judge scores: <strong>${judgeWinner}</strong> &nbsp;·&nbsp; Based on human scores: <strong>${humanWinner}</strong>`;
+  } else if (humanVals.length > 0) {
+    humanLine = `Based on judge scores: <strong>${judgeWinner}</strong> &nbsp;·&nbsp; Human: fill remaining scenarios to compare.`;
+  } else {
+    humanLine = `Based on judge scores: <strong>${judgeWinner}</strong> &nbsp;·&nbsp; Fill human ratings to compare.`;
+  }
+  document.getElementById('recommendation').innerHTML = humanLine;
+}
+
+buildCards();
+buildScenarios();
+buildSummaryTable();
+</script>
+</body>
+</html>
