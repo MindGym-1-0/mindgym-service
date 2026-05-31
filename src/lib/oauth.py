@@ -127,4 +127,4 @@ def verify_jwt_token(token: str) -> dict:
         raise ValueError("Token has expired")
     except jwt.InvalidTokenError as e:
         raise ValueError(f"Invalid token: {e}")
-        
+
