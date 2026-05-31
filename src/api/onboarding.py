@@ -8,6 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from src.lib.auth_dependencies import get_current_user
 from src.lib.supabase_client import get_supabase_admin_client
 from src.types.models import OnboardingRequest, OnboardingResponse
+from src.lib.prompt_builder import derive_preparation_for
+from src.types.models import OnboardingGapAnalysis, OnboardingFirstSession
+from src.lib.session_service import insert_onboarding_session
+from src.lib.gemini_service import analyze_onboarding, generate_onboarding_script
+from src.lib.fallbacks import get_fallback_script
+from datetime import datetime
 
 router = APIRouter(prefix="/api", tags=["onboarding"])
 logger = logging.getLogger(__name__)
@@ -33,9 +39,21 @@ async def onboard(
     user_id = current_user["id"]
     record = {
         "id": user_id,
-        "goal": request.job_goal,
-        "stage": request.job_search_stage.value,
-        "anxiety_level": request.anxiety_level,
+        "employment_status": request.employment_status,
+        "unemployed_duration": request.unemployed_duration,
+        "job_timeline": request.job_timeline,
+        "target_role_category": request.target_role_category,
+        "target_role_note": request.target_role_note,
+        "company_types": request.company_types,
+        "applications_sent_min": request.applications_sent_min,
+        "applications_sent_max": request.applications_sent_max,
+        "recruiter_contacts": request.recruiter_contacts,
+        "first_round_interviews": request.first_round_interviews,
+        "final_round_interviews": request.final_round_interviews,
+        "offers": request.offers,
+        "emotional_challenge": request.emotional_challenge,
+        "baseline_anxiety": request.baseline_anxiety,
+        "onboarding_completed_at": datetime.utcnow().isoformat(),
     }
 
     try:
@@ -50,11 +68,87 @@ async def onboard(
             lambda: client.table("users").upsert(record, on_conflict="id").execute()
         )
 
+        preparation_for = derive_preparation_for(
+            employment_status=request.employment_status,
+            emotional_challenge=request.emotional_challenge,
+            job_timeline=request.job_timeline,
+        )
+
+        gap_analysis = await asyncio.wait_for(
+            asyncio.to_thread(lambda: analyze_onboarding(
+                employment_status=request.employment_status,
+                unemployed_duration=request.unemployed_duration,
+                job_timeline=request.job_timeline,
+                target_role_category=request.target_role_category,
+                target_role_note=request.target_role_note,
+                company_types=request.company_types,
+                applications_sent_min=request.applications_sent_min,
+                applications_sent_max=request.applications_sent_max,
+                recruiter_contacts=request.recruiter_contacts,
+                first_round_interviews=request.first_round_interviews,
+                final_round_interviews=request.final_round_interviews,
+                offers=request.offers,
+                emotional_challenge=request.emotional_challenge,
+                baseline_anxiety=request.baseline_anxiety,
+                preparation_for=preparation_for
+            )),
+            timeout=30.0
+        )
+
+        if gap_analysis is None:
+            raise HTTPException(status_code=503, detail="Gap analysis unavailable, please try again.")
+
+        onboarding_session = await asyncio.wait_for(
+            asyncio.to_thread(lambda: generate_onboarding_script(
+                employment_status=request.employment_status,
+                unemployed_duration=request.unemployed_duration,
+                job_timeline=request.job_timeline,
+                target_role_category=request.target_role_category,
+                target_role_note=request.target_role_note,
+                company_types=request.company_types,
+                applications_sent_min=request.applications_sent_min,
+                applications_sent_max=request.applications_sent_max,
+                recruiter_contacts=request.recruiter_contacts,
+                first_round_interviews=request.first_round_interviews,
+                final_round_interviews=request.final_round_interviews,
+                offers=request.offers,
+                emotional_challenge=request.emotional_challenge,
+                baseline_anxiety=request.baseline_anxiety,
+                preparation_for=preparation_for
+            )),
+            timeout=30.0
+        )
+
+        if onboarding_session is None:
+            onboarding_session = get_fallback_script(preparation_for)
+
+        session_id = await insert_onboarding_session(
+            user_id=user_id,
+            preparation_for=preparation_for,
+            baseline_anxiety=request.baseline_anxiety,
+            script=onboarding_session,
+        )
+
         return OnboardingResponse(
             success=True,
-            message="Onboarding completed successfully",
             user_id=user_id,
+            gap_analysis=OnboardingGapAnalysis(
+                mindset_gap=gap_analysis["mindset_gap"],
+                mindset_gap_detail=gap_analysis["mindset_gap_detail"],
+                hunting_gap=gap_analysis.get("hunting_gap"),
+                hunting_gap_detail=gap_analysis.get("hunting_gap_detail"),
+                baseline_anxiety_note=gap_analysis["baseline_anxiety_note"],
+            ),
+            first_session=OnboardingFirstSession(
+                session_id=session_id,
+                preparation_for=preparation_for,
+                session_title=gap_analysis["session_title"],
+                session_description=gap_analysis["session_description"],
+                session_tags=gap_analysis["session_tags"],
+                script=onboarding_session,
+            ),
         )
+
     except HTTPException:
         raise
     except Exception as exc:
