@@ -48,8 +48,6 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool | None = Field(default=None, alias="AUTH_COOKIE_SECURE")
     auth_cookie_samesite: str = Field(default="lax", alias="AUTH_COOKIE_SAMESITE")
     auth_cookie_domain: str | None = Field(default=None, alias="AUTH_COOKIE_DOMAIN")
-
-    
     google_client_id: str | None = Field(default=None, alias="GOOGLE_CLIENT_ID")
     google_client_secret: str | None = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
     google_redirect_uri: str | None = Field(default=None, alias="GOOGLE_REDIRECT_URI")
