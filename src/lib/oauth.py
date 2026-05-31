@@ -1,9 +1,6 @@
 """Google OAuth utilities and token management"""
-import asyncio
 import urllib.parse
 import httpx
-from google.oauth2 import id_token as google_id_token
-from google.auth.transport import requests as google_requests
 from src.lib.config import settings
 
 
@@ -54,31 +51,3 @@ async def exchange_auth_code_for_token(code: str) -> dict:
             raise ValueError(f"Failed to exchange code for token: {response.text}")
 
         return response.json()
-
-
-async def verify_google_token(id_token: str) -> dict:
-    """
-    Verify and decode Google ID token using Google's public keys
-
-    This verifies the cryptographic signature, expiration, issuer, and audience
-    in a single secure call using Google's official oauth2 library.
-
-    Args:
-        id_token: JWT token from Google
-
-    Returns:
-        Decoded token payload
-
-    Raises:
-        ValueError: If token verification fails (invalid signature, expired, wrong audience, etc.)
-    """
-    try:
-        decoded = await asyncio.to_thread(
-            google_id_token.verify_oauth2_token,
-            id_token,
-            google_requests.Request(),
-            audience=settings.google_client_id,
-        )
-        return decoded
-    except ValueError as e:
-        raise ValueError(f"Token verification failed: {e}")
