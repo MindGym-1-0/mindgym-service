@@ -58,6 +58,11 @@ def create_app() -> FastAPI:
     final_origins = list(dict.fromkeys(allow_origins + cors_origins))
     # Credentials-based auth cannot be used with wildcard CORS origins.
     final_origins = [origin for origin in final_origins if origin != "*"]
+    if not final_origins:
+        raise RuntimeError(
+            "CORS_ORIGINS only contained '*' which is incompatible with "
+            "allow_credentials=True. Add at least one explicit origin."
+        )
 
     app.add_middleware(
         CORSMiddleware,
