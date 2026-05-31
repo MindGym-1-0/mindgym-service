@@ -16,7 +16,7 @@ from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client
 
 # Reuse your streak increment logic built from Part 2 directly
-from src.lib.streaks import increment_user_streak
+from src.api.streaks import increment_user_streak
 from src.types.daily_focus import ActionType, DailyFocusResponse, GeminiDailyFocusOutput
 
 logger = logging.getLogger(__name__)

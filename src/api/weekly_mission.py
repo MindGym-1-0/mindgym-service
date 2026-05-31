@@ -1,13 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, HTTPException, status
 from pydantic import BaseModel
-from supabase import Client
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client
@@ -34,7 +33,6 @@ def get_target_monday() -> date:
 
 def execute_fallback_generation(user_context: dict) -> dict:
     """Step 4 Fallback Engine: Explicitly builds 3 tailored actions via string
-
     formatting using pipeline metrics to ensure the client never encounters a
     processing failure.
     """
@@ -61,16 +59,17 @@ def execute_fallback_generation(user_context: dict) -> dict:
 async def generate_weekly_mission(
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
-    supabase: Client = Depends(get_supabase_user_client),
 ):
+    # Resolve the client manually using the user's token to satisfy Row Level Security (RLS)
+    supabase = get_supabase_user_client(token)
     user_id = str(current_user_id)
 
     # ------------------------------------------
     # STEP 1 — FETCH USER CONTEXT FROM SUPABASE
     # ------------------------------------------
     try:
-        user_res = (
-            supabase.table("users").select("goal, stage").eq("id", user_id).execute()
+        user_res = await asyncio.to_thread(
+            supabase.table("users").select("goal, stage").eq("id", user_id).execute
         )
         user_profile = (
             user_res.data[0]
@@ -78,40 +77,43 @@ async def generate_weekly_mission(
             else {"goal": "General Placement", "stage": "Interviewing"}
         )
 
-        jobs_res = (
+        # Added .is_("outcome", "null") to omit finalized job applications
+        jobs_res = await asyncio.to_thread(
             supabase.table("jobs")
             .select("id, stage, last_moved_at")
             .eq("user_id", user_id)
-            .execute()
+            .is_("outcome", "null")
+            .execute
         )
         active_jobs = jobs_res.data or []
 
         seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
-        sessions_res = (
+        # Swapped mood_delta -> anxiety_level_delta
+        sessions_res = await asyncio.to_thread(
             supabase.table("ai_sessions")
-            .select("mood_delta")
+            .select("anxiety_level_delta")
             .eq("user_id", user_id)
             .gte("created_at", seven_days_ago)
-            .execute()
+            .execute
         )
         sessions_this_week = sessions_res.data or []
         session_count = len(sessions_this_week)
 
-        avg_mood_delta = 0.0
+        avg_anxiety_delta = 0.0
         if session_count > 0:
-            avg_mood_delta = (
-                sum(s.get("mood_delta", 0.0) for s in sessions_this_week)
+            avg_anxiety_delta = (
+                sum(s.get("anxiety_level_delta", 0.0) for s in sessions_this_week)
                 / session_count
             )
 
-        prev_mission_res = (
+        prev_mission_res = await asyncio.to_thread(
             supabase.table("weekly_mission")
             .select("completion_count")
             .eq("user_id", user_id)
             .order("week_start_date", descending=True)
             .limit(1)
-            .execute()
+            .execute
         )
         prev_completion_count = (
             prev_mission_res.data[0]["completion_count"] if prev_mission_res.data else 0
@@ -123,7 +125,7 @@ async def generate_weekly_mission(
             active_jobs,
             session_count,
             prev_completion_count,
-            avg_mood_delta,
+            avg_anxiety_delta,
         ) = ([], 0, 0, 0.0)
         user_profile = {"goal": "General Placement", "stage": "Interviewing"}
 
@@ -132,7 +134,7 @@ async def generate_weekly_mission(
         "active_jobs": active_jobs,
         "session_count": session_count,
         "prev_completion_count": prev_completion_count,
-        "avg_mood_delta": avg_mood_delta,
+        "avg_anxiety_delta": avg_anxiety_delta,
     }
 
     # ------------------------------------------
@@ -145,7 +147,7 @@ async def generate_weekly_mission(
     - Career Goal: {user_profile.get('goal')}
     - Application Stage: {user_profile.get('stage')}
     - Current Active Pipeline Jobs: {json.dumps(active_jobs)}
-    - Activity Volume This Week: {session_count} completed sessions (Avg Mood Change: {avg_mood_delta})
+    - Activity Volume This Week: {session_count} completed sessions (Avg Anxiety Change: {avg_anxiety_delta})
     - Completed Targets from Last Week: {prev_completion_count}/3
 
     Requirements:
@@ -165,7 +167,7 @@ async def generate_weekly_mission(
         response = await asyncio.wait_for(
             asyncio.to_thread(
                 client.models.generate_content,
-                model="gemini-2.5-flash",  # Upgraded to active flash engine matching setup profiles
+                model="gemini-2.5-flash",  # Preserved 2.5-flash engine structure
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -209,20 +211,20 @@ async def generate_weekly_mission(
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    existing_row = (
+    existing_row = await asyncio.to_thread(
         supabase.table("weekly_mission")
         .select("*")
         .eq("user_id", user_id)
         .eq("week_start_date", target_monday.isoformat())
-        .execute()
+        .execute
     )
 
     if existing_row.data:
-        res = (
+        res = await asyncio.to_thread(
             supabase.table("weekly_mission")
             .update(upsert_payload)
             .eq("id", existing_row.data[0]["id"])
-            .execute()
+            .execute
         )
     else:
         upsert_payload["generated_at"] = datetime.now(timezone.utc).isoformat()
@@ -230,7 +232,9 @@ async def generate_weekly_mission(
         upsert_payload["action_2_completed"] = False
         upsert_payload["action_3_completed"] = False
         upsert_payload["completion_count"] = 0
-        res = supabase.table("weekly_mission").insert(upsert_payload).execute()
+        res = await asyncio.to_thread(
+            supabase.table("weekly_mission").insert(upsert_payload).execute
+        )
 
     # ------------------------------------------
     # STEP 6 — RETURN MAPPED RESPONSE RECORD
@@ -299,8 +303,9 @@ async def complete_weekly_mission(
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
     payload: WeeklyMissionCompleteRequest = Body(...),
-    supabase: Client = Depends(get_supabase_user_client),
 ):
+    # Authenticate via user context token mapping to unlock dynamic RLS structures
+    supabase = get_supabase_user_client(token)
     user_id = str(current_user_id)
     target_monday_str = get_target_monday().isoformat()
 
@@ -311,12 +316,12 @@ async def complete_weekly_mission(
         )
 
     # 1. Fetch current week's mission row to check state existence
-    existing_row = (
+    existing_row = await asyncio.to_thread(
         supabase.table("weekly_mission")
         .select("*")
         .eq("user_id", user_id)
         .eq("week_start_date", target_monday_str)
-        .execute()
+        .execute
     )
 
     if not existing_row.data:
@@ -349,11 +354,14 @@ async def complete_weekly_mission(
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # 3. Persist modifications back to the parent table row reference
+    # 3. Persist modifications back to the parent table row reference (using non-blocking async thread)
     try:
-        supabase.table("weekly_mission").update(update_payload).eq(
-            "id", record_id
-        ).execute()
+        await asyncio.to_thread(
+            supabase.table("weekly_mission")
+            .update(update_payload)
+            .eq("id", record_id)
+            .execute
+        )
     except Exception as save_err:
         logger.error(
             f"Failed writing update payload transaction parameters into mission ledger: {str(save_err)}"

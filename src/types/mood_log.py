@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class MoodLogCreate(BaseModel):
-    # Removed user_id as it is sourced from the authenticated token
     score: int = Field(
         ..., ge=1, le=10, description="Score must be an integer between 1 and 10"
     )

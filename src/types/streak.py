@@ -7,7 +7,7 @@ class StreakIncrementResponse(BaseModel):
 
     current_streak: int
     longest_streak: int
-    milestone: Optional[int]
+    milestone: Optional[int] = None
 
 
 class StreakGetResponse(BaseModel):

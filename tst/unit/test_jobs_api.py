@@ -1,3 +1,4 @@
+# test_jobs_api.py
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -11,7 +12,7 @@ from fastapi.testclient import TestClient
 import src.api.jobs_id as jobs_id_module
 import src.api.jobs as jobs_module
 from src.lib.auth import require_current_user_id, require_current_user_token
-from src.main import app, create_app
+from src.main import create_app
 
 
 @pytest.fixture
@@ -36,14 +37,37 @@ def sample_job_row(fake_user_id: UUID):
     }
 
 
+def create_mock_chain() -> MagicMock:
+    """Helper utility to mimic fluent builders common in Supabase Postgrest queries.
+
+    Prevents cross-thread serialization/reference failures inside asyncio.to_thread blocks.
+    """
+    mock_query_layer = MagicMock(name="fluent_query_layer")
+
+    mock_query_layer.insert.return_value = mock_query_layer
+    mock_query_layer.select.return_value = mock_query_layer
+    mock_query_layer.eq.return_value = mock_query_layer
+    mock_query_layer.is_.return_value = mock_query_layer
+    mock_query_layer.order.return_value = mock_query_layer
+    mock_query_layer.limit.return_value = mock_query_layer
+    mock_query_layer.update.return_value = mock_query_layer
+    mock_query_layer.delete.return_value = mock_query_layer
+    mock_query_layer.maybe_single.return_value = mock_query_layer
+
+    return mock_query_layer
+
+
 @pytest.fixture
 def api_client(fake_user_id: UUID, monkeypatch):
-    client = TestClient(app)
+    # Fix 1: Use application factory to isolate instances and register routers properly
+    test_app = create_app()
+    client = TestClient(test_app)
+
     monkeypatch.setitem(
-        app.dependency_overrides, require_current_user_id, lambda: fake_user_id
+        test_app.dependency_overrides, require_current_user_id, lambda: fake_user_id
     )
     monkeypatch.setitem(
-        app.dependency_overrides, require_current_user_token, lambda: "fake-token"
+        test_app.dependency_overrides, require_current_user_token, lambda: "fake-token"
     )
 
     mock_sb = MagicMock(name="supabase_client")
@@ -52,23 +76,15 @@ def api_client(fake_user_id: UUID, monkeypatch):
         jobs_id_module, "get_supabase_user_client", lambda token: mock_sb
     )
 
-    qb = MagicMock(name="query_builder")
+    qb = create_mock_chain()
     mock_sb.table.return_value = qb
-
-    qb.insert.return_value = qb
-    qb.select.return_value = qb
-    qb.eq.return_value = qb
-    qb.is_.return_value = qb
-    qb.order.return_value = qb
-    qb.limit.return_value = qb
-    qb.update.return_value = qb
-    qb.delete.return_value = qb
-    qb.maybe_single.return_value = qb
 
     yield client, qb, mock_sb
 
-    app.dependency_overrides.pop(require_current_user_id, None)
-    app.dependency_overrides.pop(require_current_user_token, None)
+    test_app.dependency_overrides.clear()
+
+
+# Fix 2: Updated prefixes from '/api/jobs' -> '/api/applications' below
 
 
 def test_post_creates_job_201(api_client, sample_job_row: dict[str, object]):
@@ -77,7 +93,7 @@ def test_post_creates_job_201(api_client, sample_job_row: dict[str, object]):
     qb.execute.return_value = SimpleNamespace(data=[sample_job_row])
 
     resp = client.post(
-        "/api/jobs",
+        "/api/applications",
         json={"company": " Acme ", "role": " Engineer "},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -95,7 +111,9 @@ def test_get_lists_jobs_ordered(api_client, sample_job_row: dict[str, object]):
 
     qb.execute.return_value = SimpleNamespace(data=[row2, sample_job_row])
 
-    resp = client.get("/api/jobs", headers={"Authorization": "Bearer fake-token"})
+    resp = client.get(
+        "/api/applications", headers={"Authorization": "Bearer fake-token"}
+    )
     assert resp.status_code == 200
 
     assert isinstance(resp.json(), list)
@@ -108,7 +126,9 @@ def test_get_empty_returns_array(api_client):
 
     qb.execute.return_value = SimpleNamespace(data=[])
 
-    resp = client.get("/api/jobs", headers={"Authorization": "Bearer fake-token"})
+    resp = client.get(
+        "/api/applications", headers={"Authorization": "Bearer fake-token"}
+    )
     assert resp.status_code == 200
     assert resp.json() == []
 
@@ -117,7 +137,7 @@ def test_post_invalid_status_400(api_client):
     client, qb, _sb = api_client
 
     resp = client.post(
-        "/api/jobs",
+        "/api/applications",
         json={"company": "Acme", "role": "Engineer", "status": "nope"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -130,7 +150,7 @@ def test_post_missing_company_400(api_client):
     client, qb, _sb = api_client
 
     resp = client.post(
-        "/api/jobs",
+        "/api/applications",
         json={"role": "Engineer"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -144,7 +164,7 @@ def test_post_only_whitespace_company_400(api_client):
     client, qb, _sb = api_client
 
     resp = client.post(
-        "/api/jobs",
+        "/api/applications",
         json={"company": "     ", "role": "Backend Engineer"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -162,7 +182,7 @@ def test_patch_updates_job(api_client, sample_job_row: dict[str, object]):
     qb.execute.return_value = SimpleNamespace(data=[updated])
 
     resp = client.patch(
-        f"/api/jobs/{sample_job_row['id']}",
+        f"/api/applications/{sample_job_row['id']}",
         json={"status": "screen"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -176,7 +196,7 @@ def test_patch_invalid_status_400(api_client, sample_job_row: dict[str, object])
     client, qb, _sb = api_client
 
     resp = client.patch(
-        f"/api/jobs/{sample_job_row['id']}",
+        f"/api/applications/{sample_job_row['id']}",
         json={"status": "nope"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -191,7 +211,7 @@ def test_patch_not_found_404(api_client, sample_job_row: dict[str, object]):
     qb.execute.return_value = SimpleNamespace(data=[])
 
     resp = client.patch(
-        f"/api/jobs/{sample_job_row['id']}",
+        f"/api/applications/{sample_job_row['id']}",
         json={"status": "screen"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -205,7 +225,7 @@ def test_delete_ok(api_client, sample_job_row: dict[str, object]):
     qb.execute.return_value = SimpleNamespace(data=[{"id": sample_job_row["id"]}])
 
     resp = client.delete(
-        f"/api/jobs/{sample_job_row['id']}",
+        f"/api/applications/{sample_job_row['id']}",
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 200
@@ -218,7 +238,7 @@ def test_delete_not_found_404(api_client, sample_job_row: dict[str, object]):
     qb.execute.return_value = SimpleNamespace(data=[])
 
     resp = client.delete(
-        f"/api/jobs/{sample_job_row['id']}",
+        f"/api/applications/{sample_job_row['id']}",
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 404
@@ -226,7 +246,7 @@ def test_delete_not_found_404(api_client, sample_job_row: dict[str, object]):
 
 def test_unauthenticated_401():
     client = TestClient(create_app())
-    resp = client.get("/api/jobs")
+    resp = client.get("/api/applications")
     assert resp.status_code == 401
 
 
@@ -242,14 +262,13 @@ def test_advance_stage_sequential_success(api_client, sample_job_row):
     updated_row = dict(sample_job_row)
     updated_row["status"] = "screen"
 
-    # Mock sequence chain responses: 1st for maybe_single select, 2nd for update return
     qb.execute.side_effect = [
         SimpleNamespace(data=sample_job_row),
         SimpleNamespace(data=[updated_row]),
     ]
 
     resp = client.patch(
-        f"/api/jobs/{sample_job_row['id']}/advance",
+        f"/api/applications/{sample_job_row['id']}/advance",
         json={"new_stage": "screen"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -264,8 +283,8 @@ def test_advance_stage_illegal_skip_400(api_client, sample_job_row):
     qb.execute.return_value = SimpleNamespace(data=sample_job_row)
 
     resp = client.patch(
-        f"/api/jobs/{sample_job_row['id']}/advance",
-        json={"new_stage": "hm"},  # Skipping screen status node entirely
+        f"/api/applications/{sample_job_row['id']}/advance",
+        json={"new_stage": "hm"},
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 400
@@ -285,15 +304,15 @@ def test_log_outcome_terminal_success(api_client, sample_job_row):
     closed_row["status"] = "closed"
     closed_row["outcome"] = "rejected"
 
-    # Sequence return layout: 1. Confirm Job exists, 2. Return updated row, 3. Find target interview to trigger
     qb.execute.side_effect = [
         SimpleNamespace(data={"id": sample_job_row["id"]}),
         SimpleNamespace(data=[closed_row]),
         SimpleNamespace(data={"id": "interview-uuid-123"}),
+        SimpleNamespace(data=[]),
     ]
 
     resp = client.post(
-        f"/api/jobs/{sample_job_row['id']}/outcome",
+        f"/api/applications/{sample_job_row['id']}/outcome",
         json={"outcome": "rejected"},
         headers={"Authorization": "Bearer fake-token"},
     )
@@ -301,7 +320,6 @@ def test_log_outcome_terminal_success(api_client, sample_job_row):
     assert resp.status_code == 200
     assert resp.json()["status"] == "closed"
     assert resp.json()["outcome"] == "rejected"
-    # Verify cascade update to target interview table executed properly
     sb.table.assert_any_call("interviews")
 
 
@@ -325,7 +343,9 @@ def test_get_stale_jobs_filtration(api_client, sample_job_row):
 
     qb.execute.return_value = SimpleNamespace(data=[row_stale, row_fresh])
 
-    resp = client.get("/api/jobs/stale", headers={"Authorization": "Bearer fake-token"})
+    resp = client.get(
+        "/api/applications/stale", headers={"Authorization": "Bearer fake-token"}
+    )
 
     assert resp.status_code == 200
     results = resp.json()

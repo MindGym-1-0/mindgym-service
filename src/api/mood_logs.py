@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 import logging
+import asyncio  # Added for thread pool delegation
 from uuid import UUID
 from typing import Dict
 from datetime import datetime, timezone, timedelta
@@ -30,16 +31,20 @@ async def create_mood_log(
 ):
     try:
         sb = get_supabase_user_client(token)
-        result = (
-            sb.table("mood_logs")
-            .insert(
-                {
-                    "user_id": str(current_user_id),
-                    "score": payload.score,
-                    "note": payload.note,
-                }
+
+        # Wrapped synchronous Supabase call in asyncio.to_thread
+        result = await asyncio.to_thread(
+            lambda: (
+                sb.table("mood_logs")
+                .insert(
+                    {
+                        "user_id": str(current_user_id),
+                        "score": payload.score,
+                        "note": payload.note,
+                    }
+                )
+                .execute()
             )
-            .execute()
         )
 
         if not result.data:
@@ -49,6 +54,8 @@ async def create_mood_log(
             )
 
         return result.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating mood log: {str(e)}")
         raise HTTPException(
@@ -67,7 +74,9 @@ async def get_mood_summary(
     user_id: UUID,
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
-    period: str = Query("week", regex="^(week|month|all)$"),
+    period: str = Query(
+        "week", pattern="^(week|month|all)$"
+    ),  # Cleaned up deprecated regex arg
 ):
     if str(user_id) != str(current_user_id):
         raise HTTPException(
@@ -77,12 +86,16 @@ async def get_mood_summary(
 
     try:
         sb = get_supabase_user_client(token)
-        result = (
-            sb.table("mood_logs")
-            .select("score, created_at")
-            .eq("user_id", str(user_id))
-            .order("created_at", descending=True)
-            .execute()
+
+        # Wrapped synchronous Supabase query loop in asyncio.to_thread
+        result = await asyncio.to_thread(
+            lambda: (
+                sb.table("mood_logs")
+                .select("score, created_at")
+                .eq("user_id", str(user_id))
+                .order("created_at", descending=True)
+                .execute()
+            )
         )
 
         all_logs = result.data or []
@@ -138,6 +151,8 @@ async def get_mood_summary(
             avg_score=avg_score, total_logs=total_logs, last_7_days=last_7_days_list
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error compiling mood log summary: {str(e)}")
         raise HTTPException(
