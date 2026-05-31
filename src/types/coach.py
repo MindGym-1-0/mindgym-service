@@ -75,12 +75,9 @@ class CoachPrepPlanResponse(BaseModel):
     coach_note: str = Field(..., min_length=1)
 
 
-class SavedCoachPrepPlanResponse(BaseModel):
+class SavedCoachPrepPlanResponse(CoachPrepPlanResponse):
     model_config = ConfigDict(extra="ignore")
 
-    plan: list[PrepPlanItem]
-    recommended_first_session: RecommendedFirstSession
-    coach_note: str = Field(..., min_length=1)
     created_at: datetime
 
 
