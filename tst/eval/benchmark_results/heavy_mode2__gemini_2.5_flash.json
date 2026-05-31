@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "heavy_mode2",
+    "label": "Heavy Mode 2 (rejection recovery)",
+    "inputs": {
+      "preparation_for": "rejection_recovery",
+      "company": null,
+      "role": null,
+      "current_feeling": "discouraged",
+      "anxiety_level_before": 6,
+      "desired_feeling": "grounded",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "gemini-2.5-flash",
+  "result": {
+    "raw": "{\n  \"phase1\": \"Let's just take a breath. Close your eyes, or soften your gaze. Feel your breath come in slow, and release it even slower. There\u2019s a natural rhythm to it. Right now, just let yourself be here with that rhythm. The weight of discouragement can be heavy, but for these next few moments, we'll just allow it to settle, and breathe through it. Just in slow, out slower. That's it.\",\n  \"phase2\": \"Feel the chair beneath you, the ground under your feet. Steady. You're feeling discouraged, and that's a natural, human response when things don't go as hoped. It's okay for those feelings to be present. They don't define your path forward, they're just part of today. You are still here, and you are still capable.\",\n  \"phase3\": \"This outcome, this specific result, is one data point in a much larger journey. It feels significant right now, of course, and that's understandable. But it's not the verdict on you, or your worth, or your ability. Picture this: the search continues. Not the whole mountain, just the next small, steady step. Maybe it\u2019s opening the job board and scanning one listing. Maybe it's sending one message. Or simply taking one hour to yourself. Just one clear, deliberate action that re-engages you with your path, gently. You\u2019re not starting over, you\u2019re simply continuing forward.\",\n  \"phase4\": \"Now, think back. Remember a time when something didn't go your way, a setback that felt significant. And yet, you picked yourself up. You kept going. You found a way to navigate it, to learn from it, or simply to move past it. That resilience, that quiet strength to continue even when it's hard \u2013 that\u2019s deeply etched into who you are. Access that feeling now. It's not new; it's a part of your blueprint.\",\n  \"phase5\": \"You\u2019ve processed this moment. Your strength is in your persistence, not just your pace. The search continues. You choose the next small step, and you take it. Steady. Forward.\"\n}",
+    "data": {
+      "phase1": "Let's just take a breath. Close your eyes, or soften your gaze. Feel your breath come in slow, and release it even slower. There\u2019s a natural rhythm to it. Right now, just let yourself be here with that rhythm. The weight of discouragement can be heavy, but for these next few moments, we'll just allow it to settle, and breathe through it. Just in slow, out slower. That's it.",
+      "phase2": "Feel the chair beneath you, the ground under your feet. Steady. You're feeling discouraged, and that's a natural, human response when things don't go as hoped. It's okay for those feelings to be present. They don't define your path forward, they're just part of today. You are still here, and you are still capable.",
+      "phase3": "This outcome, this specific result, is one data point in a much larger journey. It feels significant right now, of course, and that's understandable. But it's not the verdict on you, or your worth, or your ability. Picture this: the search continues. Not the whole mountain, just the next small, steady step. Maybe it\u2019s opening the job board and scanning one listing. Maybe it's sending one message. Or simply taking one hour to yourself. Just one clear, deliberate action that re-engages you with your path, gently. You\u2019re not starting over, you\u2019re simply continuing forward.",
+      "phase4": "Now, think back. Remember a time when something didn't go your way, a setback that felt significant. And yet, you picked yourself up. You kept going. You found a way to navigate it, to learn from it, or simply to move past it. That resilience, that quiet strength to continue even when it's hard \u2013 that\u2019s deeply etched into who you are. Access that feeling now. It's not new; it's a part of your blueprint.",
+      "phase5": "You\u2019ve processed this moment. Your strength is in your persistence, not just your pace. The search continues. You choose the next small step, and you take it. Steady. Forward."
+    },
+    "json_valid": true,
+    "latency": 11.99,
+    "finish_reason": "1",
+    "input_tokens": 2228,
+    "output_tokens": 478,
+    "cost_usd": 0.000311
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}

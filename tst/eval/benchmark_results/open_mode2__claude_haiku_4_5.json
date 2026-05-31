@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "open_mode2",
+    "label": "Open Mode 2 (general reset)",
+    "inputs": {
+      "preparation_for": "general_reset",
+      "company": null,
+      "role": null,
+      "current_feeling": "unsure",
+      "anxiety_level_before": 4,
+      "desired_feeling": "clear_minded",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "claude-haiku-4-5",
+  "result": {
+    "raw": "```json\n{\n  \"phase1\": \"Close your eyes. Breathe in slowly through your nose for a count of four. Hold for two. Out through your mouth for six. Feel that rhythm. Do it again. In for four, hold for two, out for six. Let the unsureness sit there without needing to fix it yet. One more breath. You are steady enough to be here.\",\n  \"phase2\": \"Notice what is true right now: you are here. Your body is solid. The ground holds you. The uncertainty you're carrying is real, but it is not the same as danger. It is a signal that something needs attention. Not panic. Attention. You can do this.\",\n  \"phase3\": \"Picture yourself moving through the next few days. Not the whole mountain \u2014 just the shape of it. You wake. You move through one clear thing: maybe it is one conversation, one piece of work, one decision you make without waiting for permission. You do it steadily. It does not have to be perfect. It just has to be real. You feel the ground under your feet as you do it. That is enough. That is the only thing in front of you right now.\",\n  \"phase4\": \"Remember a time you came through something hard \u2014 a project you restarted, a skill you built from confusion, a day when you had no idea what came next but you showed up anyway and figured out the first step. You did not need everything to be clear. You just needed to move. That same person is here now. You have done this before.\",\n  \"phase5\": \"You are clearing. The unsureness does not disappear, but it loses its grip. Take today steady. Take tomorrow one step at a time. You know how to do this.\"\n}\n```",
+    "data": {
+      "phase1": "Close your eyes. Breathe in slowly through your nose for a count of four. Hold for two. Out through your mouth for six. Feel that rhythm. Do it again. In for four, hold for two, out for six. Let the unsureness sit there without needing to fix it yet. One more breath. You are steady enough to be here.",
+      "phase2": "Notice what is true right now: you are here. Your body is solid. The ground holds you. The uncertainty you're carrying is real, but it is not the same as danger. It is a signal that something needs attention. Not panic. Attention. You can do this.",
+      "phase3": "Picture yourself moving through the next few days. Not the whole mountain \u2014 just the shape of it. You wake. You move through one clear thing: maybe it is one conversation, one piece of work, one decision you make without waiting for permission. You do it steadily. It does not have to be perfect. It just has to be real. You feel the ground under your feet as you do it. That is enough. That is the only thing in front of you right now.",
+      "phase4": "Remember a time you came through something hard \u2014 a project you restarted, a skill you built from confusion, a day when you had no idea what came next but you showed up anyway and figured out the first step. You did not need everything to be clear. You just needed to move. That same person is here now. You have done this before.",
+      "phase5": "You are clearing. The unsureness does not disappear, but it loses its grip. Take today steady. Take tomorrow one step at a time. You know how to do this."
+    },
+    "json_valid": true,
+    "latency": 5.41,
+    "finish_reason": "end_turn",
+    "input_tokens": 2342,
+    "output_tokens": 390,
+    "cost_usd": 0.003434
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}

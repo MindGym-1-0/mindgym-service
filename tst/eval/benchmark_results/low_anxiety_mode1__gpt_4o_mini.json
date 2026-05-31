@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "low_anxiety_mode1",
+    "label": "Low-anxiety Mode 1 (recruiter call)",
+    "inputs": {
+      "preparation_for": "recruiter_call",
+      "company": "Stripe",
+      "role": "Software Engineer",
+      "current_feeling": "anxious but hopeful",
+      "anxiety_level_before": 3,
+      "desired_feeling": "confident",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "gpt-4o-mini",
+  "result": {
+    "raw": "{\n  \"phase1\": \"Close your eyes. Inhale deeply for four counts, feeling the breath fill your lungs. Hold for two. Now exhale slowly for six counts, allowing any tension to drift away. Once more: in for four, hold for two, out for six. You are here, present in this moment.\",\n  \"phase2\": \"Feel the surface beneath you \u2014 the chair supporting your back, your feet touching the ground. You are anchored in this space. Notice the calm that's already present. You are ready to connect.\",\n  \"phase3\": \"Now picture yourself on the call with the recruiter from Stripe. There's a moment before the conversation begins, and you take a breath, feeling the anticipation in the air. When the call starts, you express why this role as a Software Engineer excites you, speaking clearly and with warmth. You share your story concisely, weaving in your passion for technology and your experience. You\u2019re there, and it feels natural. You engage with curiosity, asking insightful questions that show your interest and readiness.\",\n  \"phase4\": \"Think back to a time when you connected easily with someone new, perhaps in a discussion about a project you loved or a collaboration that brought you joy. Remember the clarity you had in your voice, how you listened, how energized both of you were by the conversation. That moment of ease and presence? It's part of you as you step into the call with Stripe.\",\n  \"phase5\": \"You are ready for your call with the recruiter at Stripe. You\u2019ll share your journey as a Software Engineer with confidence and clarity. Take a deep breath and step into that conversation knowing you are prepared and capable.\"\n}",
+    "data": {
+      "phase1": "Close your eyes. Inhale deeply for four counts, feeling the breath fill your lungs. Hold for two. Now exhale slowly for six counts, allowing any tension to drift away. Once more: in for four, hold for two, out for six. You are here, present in this moment.",
+      "phase2": "Feel the surface beneath you \u2014 the chair supporting your back, your feet touching the ground. You are anchored in this space. Notice the calm that's already present. You are ready to connect.",
+      "phase3": "Now picture yourself on the call with the recruiter from Stripe. There's a moment before the conversation begins, and you take a breath, feeling the anticipation in the air. When the call starts, you express why this role as a Software Engineer excites you, speaking clearly and with warmth. You share your story concisely, weaving in your passion for technology and your experience. You\u2019re there, and it feels natural. You engage with curiosity, asking insightful questions that show your interest and readiness.",
+      "phase4": "Think back to a time when you connected easily with someone new, perhaps in a discussion about a project you loved or a collaboration that brought you joy. Remember the clarity you had in your voice, how you listened, how energized both of you were by the conversation. That moment of ease and presence? It's part of you as you step into the call with Stripe.",
+      "phase5": "You are ready for your call with the recruiter at Stripe. You\u2019ll share your journey as a Software Engineer with confidence and clarity. Take a deep breath and step into that conversation knowing you are prepared and capable."
+    },
+    "json_valid": true,
+    "latency": 6.84,
+    "finish_reason": "stop",
+    "input_tokens": 2204,
+    "output_tokens": 345,
+    "cost_usd": 0.000538
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}

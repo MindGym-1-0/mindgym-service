@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "open_mode2",
+    "label": "Open Mode 2 (general reset)",
+    "inputs": {
+      "preparation_for": "general_reset",
+      "company": null,
+      "role": null,
+      "current_feeling": "unsure",
+      "anxiety_level_before": 4,
+      "desired_feeling": "clear_minded",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "gpt-4o-mini",
+  "result": {
+    "raw": "{\n  \"phase1\": \"Close your eyes for a moment. Take a deep breath in, filling your lungs, and then exhale slowly, letting your shoulders drop. Just breathe in, and let it go. One more time. Each breath settles you a little deeper into this moment.\",\n  \"phase2\": \"Notice where you are right now. Feel the weight of your body against the surface you\u2019re resting on. The ground is there to support you, steady and reliable. In this moment, you are safe to feel unsure, but you don\u2019t have to rush into clarity. You can take your time.\",\n  \"phase3\": \"Now, picture your day ahead. Imagine how it unfolds \u2014 small moments that draw you forward. Visualize a calm morning where you start with a simple task. Maybe it's enjoying the warmth of your coffee or listing one thing you want to achieve today. See yourself moving through the day, steady and collected, focusing on each task as it comes. You can meet the present with curiosity \u2014 no pressure to solve everything at once.\",\n  \"phase4\": \"Think back to a moment when you faced uncertainty but navigated it successfully. Perhaps it was a time when you felt unsure of your choices, yet you still took a step forward and things came together. Picture how you leaned into the discomfort and emerged clearer, wiser. That same ability to engage with uncertainty is in you now.\",\n  \"phase5\": \"This is your moment to reset. You move through today with intention, engaging with each step at your own pace. Clarity will come as you show up, and you\u2019ll find it in the moments you take for yourself.\"\n}",
+    "data": {
+      "phase1": "Close your eyes for a moment. Take a deep breath in, filling your lungs, and then exhale slowly, letting your shoulders drop. Just breathe in, and let it go. One more time. Each breath settles you a little deeper into this moment.",
+      "phase2": "Notice where you are right now. Feel the weight of your body against the surface you\u2019re resting on. The ground is there to support you, steady and reliable. In this moment, you are safe to feel unsure, but you don\u2019t have to rush into clarity. You can take your time.",
+      "phase3": "Now, picture your day ahead. Imagine how it unfolds \u2014 small moments that draw you forward. Visualize a calm morning where you start with a simple task. Maybe it's enjoying the warmth of your coffee or listing one thing you want to achieve today. See yourself moving through the day, steady and collected, focusing on each task as it comes. You can meet the present with curiosity \u2014 no pressure to solve everything at once.",
+      "phase4": "Think back to a moment when you faced uncertainty but navigated it successfully. Perhaps it was a time when you felt unsure of your choices, yet you still took a step forward and things came together. Picture how you leaned into the discomfort and emerged clearer, wiser. That same ability to engage with uncertainty is in you now.",
+      "phase5": "This is your moment to reset. You move through today with intention, engaging with each step at your own pace. Clarity will come as you show up, and you\u2019ll find it in the moments you take for yourself."
+    },
+    "json_valid": true,
+    "latency": 5.02,
+    "finish_reason": "stop",
+    "input_tokens": 2136,
+    "output_tokens": 339,
+    "cost_usd": 0.000524
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "high_anxiety_mode1",
+    "label": "High-anxiety Mode 1 (interview)",
+    "inputs": {
+      "preparation_for": "interview_tomorrow",
+      "company": "Google",
+      "role": "Product Manager",
+      "current_feeling": "overwhelmed",
+      "anxiety_level_before": 8,
+      "desired_feeling": "calm",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "gpt-4o-mini",
+  "result": {
+    "raw": "{\n  \"phase1\": \"Close your eyes. Take a deep breath in, and let it out even slower. Allow your shoulders to drop, and feel the weight of your body pressing down. One more time. You are here now, and that is enough.\",\n  \"phase2\": \"The last few days have asked a lot of you. You are carrying that weight of overwhelm. Notice how your body feels, and let yourself be here in this moment. You are grounded. You are present. You are ready.\",\n  \"phase3\": \"Now picture it. You walk into Google tomorrow. You sit down across from the panel, and there's a pause before the first question \u2014 that small, quiet beat. You let that moment be yours. Then the question comes, and you do the thing you excel at as a Product Manager: you slow down, you take a breath, you articulate your thoughts clearly about the problem you're solving, just as you would at any normal meeting.\",\n  \"phase4\": \"Think of the last time you walked into a space filled with uncertainty \u2014 maybe it was a tricky project at work or an important conversation. You stood your ground. Your insights connected with others. The same part of you that navigated that moment will guide you through your interview at Google tomorrow.\",\n  \"phase5\": \"You are prepared for Google. You will articulate your vision as a Product Manager clearly. Walk in tomorrow and share what you know.\"\n}",
+    "data": {
+      "phase1": "Close your eyes. Take a deep breath in, and let it out even slower. Allow your shoulders to drop, and feel the weight of your body pressing down. One more time. You are here now, and that is enough.",
+      "phase2": "The last few days have asked a lot of you. You are carrying that weight of overwhelm. Notice how your body feels, and let yourself be here in this moment. You are grounded. You are present. You are ready.",
+      "phase3": "Now picture it. You walk into Google tomorrow. You sit down across from the panel, and there's a pause before the first question \u2014 that small, quiet beat. You let that moment be yours. Then the question comes, and you do the thing you excel at as a Product Manager: you slow down, you take a breath, you articulate your thoughts clearly about the problem you're solving, just as you would at any normal meeting.",
+      "phase4": "Think of the last time you walked into a space filled with uncertainty \u2014 maybe it was a tricky project at work or an important conversation. You stood your ground. Your insights connected with others. The same part of you that navigated that moment will guide you through your interview at Google tomorrow.",
+      "phase5": "You are prepared for Google. You will articulate your vision as a Product Manager clearly. Walk in tomorrow and share what you know."
+    },
+    "json_valid": true,
+    "latency": 5.42,
+    "finish_reason": "stop",
+    "input_tokens": 2247,
+    "output_tokens": 296,
+    "cost_usd": 0.000515
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}
