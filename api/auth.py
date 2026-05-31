@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
+from fastapi.responses import RedirectResponse
 
 from src.lib.auth_dependencies import (
     _extract_bearer_token,
@@ -10,6 +11,7 @@ from src.lib.auth_dependencies import (
 from src.lib.auth_service import (
     AuthRateLimitError,
     AuthenticationError,
+    EmailNotConfirmedError,
     InvalidSignupInputError,
     SignupDisabledError,
     UpstreamAuthServiceError,
@@ -19,6 +21,11 @@ from src.lib.auth_service import (
     signup_with_email_password,
 )
 from src.lib.config import get_settings
+from src.lib.oauth import (
+    exchange_auth_code_for_token,
+    get_google_auth_url,
+    verify_google_token,
+)
 from src.types.auth import AuthResponse, LoginRequest, LogoutResponse, SignupRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -68,11 +75,23 @@ def _clear_auth_cookies(response: Response) -> None:
 
 
 def _as_auth_response(auth_result: dict, message: str | None = None) -> AuthResponse:
+    session_data = auth_result.get("session") or {}
+    session = None
+    access_token = session_data.get("access_token")
+    refresh_token = session_data.get("refresh_token")
+    if access_token and refresh_token:
+        session = {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": session_data.get("expires_in"),
+        }
+
     return AuthResponse.model_validate(
         {
             "authenticated": bool(auth_result.get("authenticated")),
             "user": auth_result.get("user"),
             "message": message,
+            "session": session,
         }
     )
 
@@ -84,7 +103,12 @@ async def signup(payload: SignupRequest, response: Response) -> AuthResponse:
     """Create a Supabase Auth user and persist the session when available."""
 
     try:
-        auth_result = await signup_with_email_password(payload.email, payload.password)
+        auth_result = await signup_with_email_password(
+            payload.email,
+            payload.password,
+            payload.first_name,
+            payload.last_name
+        )
     except UserAlreadyExistsError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -130,6 +154,11 @@ async def login(payload: LoginRequest, response: Response) -> AuthResponse:
 
     try:
         auth_result = await login_with_email_password(payload.email, payload.password)
+    except EmailNotConfirmedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please confirm your email before signing in",
+        ) from exc
     except AuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -180,6 +209,40 @@ async def logout(
         "Logout completed locally; remote session revocation skipped or unavailable"
     )
     return LogoutResponse(message="Signed out locally")
+
+
+@router.get("/google")
+async def google_login() -> RedirectResponse:
+    """Redirect the user to Google's OAuth consent screen."""
+    try:
+        auth_url = await get_google_auth_url() 
+        return RedirectResponse(url=auth_url)
+    except Exception as exc:
+        logger.exception("Failed to generate Google OAuth URL")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not initiate Google authentication",
+        ) from exc
+
+
+@router.get("/google/callback", response_model=AuthResponse)
+async def google_callback(code: str, response: Response) -> AuthResponse:
+    """Receive the code from Google, verify it, and set session cookies."""
+    try:
+        token_data = await exchange_auth_code_for_token(code)
+        auth_result = await verify_google_token(token_data)
+        
+    except Exception as exc:
+        logger.exception("Google OAuth callback failed")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google authentication failed",
+        ) from exc
+
+    _set_auth_cookies(response, auth_result)
+    logger.info("Google OAuth login successful")
+    
+    return _as_auth_response(auth_result, message="Google login successful")
 
 
 @router.get("/me", response_model=AuthResponse)
