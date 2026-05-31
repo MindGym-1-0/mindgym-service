@@ -22,7 +22,23 @@ python -m uvicorn src.main:app --reload --port 8000
 ```
 
 - API docs: http://127.0.0.1:8000/docs  
-- Health: http://127.0.0.1:8000/healthz  
+- Health: http://127.0.0.1:8000/health  
+
+### Test login locally
+
+1. Copy `.env.example` to `.env` and set Supabase keys.
+2. Start the API (command above).
+3. Run unit tests: `pytest tst/unit/test_auth_api.py tst/unit/test_auth_service.py -q`
+4. Optional live smoke test against Supabase (use a real beta test user):
+
+```bash
+export LOGIN_TEST_EMAIL="you@example.com"
+export LOGIN_TEST_PASSWORD="your-password"
+chmod +x scripts/smoke-login.sh
+./scripts/smoke-login.sh
+```
+
+5. In `mindgym-client`, copy `.env.example` to `.env.local`, set the same Supabase project values, run `npm run dev`, then sign in at http://localhost:3000/login.
 
 ## Tests
 
