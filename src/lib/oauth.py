@@ -1,10 +1,7 @@
 """Google OAuth utilities and token management"""
 import asyncio
 import urllib.parse
-from typing import Optional
 import httpx
-import jwt
-from datetime import datetime, timedelta, timezone
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 from src.lib.config import settings
@@ -85,63 +82,3 @@ async def verify_google_token(id_token: str) -> dict:
         return decoded
     except ValueError as e:
         raise ValueError(f"Token verification failed: {e}")
-
-
-def create_jwt_token(user_id: str, email: str, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Create a JWT token for authenticated user
-
-    Args:
-        user_id: Unique user identifier
-        email: User email address
-        expires_delta: Token expiration time delta (default: 24 hours)
-
-    Returns:
-        Encoded JWT token
-    """
-    if expires_delta is None:
-        expires_delta = timedelta(hours=24)
-
-    now = datetime.now(timezone.utc)
-    expire = now + expires_delta
-
-    payload = {
-        "user_id": user_id,
-        "email": email,
-        "exp": expire,
-        "iat": now,
-    }
-
-    token = jwt.encode(
-        payload,
-        settings.jwt_secret_key,
-        algorithm=settings.jwt_algorithm,
-    )
-
-    return token
-
-
-def verify_jwt_token(token: str) -> dict:
-    """
-    Verify and decode JWT token
-
-    Args:
-        token: JWT token string
-
-    Returns:
-        Decoded token payload
-
-    Raises:
-        ValueError: If token verification fails
-    """
-    try:
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm],
-        )
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise ValueError("Token has expired")
-    except jwt.InvalidTokenError as e:
-        raise ValueError(f"Invalid token: {e}")
