@@ -16,6 +16,7 @@ from src.lib.auth_service import (
     SignupDisabledError,
     UpstreamAuthServiceError,
     UserAlreadyExistsError,
+    fetch_authenticated_user,
     revoke_auth_session,
     refresh_session_with_refresh_token,
     login_with_email_password,
@@ -249,8 +250,9 @@ async def read_me(
 ) -> AuthResponse:
     """Return the authenticated user profile."""
 
-    _ = token
-    return AuthResponse(authenticated=True, user={"id": str(current_user_id)})
+    _ = current_user_id
+    user = await fetch_authenticated_user(token)
+    return AuthResponse(authenticated=True, user=user)
 
 
 @v1_router.get("/me", response_model=AuthResponse)
