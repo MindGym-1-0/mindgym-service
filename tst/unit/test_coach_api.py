@@ -159,7 +159,16 @@ def clear_coach_home_cache():
 def _base_tables(user_id: str) -> dict[str, list[dict]]:
     return {
         "users": [
-            {"id": user_id, "goal": "Land senior backend role", "stage": "interviewing", "anxiety_level": 7}
+            {
+                "id": user_id,
+                "goal": "Land senior backend role",
+                "stage": "interviewing",
+                "anxiety_level": 7,
+                "employment_status": "employed",
+                "target_role_category": "backend",
+                "emotional_challenge": "impostor syndrome",
+                "baseline_anxiety": 6,
+            }
         ],
         "interviews": [],
         "ai_sessions": [],
@@ -839,3 +848,93 @@ def test_post_checklist_scoped_to_authenticated_user(client, fake_user_id: UUID,
         headers={"Authorization": "Bearer fake-token"},
     )
     assert resp.status_code == 404
+
+
+def test_get_coach_home_prompt_includes_full_onboarding_fields(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    # Explicitly set nulls to verify safe prompt fallback formatting.
+    tables["users"][0]["employment_status"] = None
+    tables["users"][0]["target_role_category"] = None
+    tables["users"][0]["emotional_challenge"] = None
+    tables["users"][0]["baseline_anxiety"] = None
+    sb = FakeSupabase(tables)
+    monkeypatch.setattr(coach_module, "get_supabase_user_client", lambda token: sb)
+
+    captured = {"prompt": ""}
+
+    async def _gemini(prompt: str, **_kwargs):
+        captured["prompt"] = prompt
+        return {
+            "recommended_sessions": [
+                {"title": "A", "duration_mins": 10, "focus": "f1", "session_type": "general_reset"},
+                {"title": "B", "duration_mins": 8, "focus": "f2", "session_type": "general_reset"},
+                {"title": "C", "duration_mins": 12, "focus": "f3", "session_type": "recruiter_call"},
+            ],
+            "recommended_today": ["i1", "i2", "i3", "i4"],
+            "maya_suggests": {"text": "Try a short reset", "session_type": "general_reset", "time_suggestion": "10 min"},
+            "maya_greeting": "You're building momentum today.",
+        }
+
+    monkeypatch.setattr(coach_module, "generate_gemini_flash_json", _gemini)
+
+    resp = client.get("/api/coach/home", headers={"Authorization": "Bearer fake-token"})
+    assert resp.status_code == 200
+    prompt = captured["prompt"]
+    assert "- employment_status: Not provided" in prompt
+    assert "- target_role_category: Not provided" in prompt
+    assert "- emotional_challenge: Not provided" in prompt
+    assert "- baseline_anxiety: Not provided" in prompt
+
+
+def test_post_prep_plan_prompt_includes_full_onboarding_fields(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    interview_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaf"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "event_type": "onsite",
+            "interview_date": "2026-06-03T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    tables["users"][0]["employment_status"] = None
+    tables["users"][0]["target_role_category"] = None
+    tables["users"][0]["emotional_challenge"] = None
+    tables["users"][0]["baseline_anxiety"] = None
+    sb = FakeSupabase(tables)
+    monkeypatch.setattr(coach_module, "get_supabase_user_client", lambda token: sb)
+
+    captured = {"prompt": ""}
+
+    async def _gemini(prompt: str, **_kwargs):
+        captured["prompt"] = prompt
+        return {
+            "plan": [
+                {"day": 1, "task": "Acme role prep", "description": "Backend Engineer focus", "session_type": "general_reset", "duration_mins": 10},
+                {"day": 2, "task": "Acme stories", "description": "Backend Engineer examples", "session_type": "interview_tomorrow", "duration_mins": 10},
+                {"day": 3, "task": "Acme pressure", "description": "Backend Engineer timing", "session_type": "recruiter_call", "duration_mins": 10},
+                {"day": 4, "task": "Acme confidence", "description": "Backend Engineer strengths", "session_type": "general_reset", "duration_mins": 8},
+                {"day": 5, "task": "Acme final", "description": "Backend Engineer summary", "session_type": "interview_tomorrow", "duration_mins": 12},
+            ],
+            "recommended_first_session": {"session_type": "general_reset", "reason": "Start calm", "duration_mins": 10},
+            "coach_note": "You are ready.",
+        }
+
+    monkeypatch.setattr(coach_module, "generate_gemini_flash_json", _gemini)
+
+    resp = client.post(
+        "/api/coach/prep-plan",
+        json={"interview_id": interview_id, "worry_input": "I might blank"},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+    prompt = captured["prompt"]
+    assert "- employment_status: Not provided" in prompt
+    assert "- target_role_category: Not provided" in prompt
+    assert "- emotional_challenge: Not provided" in prompt
+    assert "- baseline_anxiety: Not provided" in prompt
