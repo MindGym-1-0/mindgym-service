@@ -123,7 +123,6 @@ async def generate_gemini_flash_json(
             params=params,
             headers=headers,
             json=request_payload,
-            timeout=timeout_seconds,
         )
         response.raise_for_status()
     except httpx.TimeoutException as exc:
