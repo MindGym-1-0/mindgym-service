@@ -8,11 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ActionType(str, Enum):
-    PREPARE_INTERVIEW = "PREPARE_INTERVIEW"
-    ADD_APPLICATIONS = "ADD_APPLICATIONS"
-    FOLLOW_UP = "FOLLOW_UP"
-    LOG_DEBRIEF = "LOG_DEBRIEF"
-    GENERIC_PIPELINE = "GENERIC_PIPELINE"
+    # Aligned with PostgreSQL action_routing_type enum constraints
+    PREPARE_INTERVIEW = "prepare_questions"
+    ADD_APPLICATIONS = "add_applications"
+    FOLLOW_UP = "follow_up"
+    LOG_DEBRIEF = "log_debrief"
+    GENERIC_PIPELINE = "review_week"
 
 
 class GeminiDailyFocusOutput(BaseModel):
