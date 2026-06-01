@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # amping up someone who needs grounding. This is not a real tone check.
 # Semantic tone and acknowledgment validation is a future LLM-judge task.
 _HIGH_ANXIETY_HYPE_WORDS = frozenset({
-    'pump', 'pumped', 'energy', 'energized', 'excited', 'hyped',
+    'pump', 'pumped', 'energized', 'excited', 'hyped',
     "let's go", 'crush it', 'fired up', 'unstoppable',
 })
 
@@ -65,6 +65,7 @@ def generate_script(
     company: str | None,
     role: str | None,
     feeling_note: str | None = None,
+    user_context: dict | None = None,
 ) -> SessionScript | None:
     """Call Gemini Flash and return a SessionScript, or None if the call fails.
 
@@ -86,6 +87,7 @@ def generate_script(
             company=company,
             role=role,
             feeling_note=feeling_note,
+            user_context=user_context,
         )
 
         response = model.generate_content(

@@ -113,6 +113,15 @@ def collect_inputs() -> dict:
     feeling_note = _prompt_optional("feeling_note (user's own words, optional)")
     first_name = _prompt_optional("first_name (optional — leave blank to use 'This person')")
 
+    include_context = input("\nInclude onboarding context? (y/n): ").strip().lower() == 'y'
+    user_context = {
+        "employment_status": "laid_off",
+        "unemployed_duration": "3m",
+        "emotional_challenge": "rejection_silence",
+        "target_role_note": "Senior PM in fintech",
+        "baseline_anxiety": 7,
+    } if include_context else None
+
     return {
         "preparation_for": preparation_for,
         "current_feeling": current_feeling,
@@ -123,6 +132,7 @@ def collect_inputs() -> dict:
         "role": role,
         "feeling_note": feeling_note,
         "first_name": first_name,
+        "user_context": user_context,
     }
 
 
@@ -165,6 +175,7 @@ def run_scenario(inputs: dict) -> None:
             role=role,
             feeling_note=inputs.get("feeling_note"),
             first_name=inputs.get("first_name"),
+            user_context=inputs.get("user_context"),
         )
 
         response = model.generate_content(prompt)

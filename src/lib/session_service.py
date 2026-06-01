@@ -106,6 +106,28 @@ async def update_session(session_id: str, anxiety_level_after: int, anxiety_leve
         raise RuntimeError(f'Failed to update session {session_id!r} — no rows matched.')
 
 
+async def _fetch_user_context(user_id: str) -> dict | None:
+    """Fetch onboarding fields for personalising the session prompt.
+
+    Returns None on any failure — session generation continues without context.
+    """
+    client = get_supabase_admin_client()
+    if client is None:
+        return None
+    try:
+        result = await asyncio.to_thread(
+            lambda: client.table("users")
+            .select("employment_status, unemployed_duration, emotional_challenge, target_role_note, baseline_anxiety")
+            .eq("id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        return getattr(result, "data", None) or None
+    except Exception:
+        logger.warning("Failed to fetch user context for user_id=%s — session will proceed without it", user_id)
+        return None
+
+
 async def start_session(user_id: str, request: SessionStartRequest) -> SessionStartResponse:
     """Orchestrate session generation — call Gemini, fall back if needed, persist, return.
 
@@ -113,6 +135,9 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
     """
     import time
     _t0 = time.monotonic()
+
+    user_context = await _fetch_user_context(user_id)
+
     try:
         script = await asyncio.wait_for(
             asyncio.to_thread(
@@ -125,6 +150,7 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
                 company=request.company,
                 role=request.role,
                 feeling_note=request.feeling_note,
+                user_context=user_context,
             ),
             timeout=30.0,
         )
