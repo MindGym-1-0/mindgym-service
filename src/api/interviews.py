@@ -6,43 +6,13 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client
+from src.types.interview import InterviewCreate, InterviewListResponse, InterviewResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-class InterviewCreate(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    company: str = Field(..., min_length=1)
-    role: str = Field(..., min_length=1)
-    interview_date: str = Field(..., min_length=1)
-    event_type: str | None = None
-    job_id: str | None = None
-    notes: str | None = None
-
-
-class InterviewResponse(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    id: str
-    user_id: str
-    company: str
-    role: str
-    interview_date: str
-    event_type: str | None = None
-    job_id: str | None = None
-    notes: str | None = None
-    created_at: str | None = None
-
-
-class InterviewListResponse(BaseModel):
-    upcoming: list[InterviewResponse]
-    past: list[InterviewResponse]
 
 
 @router.get("", response_model=InterviewListResponse)
@@ -61,6 +31,7 @@ async def list_interviews(
             .eq("user_id", user_id)
             .gte("interview_date", now_iso)
             .order("interview_date", desc=False)
+            .limit(20)
             .execute
         )
         past_res = await asyncio.to_thread(
@@ -95,10 +66,9 @@ async def create_interview(
         "user_id": user_id,
         "company": body.company.strip(),
         "role": body.role.strip(),
-        "interview_date": body.interview_date,
+        "interview_date": body.interview_date.isoformat(),
+        "event_type": body.event_type.strip(),
     }
-    if body.event_type:
-        insert_row["event_type"] = body.event_type.strip()
     if body.job_id:
         insert_row["job_id"] = body.job_id
     if body.notes:
