@@ -23,7 +23,7 @@ class InterviewResponse(BaseModel):
     company: str
     role: str
     interview_date: datetime
-    event_type: str 
+    event_type: str
     job_id: str | None = None
     notes: str | None = None
     created_at: datetime
