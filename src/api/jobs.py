@@ -119,7 +119,8 @@ async def get_stale_jobs(
         last_moved = datetime.fromisoformat(last_moved_str.replace("Z", "+00:00"))
         delta_days = (now - last_moved).days
 
-        if delta_days > 28:
+        # Aligned with daily focus logic threshold (Changed from 28 to 14)
+        if delta_days > 14:
             casted_row = cast_row_uuids(row)
             casted_row["days_since_moved"] = delta_days
             stale_jobs.append(casted_row)
