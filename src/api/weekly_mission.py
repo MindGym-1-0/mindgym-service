@@ -5,12 +5,15 @@ import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Body, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client
-from src.types.weekly_mission import GeminiMissionOutput, WeeklyMissionGenerateResponse
+from src.types.weekly_mission import (
+    GeminiMissionOutput,
+    WeeklyMissionGenerateResponse,
+)
 
 # Modern Google GenAI SDK imports
 from google import genai
@@ -18,6 +21,9 @@ from google.genai import types
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Performance Optimization: Instantiated client once at module level
+ai_client = genai.Client()
 
 
 def get_target_monday() -> date:
@@ -33,6 +39,7 @@ def get_target_monday() -> date:
 
 def execute_fallback_generation(user_context: dict) -> dict:
     """Step 4 Fallback Engine: Explicitly builds 3 tailored actions via string
+
     formatting using pipeline metrics to ensure the client never encounters a
     processing failure.
     """
@@ -40,17 +47,32 @@ def execute_fallback_generation(user_context: dict) -> dict:
     total_applications = len(active_jobs)
 
     if total_applications < 3:
-        act_1 = "Target and submit at least 2 new backend engineering applications to expand your baseline pipeline."
+        act_1 = (
+            "Target and submit at least 2 new backend engineering "
+            "applications to expand your baseline pipeline."
+        )
     else:
-        act_1 = f"Follow up on your existing {total_applications} open applications to gauge response momentum."
+        act_1 = (
+            f"Follow up on your existing {total_applications} open "
+            "applications to gauge response momentum."
+        )
 
-    act_2 = "Complete 2 practice mock sessions this week to initialize your competency tracking."
+    act_2 = (
+        "Complete 2 practice mock sessions this week to initialize your "
+        "competency tracking."
+    )
 
     session_count = user_context.get("session_count", 0)
     if session_count < 2:
-        act_3 = "Book and complete a core system design mock study session to stabilize your weekly performance trends."
+        act_3 = (
+            "Book and complete a core system design mock study session "
+            "to stabilize your weekly performance trends."
+        )
     else:
-        act_3 = "Document post-session technical debrief notes across your upcoming interviews to protect your active tracking streak."
+        act_3 = (
+            "Document post-session technical debrief notes across your "
+            "upcoming interviews to protect your active tracking streak."
+        )
 
     return {"action_1": act_1, "action_2": act_2, "action_3": act_3}
 
@@ -60,7 +82,7 @@ async def generate_weekly_mission(
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
 ):
-    # Resolve the client manually using the user's token to satisfy Row Level Security (RLS)
+    # Resolve the client manually using the user's token for RLS stability
     supabase = get_supabase_user_client(token)
     user_id = str(current_user_id)
 
@@ -77,10 +99,10 @@ async def generate_weekly_mission(
             else {"goal": "General Placement", "stage": "Interviewing"}
         )
 
-        # Added .is_("outcome", "null") to omit finalized job applications
+        # Database Optimization Fix: Selecting actual column layout
         jobs_res = await asyncio.to_thread(
             supabase.table("jobs")
-            .select("id, stage, last_moved_at")
+            .select("id, status, last_moved_at")
             .eq("user_id", user_id)
             .is_("outcome", "null")
             .execute
@@ -89,7 +111,6 @@ async def generate_weekly_mission(
 
         seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
-        # Swapped mood_delta -> anxiety_level_delta
         sessions_res = await asyncio.to_thread(
             supabase.table("ai_sessions")
             .select("anxiety_level_delta")
@@ -120,7 +141,7 @@ async def generate_weekly_mission(
         )
 
     except Exception as db_err:
-        logger.error(f"Error compiling user mission context parameters: {str(db_err)}")
+        logger.error(f"Error compiling user mission parameters: {str(db_err)}")
         (
             active_jobs,
             session_count,
@@ -141,33 +162,32 @@ async def generate_weekly_mission(
     # STEP 2 — BUILD THE GEMINI PROMPT
     # ------------------------------------------
     prompt = f"""
-    You are an expert career performance optimization AI. Analyze the user's data to generate 3 actionable, non-generic target missions for next week.
+    You are an expert career performance optimization AI.
+    Analyze the user's data to generate 3 actionable targets for next week.
 
     User Context:
     - Career Goal: {user_profile.get('goal')}
     - Application Stage: {user_profile.get('stage')}
     - Current Active Pipeline Jobs: {json.dumps(active_jobs)}
-    - Activity Volume This Week: {session_count} completed sessions (Avg Anxiety Change: {avg_anxiety_delta})
+    - Activity Volume This Week: {session_count} completed sessions
     - Completed Targets from Last Week: {prev_completion_count}/3
 
     Requirements:
     - Focus heavily on pipeline gaps, performance gaps, or momentum drop-offs.
-    - Write highly concrete and contextually tailored strings for this individual user. Avoid generic platitudes.
-    - Return your response exclusively as valid JSON matching the required fields.
+    - Write highly concrete strings. Avoid generic platitudes.
+    - Return your response exclusively as valid JSON matching the schema.
     """
 
     generated_actions = None
 
     # ------------------------------------------
-    # STEP 3 & 4 — CALL GEMINI WITH STRICT 4S TIMEOUT
+    # STEP 3 & 4 — CALL GEMINI WITH TIMEOUT
     # ------------------------------------------
     try:
-        client = genai.Client()
-
         response = await asyncio.wait_for(
             asyncio.to_thread(
-                client.models.generate_content,
-                model="gemini-2.5-flash",  # Preserved 2.5-flash engine structure
+                ai_client.models.generate_content,
+                model="gemini-2.5-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -186,15 +206,11 @@ async def generate_weekly_mission(
         ):
             generated_actions = raw_json
         else:
-            logger.warning(
-                "Gemini structure was missing fields. Dropping to fallback handler."
-            )
+            logger.warning("Gemini structure incomplete. Going to fallback.")
             generated_actions = execute_fallback_generation(context_package)
 
     except (asyncio.TimeoutError, Exception) as gen_error:
-        logger.error(
-            "Gemini generation engine bypassed or timed out: " + str(gen_error)
-        )
+        logger.error(f"Gemini generation engine bypassed: {str(gen_error)}")
         generated_actions = execute_fallback_generation(context_package)
 
     # ------------------------------------------
@@ -278,13 +294,8 @@ async def generate_weekly_mission(
     )
 
 
-# =====================================================================
-# PART 5: COMPLETE ENDPOINTS (WEEKLY MISSION TASK TRACKING SWAP-SYSTEM)
-# =====================================================================
-
-
 class WeeklyMissionCompleteRequest(BaseModel):
-    mission_item_id: str  # Expected values: "action_1", "action_2", or "action_3"
+    mission_item_id: str
 
 
 class WeeklyMissionCompleteResponse(BaseModel):
@@ -297,14 +308,13 @@ class WeeklyMissionCompleteResponse(BaseModel):
     "/complete",
     response_model=WeeklyMissionCompleteResponse,
     status_code=status.HTTP_200_OK,
-    summary="Mark a specific weekly mission action item as completed and increment score counter",
+    summary="Mark a specific item as completed and increment tracker counter",
 )
 async def complete_weekly_mission(
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
-    payload: WeeklyMissionCompleteRequest = Body(...),
+    payload: WeeklyMissionCompleteRequest,
 ):
-    # Authenticate via user context token mapping to unlock dynamic RLS structures
     supabase = get_supabase_user_client(token)
     user_id = str(current_user_id)
     target_monday_str = get_target_monday().isoformat()
@@ -312,7 +322,7 @@ async def complete_weekly_mission(
     if payload.mission_item_id not in ["action_1", "action_2", "action_3"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid mission_item_id. Must be 'action_1', 'action_2', or 'action_3'.",
+            detail="Invalid mission_item_id. Must be action_1, _2, or _3.",
         )
 
     # 1. Fetch current week's mission row to check state existence
@@ -327,7 +337,7 @@ async def complete_weekly_mission(
     if not existing_row.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No weekly mission structure initialized for this target week block.",
+            detail="No weekly mission structure initialized for this week.",
         )
 
     record = existing_row.data[0]
@@ -335,7 +345,7 @@ async def complete_weekly_mission(
 
     target_completed_field = f"{payload.mission_item_id}_completed"
 
-    # If already marked completed, return current database count immediately without duplicate updates
+    # If already marked completed, return count without duplicate queries
     if record.get(target_completed_field) is True:
         return WeeklyMissionCompleteResponse(
             success=True,
@@ -354,7 +364,7 @@ async def complete_weekly_mission(
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # 3. Persist modifications back to the parent table row reference (using non-blocking async thread)
+    # 3. Persist modifications back to the parent table row reference
     try:
         await asyncio.to_thread(
             supabase.table("weekly_mission")
@@ -363,9 +373,7 @@ async def complete_weekly_mission(
             .execute
         )
     except Exception as save_err:
-        logger.error(
-            f"Failed writing update payload transaction parameters into mission ledger: {str(save_err)}"
-        )
+        logger.error(f"Failed writing update payload ledger: {str(save_err)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not update weekly mission target completion counts.",
