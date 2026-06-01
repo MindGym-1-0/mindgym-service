@@ -1,7 +1,6 @@
 import logging
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
-from fastapi.responses import RedirectResponse
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.auth_dependencies import (
@@ -21,14 +20,9 @@ from src.lib.auth_service import (
     revoke_auth_session,
     refresh_session_with_refresh_token,
     login_with_email_password,
-    login_with_google_id_token,
     signup_with_email_password,
 )
 from src.lib.config import get_settings
-from src.lib.oauth import (
-    exchange_auth_code_for_token,
-    get_google_auth_url,
-)
 from src.types.auth import AuthResponse, LoginRequest, LogoutResponse, SignupRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
