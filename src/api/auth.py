@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
+from fastapi.responses import RedirectResponse
 
 from src.lib.auth_dependencies import (
     _extract_bearer_token,
@@ -17,9 +18,14 @@ from src.lib.auth_service import (
     UserAlreadyExistsError,
     revoke_auth_session,
     login_with_email_password,
+    login_with_google_id_token,
     signup_with_email_password,
 )
 from src.lib.config import get_settings
+from src.lib.oauth import (
+    exchange_auth_code_for_token,
+    get_google_auth_url,
+)
 from src.types.auth import AuthResponse, LoginRequest, LogoutResponse, SignupRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -203,6 +209,45 @@ async def logout(
         "Logout completed locally; remote session revocation skipped or unavailable"
     )
     return LogoutResponse(message="Signed out locally")
+
+
+@router.get("/google")
+async def google_login() -> RedirectResponse:
+    """Redirect the user to Google's OAuth consent screen."""
+
+    try:
+        auth_url = get_google_auth_url()
+        return RedirectResponse(url=auth_url)
+    except Exception as exc:
+        logger.exception("Failed to generate Google OAuth URL")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not initiate Google authentication",
+        ) from exc
+
+
+@router.get("/google/callback", response_model=AuthResponse)
+async def google_callback(code: str, response: Response) -> AuthResponse:
+    """Receive the code from Google, exchange it for an ID token, and sign in with Supabase."""
+
+    try:
+        token_data = await exchange_auth_code_for_token(code)
+        id_token = token_data.get("id_token")
+        if not id_token:
+            raise ValueError("Google OAuth token exchange did not return an id_token")
+
+        auth_result = await login_with_google_id_token(id_token)
+    except Exception as exc:
+        logger.exception("Google OAuth callback failed")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google authentication failed",
+        ) from exc
+
+    _set_auth_cookies(response, auth_result)
+    logger.info("Google OAuth login successful")
+
+    return _as_auth_response(auth_result, message="Google login successful")
 
 
 @router.get("/me", response_model=AuthResponse)
