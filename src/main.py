@@ -14,6 +14,7 @@ from src.api.onboarding import router as onboarding_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
 from src.api.coach import router as coach_router
+from src.api.interviews import router as interviews_router
 from src.api.sessions import router as sessions_router
 from src.api.sessions import users_router as users_router
 from src.api.streaks import router as streaks_router
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     # Streaks router
     app.include_router(streaks_router, prefix="/api/streaks", tags=["streaks"])
     app.include_router(coach_router, prefix="/api/coach", tags=["coach"])
+    app.include_router(interviews_router, prefix="/api/interviews", tags=["interviews"])
 
     @app.get("/")
     async def root():
