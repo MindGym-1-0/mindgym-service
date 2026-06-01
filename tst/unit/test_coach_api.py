@@ -95,6 +95,20 @@ class FakeQuery:
         )
 
     def execute(self):
+        self.sb.query_log.append(
+            {
+                "table": self.table_name,
+                "select_fields": self.select_fields,
+                "filters": [
+                    {"op": flt.op, "field": flt.field, "value": flt.value}
+                    for flt in self.filters
+                ],
+                "order_field": self.order_field,
+                "order_desc": self.order_desc,
+                "limit": self.limit_value,
+                "is_upsert": self.upsert_payload is not None,
+            }
+        )
         if self.upsert_payload is not None:
             rows = self.sb.tables.setdefault(self.table_name, [])
             key_fields = (self.sb.last_upsert or {}).get("on_conflict", "")
@@ -125,6 +139,7 @@ class FakeSupabase:
     def __init__(self, tables: dict[str, list[dict]] | None = None):
         self.tables = tables or {}
         self.last_upsert: dict | None = None
+        self.query_log: list[dict] = []
 
     def table(self, table_name: str) -> FakeQuery:
         return FakeQuery(self, table_name)
@@ -612,6 +627,74 @@ def test_post_prep_plan_missing_company_role_mentions_uses_fallback(client, fake
     assert "sre" in combined
 
 
+def test_post_prep_plan_empty_company_uses_fallback(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6",
+            "user_id": uid,
+            "company": "",
+            "role": "SRE",
+            "event_type": "onsite",
+            "interview_date": "2026-06-06T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    gemini = {
+        "plan": [
+            {"day": i, "task": "Generic task", "description": "Generic desc", "session_type": "general_reset", "duration_mins": 10}
+            for i in [1, 2, 3, 4, 5]
+        ],
+        "recommended_first_session": {"session_type": "general_reset", "reason": "x", "duration_mins": 10},
+        "coach_note": "note",
+    }
+    _mock_coach_deps(monkeypatch, sb, gemini)
+
+    resp = client.post(
+        "/api/coach/prep-plan",
+        json={"interview_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6", "worry_input": "I lose focus"},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()["plan"]) == 5
+
+
+def test_post_prep_plan_empty_role_uses_fallback(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa7",
+            "user_id": uid,
+            "company": "Orbit",
+            "role": "   ",
+            "event_type": "onsite",
+            "interview_date": "2026-06-06T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    gemini = {
+        "plan": [
+            {"day": i, "task": "Generic task", "description": "Generic desc", "session_type": "general_reset", "duration_mins": 10}
+            for i in [1, 2, 3, 4, 5]
+        ],
+        "recommended_first_session": {"session_type": "general_reset", "reason": "x", "duration_mins": 10},
+        "coach_note": "note",
+    }
+    _mock_coach_deps(monkeypatch, sb, gemini)
+
+    resp = client.post(
+        "/api/coach/prep-plan",
+        json={"interview_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa7", "worry_input": "I lose focus"},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()["plan"]) == 5
+
+
 def test_get_saved_prep_plan_existing_returns_saved(client, fake_user_id: UUID, monkeypatch):
     uid = str(fake_user_id)
     tables = _base_tables(uid)
@@ -782,6 +865,107 @@ def test_post_checklist_success(client, fake_user_id: UUID, monkeypatch):
     assert "quote" in body
     assert len(body["tonights_plan"]) == 3
     assert body["quote"]
+    assert body["overall_readiness"]["total_items"] == (
+        len(body["mental_prep"]) + len(body["logistics"])
+    )
+
+
+def test_post_checklist_skips_company_role_fallback_when_job_sessions_exist(
+    client, fake_user_id: UUID, monkeypatch
+):
+    uid = str(fake_user_id)
+    interview_id = "cccccccc-cccc-cccc-cccc-ccccccccccc5"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-10T12:00:00+00:00",
+            "job_id": "job-123",
+        }
+    ]
+    tables["ai_sessions"] = [
+        {
+            "id": "s1",
+            "user_id": uid,
+            "job_id": "job-123",
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "anxiety_level_after": 8,
+            "completed_at": "2026-06-09T18:00:00+00:00",
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, GeminiTimeoutError("timeout"))
+
+    resp = client.post(
+        "/api/coach/checklist",
+        json={"interview_id": interview_id},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+
+    ai_session_queries = [q for q in sb.query_log if q["table"] == "ai_sessions"]
+    assert len(ai_session_queries) == 1
+    assert any(
+        f["field"] == "job_id" and f["value"] == "job-123"
+        for f in ai_session_queries[0]["filters"]
+    )
+
+
+def test_post_checklist_uses_company_role_fallback_when_job_query_empty(
+    client, fake_user_id: UUID, monkeypatch
+):
+    uid = str(fake_user_id)
+    interview_id = "cccccccc-cccc-cccc-cccc-ccccccccccc6"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-10T12:00:00+00:00",
+            "job_id": "job-123",
+        }
+    ]
+    tables["ai_sessions"] = [
+        {
+            "id": "s2",
+            "user_id": uid,
+            "job_id": "different-job",
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "anxiety_level_after": 7,
+            "completed_at": "2026-06-09T20:00:00+00:00",
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, GeminiTimeoutError("timeout"))
+
+    resp = client.post(
+        "/api/coach/checklist",
+        json={"interview_id": interview_id},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+    assert resp.status_code == 200
+
+    ai_session_queries = [q for q in sb.query_log if q["table"] == "ai_sessions"]
+    assert len(ai_session_queries) == 2
+    assert any(
+        any(f["field"] == "job_id" and f["value"] == "job-123" for f in q["filters"])
+        for q in ai_session_queries
+    )
+    assert any(
+        any(f["field"] == "company" and f["value"] == "Acme" for f in q["filters"])
+        and any(
+            f["field"] == "role" and f["value"] == "Backend Engineer"
+            for f in q["filters"]
+        )
+        for q in ai_session_queries
+    )
 
 
 def test_post_checklist_interview_not_found_returns_404(client, fake_user_id: UUID, monkeypatch):
