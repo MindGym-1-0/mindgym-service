@@ -572,7 +572,7 @@ async def get_or_create_interview_checklist(
         try:
             sessions_by_job = await asyncio.to_thread(
                 sb.table("ai_sessions")
-                .select("id,post_score,completed_at")
+                .select("id,anxiety_level_after,completed_at")
                 .eq("user_id", user_id)
                 .eq("job_id", job_id)
                 .not_.is_("completed_at", "null")
@@ -584,21 +584,22 @@ async def get_or_create_interview_checklist(
         except Exception:
             logger.exception("Checklist ai_sessions job query failed; falling back to company+role query.")
 
-    try:
-        sessions_by_company_role = await asyncio.to_thread(
-            sb.table("ai_sessions")
-            .select("id,post_score,completed_at")
-            .eq("user_id", user_id)
-            .eq("company", company)
-            .eq("role", role)
-            .not_.is_("completed_at", "null")
-            .order("completed_at", desc=True)
-            .limit(MAX_SESSION_HISTORY_FOR_PREP)
-            .execute
-        )
-        completed_rows.extend(sessions_by_company_role.data or [])
-    except Exception:
-        logger.exception("Checklist ai_sessions company+role query failed.")
+    if not completed_rows:
+        try:
+            sessions_by_company_role = await asyncio.to_thread(
+                sb.table("ai_sessions")
+                .select("id,anxiety_level_after,completed_at")
+                .eq("user_id", user_id)
+                .eq("company", company)
+                .eq("role", role)
+                .not_.is_("completed_at", "null")
+                .order("completed_at", desc=True)
+                .limit(MAX_SESSION_HISTORY_FOR_PREP)
+                .execute
+            )
+            completed_rows.extend(sessions_by_company_role.data or [])
+        except Exception:
+            logger.exception("Checklist ai_sessions company+role query failed.")
 
     deduped_rows: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -615,21 +616,25 @@ async def get_or_create_interview_checklist(
     one_day_ago = now.timestamp() - 24 * 60 * 60
     completed_today = False
     completed_last_24h = False
-    post_scores: list[float] = []
+    anxiety_level_after_scores: list[float] = []
 
     for row in completed_rows:
         completed_at = _parse_iso_datetime(str(row.get("completed_at") or ""))
         if completed_at:
             completed_today = completed_today or completed_at.date() == now.date()
             completed_last_24h = completed_last_24h or completed_at.timestamp() >= one_day_ago
-        score = row.get("post_score")
+        score = row.get("anxiety_level_after")
         if isinstance(score, (int, float)):
-            post_scores.append(float(score))
+            anxiety_level_after_scores.append(float(score))
 
     session_count = len(completed_rows)
     coaching_checked = session_count >= 5
     breathing_checked = completed_last_24h
-    confidence_baseline = sum(post_scores) / len(post_scores) if post_scores else 0.0
+    confidence_baseline = (
+        sum(anxiety_level_after_scores) / len(anxiety_level_after_scores)
+        if anxiety_level_after_scores
+        else 0.0
+    )
 
     is_tomorrow = interview_dt is not None and interview_dt.date() == (now + timedelta(days=1)).date()
     grounding_checked = completed_today
@@ -662,10 +667,9 @@ async def get_or_create_interview_checklist(
         {"id": "interview_confirmed", "label": "Interview confirmed", "checked": False, "metadata": {}},
         {"id": "questions_prepared", "label": "Questions to ask prepared", "checked": False, "metadata": {}},
         {"id": "quiet_space", "label": "Quiet space confirmed", "checked": False, "metadata": {}},
-        {"id": "breathing_session", "label": "Breathing session done last night", "checked": False, "metadata": {}},
     ]
 
-    total_items = 10
+    total_items = len(mental_prep) + len(logistics)
     checked_count = (
         sum(1 for item in mental_prep if item["checked"])
         + sum(1 for item in logistics if item["checked"])

@@ -744,7 +744,7 @@ def test_post_checklist_success(client, fake_user_id: UUID, monkeypatch):
             "job_id": "job-123",
             "company": "Acme",
             "role": "Backend Engineer",
-            "post_score": 8,
+            "anxiety_level_after": 8,
             "completed_at": "2026-06-09T18:00:00+00:00",
         },
         {
@@ -753,7 +753,7 @@ def test_post_checklist_success(client, fake_user_id: UUID, monkeypatch):
             "job_id": "job-123",
             "company": "Acme",
             "role": "Backend Engineer",
-            "post_score": 9,
+            "anxiety_level_after": 9,
             "completed_at": "2026-06-09T20:00:00+00:00",
         },
     ]
