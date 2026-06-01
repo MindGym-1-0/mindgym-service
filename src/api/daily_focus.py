@@ -1,34 +1,33 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from datetime import date, datetime, timedelta, UTC
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Dict, Optional
-
-from fastapi import APIRouter, Body, HTTPException, status
-
-# Upgraded to modern SDK namespace
 from google import genai
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
+from src.api.streaks import increment_user_streak
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client
-
-# Reuse your streak increment logic built from Part 2 directly
-from src.api.streaks import increment_user_streak
-from src.types.daily_focus import ActionType, DailyFocusResponse, GeminiDailyFocusOutput
+from src.types.daily_focus import (
+    ActionType,
+    DailyFocusResponse,
+    GeminiDailyFocusOutput,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Initialize the standard Client. It picks up your GEMINI_API_KEY environment variable.
+# Performance Optimization: Instantiated client once at module level
 ai_client = genai.Client()
 
 
 def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
-    """Generates a highly contextual fallback response if Gemini fails or times out."""
-    logger.warning("Executing local fallback logic for daily focus generation.")
+    """Generates a highly contextual fallback response if Gemini fails."""
+    logger.warning("Executing local fallback logic for daily focus.")
     today = date.today()
 
     # 1. Check for urgent interview in the next 2 days
@@ -40,12 +39,19 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
             ).date()
             if today <= iv_date <= (today + timedelta(days=2)):
                 return GeminiDailyFocusOutput(
-                    action_1_text=f"Prepare for your upcoming interview with {iv.get('company')} for the {iv.get('role')} role.",
+                    action_1_text=(
+                        f"Prepare for your upcoming interview with "
+                        f"{iv.get('company')} for the {iv.get('role')} role."
+                    ),
                     action_1_type=ActionType.PREPARE_INTERVIEW,
-                    action_2_text="Review your application details and core engineering projects.",
+                    action_2_text=(
+                        "Review your application details and core "
+                        "engineering projects."
+                    ),
                     action_2_type=ActionType.GENERIC_PIPELINE,
                 )
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Skipping row due to interview parse error: {e}")
             continue
 
     # 2. Check for stagnant applications (> 14 days)
@@ -57,19 +63,30 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
             ).date()
             if (today - last_moved).days > 14:
                 return GeminiDailyFocusOutput(
-                    action_1_text=f"Follow up with the hiring team or recruiter at {job.get('company')} regarding your {job.get('role')} application.",
+                    action_1_text=(
+                        f"Follow up with the hiring team or recruiter at "
+                        f"{job.get('company')} regarding your "
+                        f"{job.get('role')} application."
+                    ),
                     action_1_type=ActionType.FOLLOW_UP,
-                    action_2_text="Keep looking for new technical opportunities to fill your pipeline.",
+                    action_2_text=(
+                        "Keep looking for new technical opportunities "
+                        "to fill your pipeline."
+                    ),
                     action_2_type=ActionType.ADD_APPLICATIONS,
                 )
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Skipping row due to job status parse error: {e}")
             continue
 
-    # 3. Check for low pipeline numbers (Fixed: schema holds stage as lowercase "applied")
-    applied_count = sum(1 for j in active_jobs if j.get("stage") == "applied")
+    # 3. Check for low pipeline numbers (Schema holds lowercase status column)
+    applied_count = sum(1 for j in active_jobs if j.get("status") == "applied")
     if applied_count < 3:
         return GeminiDailyFocusOutput(
-            action_1_text="Find and apply to at least 2 new jobs today to keep your application pipeline healthy.",
+            action_1_text=(
+                "Find and apply to at least 2 new jobs today to keep "
+                "your application pipeline healthy."
+            ),
             action_1_type=ActionType.ADD_APPLICATIONS,
             action_2_text=None,
             action_2_type=None,
@@ -77,7 +94,10 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
 
     # 4. Total safe default
     return GeminiDailyFocusOutput(
-        action_1_text="Review your open applications and plan out outreach targets for the week.",
+        action_1_text=(
+            "Review your open applications and plan out outreach "
+            "targets for the week."
+        ),
         action_1_type=ActionType.GENERIC_PIPELINE,
         action_2_text=None,
         action_2_type=None,
@@ -95,7 +115,7 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
     sb = get_supabase_user_client(token)
     user_uuid_str = str(current_user_id)
 
-    # STEP 1: Fetch multi-table context from Supabase via non-blocking worker threads
+    # STEP 1: Fetch multi-table context from Supabase
     try:
         user_res = await asyncio.to_thread(
             sb.table("users")
@@ -105,9 +125,10 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
         )
         user_profile = user_res.data[0] if user_res.data else {}
 
+        # Fixed: Modified 'stage' selection over to 'status' column layout
         jobs_res = await asyncio.to_thread(
             sb.table("jobs")
-            .select("company, role, stage, last_moved_at")
+            .select("company, role, status, last_moved_at")
             .eq("user_id", user_uuid_str)
             .is_("outcome", "null")
             .order("last_moved_at", descending=True)
@@ -126,7 +147,6 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
         )
         upcoming_interviews = interviews_res.data or []
 
-        # Fixed: selected anxiety_level_delta instead of old mood_delta field
         sessions_res = await asyncio.to_thread(
             sb.table("ai_sessions")
             .select("preparation_for, anxiety_level_delta, completed_at")
@@ -148,9 +168,7 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
             streak_res.data[0].get("current_streak", 0) if streak_res.data else 0
         )
     except Exception as db_err:
-        logger.error(
-            f"Failed to fetch user context tables from Supabase: {str(db_err)}"
-        )
+        logger.error(f"Failed to fetch user context tables: {str(db_err)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to look up user metadata context.",
@@ -166,11 +184,11 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
 
     # STEP 2: Build the prompt
     prompt = f"""
-    You are an expert, highly personalized AI Job Search Assistant for a software engineer.
-    Analyze the user's specific application pipeline below and return exactly 1 or 2 actions for today.
+    You are an expert, highly personalized AI Job Assistant for an engineer.
+    Analyze the user's specific application pipeline below and return targets.
 
-    CRITICAL PRODUCT REQUIREMENT: Generic output like "apply to more jobs" or "check your status" is a defect.
-    You MUST reference specific companies, roles, timeline conditions, or interview opportunities present in the raw data context.
+    CRITICAL REQUIREMENT: Generic output like "apply to more jobs" is a defect.
+    You MUST reference specific companies, roles, or raw data context.
 
     --- USER PIPELINE CONTEXT ---
     User Profile: {json.dumps(user_profile)}
@@ -181,13 +199,13 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
     Current Date: {today_str}
 
     --- BUSINESS RULE PRIORITY HEURISTICS ---
-    1. Urgent Interview Focus: If an interview is scheduled in the next 2 days, action_1 MUST guide preparation for that specific company and role.
-    2. Stagnant Applications: If an application has sat in its current stage without moving for more than 14 days, prioritize an outreach or follow-up action naming that company.
-    3. Low Pipeline Volume: If there are fewer than 3 active items in the 'applied' stage, prioritize adding new job targets.
-    4. Feedback & Debrief Loops: If an application's stage was advanced recently but no post-session debrief was logged, prioritize a debrief logging task.
+    1. Urgent Interview Focus: If interview is in next 2 days, action_1 targets it.
+    2. Stagnant Applications: If open items sat > 14 days, prioritize outreach.
+    3. Low Pipeline Volume: If < 3 items are in 'applied' status, add new jobs.
+    4. Feedback Loops: If stage moved but no debrief logged, prompt for debrief.
     """
 
-    # STEP 3 & 4: Call Gemini with strict formatting validation and a 4-second timeout limit
+    # STEP 3 & 4: Call Gemini with formatting validation
     validated_output: Optional[GeminiDailyFocusOutput] = None
     try:
 
@@ -210,15 +228,13 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
         parsed_json = json.loads(raw_text.strip())
         validated_output = GeminiDailyFocusOutput(**parsed_json)
     except (asyncio.TimeoutError, Exception) as err:
-        logger.error(
-            f"Gemini generation failure or timeout window exceeded: {repr(err)}"
-        )
+        logger.error(f"Gemini focus generation failed: {repr(err)}")
         validated_output = execute_fallback_logic(context)
 
     if not validated_output or not validated_output.action_1_text:
         validated_output = execute_fallback_logic(context)
 
-    # STEP 5 & 6: Save/Upsert and Return
+    # STEP 5 & 6: Save/Upsert and Return Data Parameters
     try:
         focus_payload = {
             "user_id": user_uuid_str,
@@ -236,7 +252,7 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
                 and hasattr(validated_output.action_2_type, "value")
                 else validated_output.action_2_type
             ),
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
 
         existing_check = await asyncio.to_thread(
@@ -253,32 +269,26 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
                 sb.table("daily_focus")
                 .update(focus_payload)
                 .eq("id", record_id)
+                .select("*")
                 .execute
             )
         else:
-            focus_payload["created_at"] = datetime.utcnow().isoformat()
+            focus_payload["created_at"] = datetime.now(UTC).isoformat()
             db_result = await asyncio.to_thread(
-                sb.table("daily_focus").insert(focus_payload).execute
+                sb.table("daily_focus").insert(focus_payload).select("*").execute
             )
 
         return db_result.data[0]
     except Exception as save_err:
-        logger.error(
-            f"Error saving daily focus context mapping record: {str(save_err)}"
-        )
+        logger.error(f"Error saving daily focus mapping record: {str(save_err)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to persist generated focus plan record.",
         )
 
 
-# =====================================================================
-# PART 5: COMPLETE ENDPOINTS (DAILY FOCUS TASK TRACKING SWAP-SYSTEM)
-# =====================================================================
-
-
 class DailyFocusCompleteRequest(BaseModel):
-    action_id: str  # Expected values: "action_1" or "action_2"
+    action_id: str
 
 
 class DailyFocusCompleteResponse(BaseModel):
@@ -291,12 +301,12 @@ class DailyFocusCompleteResponse(BaseModel):
     "/complete",
     response_model=DailyFocusCompleteResponse,
     status_code=status.HTTP_200_OK,
-    summary="Mark a specific daily focus action item as completed and update streak",
+    summary="Mark focus item completed and increment user streak values",
 )
 async def complete_daily_focus(
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
-    payload: DailyFocusCompleteRequest = Body(...),
+    payload: DailyFocusCompleteRequest,
 ):
     sb = get_supabase_user_client(token)
     user_uuid_str = str(current_user_id)
@@ -335,7 +345,6 @@ async def complete_daily_focus(
     # Check if target action field is already marked true
     target_field = f"{payload.action_id}_completed"
     if record.get(target_field) is True:
-        # Already completed; fetch current streak status without duplicate increments
         streak_res = await asyncio.to_thread(
             sb.table("streaks")
             .select("current_streak")
@@ -359,16 +368,16 @@ async def complete_daily_focus(
     except Exception as err:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update action task completion state: {str(err)}",
+            detail=f"Failed to update task completion state: {str(err)}",
         )
 
-    # 3. Reuse your streak increment logic built during Part 2
+    # 3. Fixed: Parameter ordering updated to match structural definition
     try:
-        streak_data = await increment_user_streak(user_uuid_str, sb)
+        streak_data = await increment_user_streak(sb, user_uuid_str)
     except Exception as err:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Action completed, but streak calculation failed: {str(err)}",
+            detail=f"Action finished, but streak update failed: {str(err)}",
         )
 
     return DailyFocusCompleteResponse(
