@@ -90,7 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(streaks_router, prefix="/api/streaks", tags=["streaks"])
     app.include_router(coach_router, prefix="/api/coach", tags=["coach"])
     app.include_router(interviews_router, prefix="/api/interviews", tags=["interviews"])
-    
+
     @app.get("/")
     async def root():
         return {"status": "MindGym API is running"}
