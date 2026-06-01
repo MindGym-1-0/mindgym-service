@@ -154,7 +154,10 @@ async def advance_job_stage(
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Illegal transition from '{current_stage}' to '{new_stage}'. From here, you can only advance to '{allowed_next}'.",
+            detail=(
+                f"Illegal transition from '{current_stage}' to '{new_stage}'. "
+                f"From here, you can only advance to '{allowed_next}'."
+            ),
         )
 
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -170,6 +173,10 @@ async def advance_job_stage(
             .execute()
         )
     )
+
+    # Guard against RLS / empty result modifications (PR Comment Fix #1)
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Job not found.")
 
     return JobResponse.model_validate(cast_row_uuids(result.data[0]))
 
@@ -224,6 +231,10 @@ async def log_job_outcome(
         )
     )
 
+    # Guard against RLS / empty result modifications (PR Comment Fix #2)
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
     if outcome_val in ["rejected", "ghosted"]:
         # REFACTOR: Wrapped in asyncio.to_thread
         interview_res = await asyncio.to_thread(
@@ -237,13 +248,15 @@ async def log_job_outcome(
             )
         )
 
-        if interview_res.data:
+        # Bugfix: `.maybe_single()` returns the dict or None directly into `.data`
+        if interview_res.data and "id" in interview_res.data:
+            interview_id = interview_res.data["id"]
             # REFACTOR: Wrapped in asyncio.to_thread
             await asyncio.to_thread(
                 lambda: (
                     sb.table("interviews")
                     .update({"recovery_needed": True})
-                    .eq("id", interview_res.data["id"])
+                    .eq("id", str(interview_id))
                     .execute()
                 )
             )
