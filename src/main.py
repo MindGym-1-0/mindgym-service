@@ -13,6 +13,8 @@ from src.api.auth import v1_router as auth_v1_router
 from src.api.onboarding import router as onboarding_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
+from src.api.coach import router as coach_router
+from src.api.interviews import router as interviews_router
 from src.api.sessions import router as sessions_router
 from src.api.sessions import users_router as users_router
 from src.api.streaks import router as streaks_router
@@ -55,12 +57,18 @@ def create_app() -> FastAPI:
 
     # Merge both origin lists cleanly removing duplicates
     final_origins = list(dict.fromkeys(allow_origins + cors_origins))
-    allow_all = "*" in final_origins
+    # Credentials-based auth cannot be used with wildcard CORS origins.
+    final_origins = [origin for origin in final_origins if origin != "*"]
+    if not final_origins:
+        raise RuntimeError(
+            "CORS_ORIGINS only contained '*' which is incompatible with "
+            "allow_credentials=True. Add at least one explicit origin."
+        )
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if allow_all else final_origins,
-        allow_credentials=not allow_all,
+        allow_origins=final_origins,
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -80,6 +88,8 @@ def create_app() -> FastAPI:
 
     # Streaks router
     app.include_router(streaks_router, prefix="/api/streaks", tags=["streaks"])
+    app.include_router(coach_router, prefix="/api/coach", tags=["coach"])
+    app.include_router(interviews_router, prefix="/api/interviews", tags=["interviews"])
 
     @app.get("/")
     async def root():

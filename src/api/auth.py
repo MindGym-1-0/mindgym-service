@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
 from fastapi.responses import RedirectResponse
 
+from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.auth_dependencies import (
     _extract_bearer_token,
     _extract_cookie_token,
@@ -16,7 +17,9 @@ from src.lib.auth_service import (
     SignupDisabledError,
     UpstreamAuthServiceError,
     UserAlreadyExistsError,
+    fetch_authenticated_user,
     revoke_auth_session,
+    refresh_session_with_refresh_token,
     login_with_email_password,
     login_with_google_id_token,
     signup_with_email_password,
@@ -211,50 +214,51 @@ async def logout(
     return LogoutResponse(message="Signed out locally")
 
 
-@router.get("/google")
-async def google_login() -> RedirectResponse:
-    """Redirect the user to Google's OAuth consent screen."""
-
-    try:
-        auth_url = get_google_auth_url()
-        return RedirectResponse(url=auth_url)
-    except Exception as exc:
-        logger.exception("Failed to generate Google OAuth URL")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not initiate Google authentication",
-        ) from exc
-
-
-@router.get("/google/callback", response_model=AuthResponse)
-async def google_callback(code: str, response: Response) -> AuthResponse:
-    """Receive the code from Google, exchange it for an ID token, and sign in with Supabase."""
-
-    try:
-        token_data = await exchange_auth_code_for_token(code)
-        id_token = token_data.get("id_token")
-        if not id_token:
-            raise ValueError("Google OAuth token exchange did not return an id_token")
-
-        auth_result = await login_with_google_id_token(id_token)
-    except Exception as exc:
-        logger.exception("Google OAuth callback failed")
+@router.post("/refresh", response_model=AuthResponse)
+async def refresh_session(
+    response: Response,
+    refresh_token: str | None = Cookie(default=None),
+) -> AuthResponse:
+    """Refresh access session cookies using a valid refresh token cookie."""
+    if not refresh_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Google authentication failed",
+            detail="Refresh token required",
+        )
+
+    try:
+        auth_result = await refresh_session_with_refresh_token(refresh_token)
+    except AuthenticationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        ) from exc
+    except UpstreamAuthServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Unexpected refresh error")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected refresh error",
         ) from exc
 
     _set_auth_cookies(response, auth_result)
-    logger.info("Google OAuth login successful")
-
-    return _as_auth_response(auth_result, message="Google login successful")
+    return _as_auth_response(auth_result, message="Session refreshed")
 
 
 @router.get("/me", response_model=AuthResponse)
-async def read_me(current_user: dict = Depends(get_current_user)) -> AuthResponse:
+async def read_me(
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
+) -> AuthResponse:
     """Return the authenticated user profile."""
 
-    return AuthResponse(authenticated=True, user=current_user)
+    _ = current_user_id
+    user = await fetch_authenticated_user(token)
+    return AuthResponse(authenticated=True, user=user)
 
 
 @v1_router.get("/me", response_model=AuthResponse)

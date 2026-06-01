@@ -1,13 +1,12 @@
-"""Gemini Flash integration — tone calibration and session script generation."""
+"""Gemini Flash integration - tone calibration and session script generation."""
 import json
-
-import google.generativeai as genai
+from types import ModuleType
 
 from src.lib.config import settings
 from src.types.session import SessionScript
 
 
-# Heuristic smoke-alarm — deliberately crude word list.
+# Heuristic smoke-alarm - deliberately crude word list.
 # Fires ONLY at anxiety_level_before >= 7 to catch the worst-case failure:
 # amping up someone who needs grounding. This is not a real tone check.
 # Semantic tone and acknowledgment validation is a future LLM-judge task.
@@ -15,6 +14,21 @@ _HIGH_ANXIETY_HYPE_WORDS = frozenset({
     'pump', 'pumped', 'energy', 'energized', 'excited', 'hyped',
     "let's go", 'crush it', 'fired up', 'unstoppable',
 })
+
+
+try:
+    import google.generativeai as genai
+except Exception:  # pragma: no cover - optional dependency in some envs
+    genai = None
+
+
+def _get_genai() -> ModuleType:
+    global genai
+    if genai is None:
+        import google.generativeai as genai_module
+
+        genai = genai_module
+    return genai
 
 
 def is_hype_in_phase1(phase1: str) -> bool:
@@ -27,8 +41,8 @@ def calibrate_tone(anxiety_level_before: int) -> str:
     """Map an anxiety_level_before score to a tone string for the Gemini prompt.
 
     Scale: 1 = calm/not anxious, 10 = extremely anxious.
-    High anxiety → grounding tone; low anxiety → affirming/priming tone.
-    Raises ValueError if the score is outside the valid 1–10 range.
+    High anxiety -> grounding tone; low anxiety -> affirming/priming tone.
+    Raises ValueError if the score is outside the valid 1-10 range.
     """
     if not 1 <= anxiety_level_before <= 10:
         raise ValueError(f'anxiety_level_before out of range: {anxiety_level_before}')
@@ -55,8 +69,9 @@ def generate_script(
     The caller (session_service) is responsible for falling back to a hardcoded template.
     """
     try:
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel(settings.gemini_model)
+        genai_module = _get_genai()
+        genai_module.configure(api_key=settings.gemini_api_key)
+        model = genai_module.GenerativeModel(settings.gemini_model)
 
         from src.lib.prompt_builder import build_prompt
         prompt = build_prompt(
@@ -72,7 +87,7 @@ def generate_script(
 
         response = model.generate_content(
             prompt,
-            generation_config=genai.GenerationConfig(max_output_tokens=600),
+            generation_config=genai_module.GenerationConfig(max_output_tokens=600),
         )
         raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
         data = json.loads(raw)
@@ -81,8 +96,12 @@ def generate_script(
         if company and role:
             p3 = script.phase3.lower()
             p5 = script.phase5.lower()
-            if (company.lower() not in p3 or role.lower() not in p3
-                    or company.lower() not in p5 or role.lower() not in p5):
+            if (
+                company.lower() not in p3
+                or role.lower() not in p3
+                or company.lower() not in p5
+                or role.lower() not in p5
+            ):
                 return None
 
         if anxiety_level_before >= 7 and is_hype_in_phase1(script.phase1):
@@ -109,7 +128,7 @@ def analyze_onboarding(
     offers: int | None = None,
     emotional_challenge: str | None = None,
     baseline_anxiety: int | None = None,
-    preparation_for: str | None = None
+    preparation_for: str | None = None,
 ) -> dict | None:
     """Analyze onboarding answers and decide the first session.
 
@@ -127,10 +146,12 @@ def analyze_onboarding(
     Returns None if Gemini fails.
     """
     try:
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel(settings.gemini_model)
+        genai_module = _get_genai()
+        genai_module.configure(api_key=settings.gemini_api_key)
+        model = genai_module.GenerativeModel(settings.gemini_model)
 
         from src.lib.prompt_builder import build_onboarding_prompt
+
         prompt = build_onboarding_prompt(
             employment_status=employment_status,
             unemployed_duration=unemployed_duration,
@@ -146,12 +167,12 @@ def analyze_onboarding(
             offers=offers,
             emotional_challenge=emotional_challenge,
             baseline_anxiety=baseline_anxiety,
-            preparation_for=preparation_for
+            preparation_for=preparation_for,
         )
 
         response = model.generate_content(
             prompt,
-            generation_config=genai.GenerationConfig(max_output_tokens=600),
+            generation_config=genai_module.GenerationConfig(max_output_tokens=600),
         )
 
         raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
@@ -177,17 +198,19 @@ def generate_onboarding_script(
     offers: int | None = None,
     emotional_challenge: str | None = None,
     baseline_anxiety: int | None = None,
-    preparation_for: str | None = None
+    preparation_for: str | None = None,
 ) -> SessionScript | None:
     """Call Gemini Flash and return a SessionScript, or None if the call fails.
 
     Returns None on timeout, invalid JSON.
     """
     try:
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel(settings.gemini_model)
+        genai_module = _get_genai()
+        genai_module.configure(api_key=settings.gemini_api_key)
+        model = genai_module.GenerativeModel(settings.gemini_model)
 
         from src.lib.prompt_builder import build_onboarding_script_prompt
+
         prompt = build_onboarding_script_prompt(
             employment_status=employment_status,
             unemployed_duration=unemployed_duration,
@@ -203,12 +226,12 @@ def generate_onboarding_script(
             offers=offers,
             emotional_challenge=emotional_challenge,
             baseline_anxiety=baseline_anxiety,
-            preparation_for=preparation_for
+            preparation_for=preparation_for,
         )
 
         response = model.generate_content(
             prompt,
-            generation_config=genai.GenerationConfig(max_output_tokens=600),
+            generation_config=genai_module.GenerationConfig(max_output_tokens=600),
         )
 
         raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
