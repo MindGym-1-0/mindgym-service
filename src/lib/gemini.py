@@ -67,19 +67,9 @@ def _extract_text_from_gemini_response(payload: dict[str, Any]) -> str:
     return ""
 
 
-def _strip_code_fences(text: str) -> str:
-    stripped = text.strip()
-    if stripped.startswith("```") and stripped.endswith("```"):
-        lines = stripped.splitlines()
-        if len(lines) >= 3:
-            return "\n".join(lines[1:-1]).strip()
-    return stripped
-
-
 def _parse_json_output(text: str) -> Any:
-    cleaned = _strip_code_fences(text)
     try:
-        return json.loads(cleaned)
+        return json.loads(text)
     except json.JSONDecodeError as exc:
         raise GeminiInvalidJsonError("Gemini returned invalid JSON.") from exc
 

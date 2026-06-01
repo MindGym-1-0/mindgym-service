@@ -391,10 +391,15 @@ def _validate_gemini_prep_plan_payload(
         if item.session_type not in _VALID_SESSION_TYPES:
             return None
 
+    company_normalized = company.strip().lower()
+    role_normalized = role.strip().lower()
+    if not company_normalized or not role_normalized:
+        return None
+
     combined = " ".join(
         [f"{item.task} {item.description}" for item in model.plan]
     ).lower()
-    if company.lower() not in combined or role.lower() not in combined:
+    if company_normalized not in combined or role_normalized not in combined:
         return None
 
     return model
