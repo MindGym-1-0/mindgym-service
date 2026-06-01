@@ -1,7 +1,10 @@
 """Google OAuth utilities and token management"""
+import logging
 import urllib.parse
 import httpx
 from src.lib.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def get_google_auth_url() -> str:
@@ -48,6 +51,7 @@ async def exchange_auth_code_for_token(code: str) -> dict:
         response = await client.post(token_url, data=payload)
 
         if response.status_code != 200:
-            raise ValueError(f"Failed to exchange code for token: {response.text}")
+            logger.error(f"Google token exchange failed: {response.text}")
+            raise ValueError("Failed to exchange Google authorization code for token.")
 
         return response.json()
