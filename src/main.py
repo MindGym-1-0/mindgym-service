@@ -10,14 +10,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.auth import router as auth_router
 from src.api.auth import v1_router as auth_v1_router
-from src.api.onboarding import router as onboarding_router
+from src.api.coach import router as coach_router
+from src.api.daily_focus import router as daily_focus_router
+from src.api.interviews import router as interviews_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
-from src.api.coach import router as coach_router
-from src.api.interviews import router as interviews_router
+from src.api.mood_logs import router as mood_logs_router
+from src.api.onboarding import router as onboarding_router
 from src.api.sessions import router as sessions_router
 from src.api.sessions import users_router as users_router
 from src.api.streaks import router as streaks_router
+from src.api.weekly_mission import router as weekly_mission_router
 from src.lib import config
 from src.lib.config import settings
 
@@ -28,8 +31,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Handles startup validation routines cleanly via modern lifespan architecture"""
-    # 🚀 Everything here runs on application STARTUP
+    """Handles startup validation routines cleanly via modern lifespan architecture
+
+    🚀 Everything here runs on application STARTUP.
+    """
     if not getattr(settings, "supabase_service_role_key", None):
         logger.warning("SUPABASE_SERVICE_ROLE_KEY is not configured")
     if not getattr(settings, "resolved_supabase_jwt_secret", None):
@@ -73,12 +78,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Include their onboarding and authentication routers
+    # Include onboarding and authentication routers
     app.include_router(onboarding_router)
     app.include_router(auth_router, prefix="/api")
     app.include_router(auth_v1_router, prefix="/api/v1")
 
-    # Include your Job Tracker features under the required specification
+    # Include Job Tracker features under the required specification
     app.include_router(jobs_router, prefix="/api/applications", tags=["jobs"])
     app.include_router(jobs_id_router, prefix="/api/applications", tags=["jobs"])
 
@@ -86,10 +91,25 @@ def create_app() -> FastAPI:
     app.include_router(sessions_router)
     app.include_router(users_router)
 
-    # Streaks router
+    # Streaks and Core Platform routers
     app.include_router(streaks_router, prefix="/api/streaks", tags=["streaks"])
     app.include_router(coach_router, prefix="/api/coach", tags=["coach"])
-    app.include_router(interviews_router, prefix="/api/interviews", tags=["interviews"])
+    app.include_router(
+        interviews_router, prefix="/api/interviews", tags=["interviews"]
+    )
+
+    # Core user optimization routers
+    app.include_router(
+        mood_logs_router, prefix="/api/mood-logs", tags=["mood-logs"]
+    )
+    app.include_router(
+        daily_focus_router, prefix="/api/daily-focus", tags=["Daily Focus"]
+    )
+    app.include_router(
+        weekly_mission_router,
+        prefix="/api/weekly-mission",
+        tags=["Weekly Mission"],
+    )
 
     @app.get("/")
     async def root():

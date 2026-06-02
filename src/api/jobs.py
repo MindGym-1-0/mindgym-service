@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timezone
 from fastapi import APIRouter, Body, HTTPException
 from pydantic import ValidationError
 
@@ -39,9 +41,11 @@ async def create_job(
     if payload.applied_at is not None:
         insert_row["applied_at"] = payload.applied_at.isoformat()
 
-    # Catch database execution exceptions (network errors, schema conflicts, constraint violations)
     try:
-        result = sb.table("jobs").insert(insert_row).select("*").execute()
+        # REFACTOR: Executed non-blockingly inside worker thread via lambda context
+        result = await asyncio.to_thread(
+            lambda: sb.table("jobs").insert(insert_row).select("*").execute()
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=500, detail=f"Database error during job creation: {str(exc)}"
@@ -58,12 +62,15 @@ async def list_jobs(current_user_id: CurrentUserId, token: CurrentUserToken):
     sb = get_supabase_user_client(token)
 
     try:
-        result = (
-            sb.table("jobs")
-            .select("*")
-            .eq("user_id", str(current_user_id))
-            .order("created_at", desc=True)
-            .execute()
+        # REFACTOR: Executed non-blockingly inside worker thread via lambda context
+        result = await asyncio.to_thread(
+            lambda: (
+                sb.table("jobs")
+                .select("*")
+                .eq("user_id", str(current_user_id))
+                .order("created_at", desc=True)
+                .execute()
+            )
         )
     except Exception as exc:
         raise HTTPException(
@@ -73,3 +80,49 @@ async def list_jobs(current_user_id: CurrentUserId, token: CurrentUserToken):
     rows = result.data or []
 
     return [JobResponse.model_validate(cast_row_uuids(row)) for row in rows]
+
+
+@router.get("/stale", response_model=list[dict])
+async def get_stale_jobs(
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
+):
+    sb = get_supabase_user_client(token)
+
+    try:
+        # REFACTOR: Executed non-blockingly inside worker thread via lambda context
+        result = await asyncio.to_thread(
+            lambda: (
+                sb.table("jobs")
+                .select("*")
+                .eq("user_id", str(current_user_id))
+                .is_("outcome", "null")
+                .order("last_moved_at", ascending=True)
+                .execute()
+            )
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error while fetching stale jobs: {str(exc)}",
+        ) from None
+
+    rows = result.data or []
+    now = datetime.now(timezone.utc)
+    stale_jobs = []
+
+    for row in rows:
+        last_moved_str = row.get("last_moved_at")
+        if not last_moved_str:
+            continue
+
+        last_moved = datetime.fromisoformat(last_moved_str.replace("Z", "+00:00"))
+        delta_days = (now - last_moved).days
+
+        # Aligned with daily focus logic threshold (Changed from 28 to 14)
+        if delta_days > 14:
+            casted_row = cast_row_uuids(row)
+            casted_row["days_since_moved"] = delta_days
+            stale_jobs.append(casted_row)
+
+    return stale_jobs
