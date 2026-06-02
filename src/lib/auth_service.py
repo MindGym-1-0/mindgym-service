@@ -279,6 +279,32 @@ async def fetch_authenticated_user(access_token: str) -> Optional[dict[str, Any]
     return _normalize_user(user)
 
 
+async def refresh_session_with_refresh_token(refresh_token: str) -> dict[str, Any]:
+    """Refresh an auth session using a refresh token."""
+    client = create_fresh_supabase_client()
+
+    try:
+        response = await asyncio.to_thread(client.auth.refresh_session, refresh_token)
+    except Exception as exc:
+        message = str(exc).lower()
+        if (
+            "invalid refresh token" in message
+            or "refresh token not found" in message
+            or "expired" in message
+            or "invalid grant" in message
+        ):
+            raise AuthenticationError("Invalid or expired refresh token") from exc
+        logger.exception("Supabase refresh session request failed")
+        raise UpstreamAuthServiceError("Authentication provider unavailable") from exc
+
+    session = getattr(response, "session", None)
+    user = getattr(response, "user", None)
+    if session is None or user is None:
+        raise AuthenticationError("Invalid or expired refresh token")
+
+    return _build_auth_payload(response)
+
+
 async def revoke_auth_session(
     access_token: str | None, refresh_token: str | None = None
 ) -> bool:
