@@ -265,8 +265,20 @@ async def google_login() -> RedirectResponse:
 
 
 @router.get("/google/callback", response_model=AuthResponse)
-async def google_callback(code: str, response: Response) -> AuthResponse:
+async def google_callback(code: str | None = None, error: str | None = None, response: Response = None) -> AuthResponse:
     """Receive the code from Google, exchange it for an ID token, and sign in with Supabase."""
+
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google sign-in was cancelled or failed.",
+        )
+
+    if not code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing authorization code",
+        )
 
     try:
         token_data = await exchange_auth_code_for_token(code)
