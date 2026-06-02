@@ -91,7 +91,10 @@ async def generate_weekly_mission(
     # ------------------------------------------
     try:
         user_res = await asyncio.to_thread(
-            supabase.table("users").select("goal, stage").eq("id", user_id).execute
+            supabase.table("users")
+            .select("goal, stage")
+            .eq("id", user_id)
+            .execute
         )
         user_profile = (
             user_res.data[0]
@@ -109,7 +112,8 @@ async def generate_weekly_mission(
         )
         active_jobs = jobs_res.data or []
 
-        seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        now_utc = datetime.now(timezone.utc)
+        seven_days_ago = (now_utc - timedelta(days=7)).isoformat()
 
         sessions_res = await asyncio.to_thread(
             supabase.table("ai_sessions")
@@ -123,10 +127,10 @@ async def generate_weekly_mission(
 
         avg_anxiety_delta = 0.0
         if session_count > 0:
-            avg_anxiety_delta = (
-                sum(s.get("anxiety_level_delta", 0.0) for s in sessions_this_week)
-                / session_count
+            total_anxiety = sum(
+                s.get("anxiety_level_delta", 0.0) for s in sessions_this_week
             )
+            avg_anxiety_delta = total_anxiety / session_count
 
         prev_mission_res = await asyncio.to_thread(
             supabase.table("weekly_mission")
@@ -136,12 +140,15 @@ async def generate_weekly_mission(
             .limit(1)
             .execute
         )
+        prev_data = prev_mission_res.data
         prev_completion_count = (
-            prev_mission_res.data[0]["completion_count"] if prev_mission_res.data else 0
+            prev_data[0]["completion_count"] if prev_data else 0
         )
 
     except Exception as db_err:
-        logger.error(f"Error compiling user mission parameters: {str(db_err)}")
+        logger.error(
+            f"Error compiling user mission parameters: {str(db_err)}"
+        )
         (
             active_jobs,
             session_count,
@@ -240,6 +247,7 @@ async def generate_weekly_mission(
             supabase.table("weekly_mission")
             .update(upsert_payload)
             .eq("id", existing_row.data[0]["id"])
+            .select("*")
             .execute
         )
     else:
@@ -249,7 +257,10 @@ async def generate_weekly_mission(
         upsert_payload["action_3_completed"] = False
         upsert_payload["completion_count"] = 0
         res = await asyncio.to_thread(
-            supabase.table("weekly_mission").insert(upsert_payload).execute
+            supabase.table("weekly_mission")
+            .insert(upsert_payload)
+            .select("*")
+            .execute
         )
 
     # ------------------------------------------
@@ -373,7 +384,9 @@ async def complete_weekly_mission(
             .execute
         )
     except Exception as save_err:
-        logger.error(f"Failed writing update payload ledger: {str(save_err)}")
+        logger.error(
+            f"Failed writing update payload ledger: {str(save_err)}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not update weekly mission target completion counts.",
