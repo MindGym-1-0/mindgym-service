@@ -329,7 +329,7 @@ def test_log_outcome_terminal_success(api_client, sample_job_row):
 
 
 def test_get_stale_jobs_filtration(api_client, sample_job_row):
-    """Should correctly classify entries inactive for over 28 days as stale, sorting cleanly."""
+    """Should correctly classify entries inactive for over 14 days as stale, sorting cleanly."""
     client, qb, _sb = api_client
 
     stale_date = (datetime.now(timezone.utc) - timedelta(days=35)).isoformat()
