@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 INTERVIEW_SELECT_FIELDS = (
     "id,user_id,company,role,interview_date,event_type,job_id,notes,"
-    "outcome,check_in_attempts,next_checkin_at,created_at"
+    "outcome,check_in_attempts,next_check_in_at,created_at"
 )
 MAX_CHECK_IN_ATTEMPTS = 3
 
@@ -113,6 +113,12 @@ async def update_interview_outcome(
     sb = get_supabase_user_client(token)
     user_id = str(current_user_id)
 
+    if body.from_not_ready and body.outcome != InterviewOutcome.NO_OFFER:
+        raise HTTPException(
+            status_code=422,
+            detail="from_not_ready can only be used with outcome='no_offer'.",
+        )
+
     try:
         existing = await asyncio.to_thread(
             sb.table("interviews")
@@ -142,15 +148,15 @@ async def update_interview_outcome(
 
         if next_attempts >= MAX_CHECK_IN_ATTEMPTS:
             updates["outcome"] = InterviewOutcome.NO_OFFER.value
-            updates["next_checkin_at"] = None
+            updates["next_check_in_at"] = None
         else:
             updates["outcome"] = InterviewOutcome.AWAITING.value
-            updates["next_checkin_at"] = (
+            updates["next_check_in_at"] = (
                 datetime.now(timezone.utc) + timedelta(days=1)
             ).isoformat()
     else:
         updates["outcome"] = body.outcome.value
-        updates["next_checkin_at"] = None
+        updates["next_check_in_at"] = None
 
     try:
         result = await asyncio.to_thread(

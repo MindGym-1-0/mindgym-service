@@ -44,7 +44,7 @@ class InterviewResponse(BaseModel):
     notes: str | None = None
     outcome: InterviewOutcome | None = None
     check_in_attempts: int | None = None
-    next_checkin_at: datetime | None = None
+    next_check_in_at: datetime | None = None
     created_at: datetime
 
 

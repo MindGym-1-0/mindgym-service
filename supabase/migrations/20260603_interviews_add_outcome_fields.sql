@@ -9,7 +9,7 @@ alter table public.interviews
     add column if not exists check_in_attempts integer;
 
 alter table public.interviews
-    add column if not exists next_checkin_at timestamptz;
+    add column if not exists next_check_in_at timestamptz;
 
 alter table public.interviews
     alter column outcome set default 'pending';
