@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "heavy_mode2",
+    "label": "Heavy Mode 2 (rejection recovery)",
+    "inputs": {
+      "preparation_for": "rejection_recovery",
+      "company": null,
+      "role": null,
+      "current_feeling": "discouraged",
+      "anxiety_level_before": 6,
+      "desired_feeling": "grounded",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "gpt-4o-mini",
+  "result": {
+    "raw": "{\n  \"phase1\": \"Close your eyes and breathe. In for a slow count of four, and out for a longer count of six. Let the weight of today rest on your shoulders for just a moment. One more time. You are here, breathing, present.\",\n  \"phase2\": \"Notice the surface beneath you, holding you steady. You may feel a sense of discouragement, and that's valid. It\u2019s okay to feel this way. This moment feels heavy, but it is not the end of your journey. You are still here, and that matters.\",\n  \"phase3\": \"Imagine the path ahead of you, one that continues despite this setback. Picture your next small step \u2014 perhaps it\u2019s a single application or a brief moment of reconnecting with your network. Visualize the action: you take a deep breath, ready yourself, and reach out. This is just a step, not the entire road. You can see the next move clearly.\",\n  \"phase4\": \"Think back to a time when you faced something difficult, like a failed project or a personal challenge, and you didn\u2019t stop there. Remember how you found your way through that moment. You picked yourself up, learned, and continued on a stronger path. That resilience is still inside you, ready for this moment.\",\n  \"phase5\": \"You\u2019re still moving forward, even after this rejection. Tomorrow, you'll take that small step, and that is enough. You are not defined by this moment. Take a breath, ground yourself, and remind yourself that the journey continues.\"\n}",
+    "data": {
+      "phase1": "Close your eyes and breathe. In for a slow count of four, and out for a longer count of six. Let the weight of today rest on your shoulders for just a moment. One more time. You are here, breathing, present.",
+      "phase2": "Notice the surface beneath you, holding you steady. You may feel a sense of discouragement, and that's valid. It\u2019s okay to feel this way. This moment feels heavy, but it is not the end of your journey. You are still here, and that matters.",
+      "phase3": "Imagine the path ahead of you, one that continues despite this setback. Picture your next small step \u2014 perhaps it\u2019s a single application or a brief moment of reconnecting with your network. Visualize the action: you take a deep breath, ready yourself, and reach out. This is just a step, not the entire road. You can see the next move clearly.",
+      "phase4": "Think back to a time when you faced something difficult, like a failed project or a personal challenge, and you didn\u2019t stop there. Remember how you found your way through that moment. You picked yourself up, learned, and continued on a stronger path. That resilience is still inside you, ready for this moment.",
+      "phase5": "You\u2019re still moving forward, even after this rejection. Tomorrow, you'll take that small step, and that is enough. You are not defined by this moment. Take a breath, ground yourself, and remind yourself that the journey continues."
+    },
+    "json_valid": true,
+    "latency": 5.04,
+    "finish_reason": "stop",
+    "input_tokens": 2129,
+    "output_tokens": 320,
+    "cost_usd": 0.000511
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}

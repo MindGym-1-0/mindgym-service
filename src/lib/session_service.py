@@ -106,11 +106,38 @@ async def update_session(session_id: str, anxiety_level_after: int, anxiety_leve
         raise RuntimeError(f'Failed to update session {session_id!r} — no rows matched.')
 
 
+async def _fetch_user_context(user_id: str) -> dict | None:
+    """Fetch onboarding fields for personalising the session prompt.
+
+    Returns None on any failure — session generation continues without context.
+    """
+    client = get_supabase_admin_client()
+    if client is None:
+        return None
+    try:
+        result = await asyncio.to_thread(
+            lambda: client.table("users")
+            .select("employment_status, unemployed_duration, job_timeline, applications_sent_min, applications_sent_max, recruiter_contacts, first_round_interviews, final_round_interviews, emotional_challenge, target_role_category, target_role_note, company_types, baseline_anxiety")
+            .eq("id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        return getattr(result, "data", None) or None
+    except Exception:
+        logger.warning("Failed to fetch user context for user_id=%s — session will proceed without it", user_id)
+        return None
+
+
 async def start_session(user_id: str, request: SessionStartRequest) -> SessionStartResponse:
     """Orchestrate session generation — call Gemini, fall back if needed, persist, return.
 
     Raises RuntimeError if both Gemini and the fallback fail, or if the DB insert returns no id.
     """
+    import time
+    _t0 = time.monotonic()
+
+    user_context = await _fetch_user_context(user_id)
+
     try:
         script = await asyncio.wait_for(
             asyncio.to_thread(
@@ -123,10 +150,13 @@ async def start_session(user_id: str, request: SessionStartRequest) -> SessionSt
                 company=request.company,
                 role=request.role,
                 feeling_note=request.feeling_note,
+                user_context=user_context,
             ),
-            timeout=10.0,
+            timeout=30.0,
         )
+        logger.info("Gemini completed in %.1fs", time.monotonic() - _t0)
     except asyncio.TimeoutError:
+        logger.warning("Gemini timed out after %.1fs — using fallback", time.monotonic() - _t0)
         script = None
 
     if script is None:

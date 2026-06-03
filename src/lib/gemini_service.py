@@ -1,9 +1,12 @@
 """Gemini Flash integration - tone calibration and session script generation."""
 import json
+import logging
 from types import ModuleType
 
 from src.lib.config import settings
 from src.types.session import SessionScript
+
+logger = logging.getLogger(__name__)
 
 
 # Heuristic smoke-alarm - deliberately crude word list.
@@ -11,7 +14,7 @@ from src.types.session import SessionScript
 # amping up someone who needs grounding. This is not a real tone check.
 # Semantic tone and acknowledgment validation is a future LLM-judge task.
 _HIGH_ANXIETY_HYPE_WORDS = frozenset({
-    'pump', 'pumped', 'energy', 'energized', 'excited', 'hyped',
+    'pump', 'pumped', 'energized', 'excited', 'hyped',
     "let's go", 'crush it', 'fired up', 'unstoppable',
 })
 
@@ -62,6 +65,7 @@ def generate_script(
     company: str | None,
     role: str | None,
     feeling_note: str | None = None,
+    user_context: dict | None = None,
 ) -> SessionScript | None:
     """Call Gemini Flash and return a SessionScript, or None if the call fails.
 
@@ -83,13 +87,17 @@ def generate_script(
             company=company,
             role=role,
             feeling_note=feeling_note,
+            user_context=user_context,
         )
 
         response = model.generate_content(
             prompt,
-            generation_config=genai_module.GenerationConfig(max_output_tokens=600),
+            generation_config=genai_module.GenerationConfig(max_output_tokens=8192),
         )
+        finish_reason = response.candidates[0].finish_reason if response.candidates else "NO_CANDIDATES"
+        logger.info("Gemini finish_reason: %s", finish_reason)
         raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
+        logger.info("Gemini raw response: %r", raw[:500])
         data = json.loads(raw)
         script = SessionScript(**data)
 
@@ -102,14 +110,20 @@ def generate_script(
                 or company.lower() not in p5
                 or role.lower() not in p5
             ):
+                logger.warning(
+                    "Mode 1 validation failed — company=%r role=%r missing from phase3/phase5",
+                    company, role,
+                )
                 return None
 
         if anxiety_level_before >= 7 and is_hype_in_phase1(script.phase1):
+            logger.warning("Hype guard triggered — phase1 contains hype language at anxiety=%d", anxiety_level_before)
             return None
 
         return script
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Gemini script generation failed: %s", exc)
         return None
 
 
@@ -172,7 +186,7 @@ def analyze_onboarding(
 
         response = model.generate_content(
             prompt,
-            generation_config=genai_module.GenerationConfig(max_output_tokens=600),
+            generation_config=genai_module.GenerationConfig(max_output_tokens=8192),
         )
 
         raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
@@ -180,6 +194,7 @@ def analyze_onboarding(
         return data
 
     except Exception:
+        logger.exception("analyze_onboarding failed")
         return None
 
 
@@ -231,7 +246,7 @@ def generate_onboarding_script(
 
         response = model.generate_content(
             prompt,
-            generation_config=genai_module.GenerationConfig(max_output_tokens=600),
+            generation_config=genai_module.GenerationConfig(max_output_tokens=8192),
         )
 
         raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()

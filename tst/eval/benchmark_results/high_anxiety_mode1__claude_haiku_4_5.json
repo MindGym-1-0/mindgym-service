@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "high_anxiety_mode1",
+    "label": "High-anxiety Mode 1 (interview)",
+    "inputs": {
+      "preparation_for": "interview_tomorrow",
+      "company": "Google",
+      "role": "Product Manager",
+      "current_feeling": "overwhelmed",
+      "anxiety_level_before": 8,
+      "desired_feeling": "calm",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "claude-haiku-4-5",
+  "result": {
+    "raw": "```json\n{\n  \"phase1\": \"Close your eyes. You're carrying a lot right now \u2014 that eight out of ten is real. Let it be there. Now breathe in slow through your nose, and out slower through your mouth. In slow. Out slower. Again. Your body knows how to do this. One more breath, and feel yourself land.\",\n  \"phase2\": \"You've been running toward this moment, and that effort is heavy. Before we go anywhere else, I want you to know that's being seen. Now feel where you're sitting. Feel your feet on the ground. You are here, not in tomorrow yet. You are safe right now. That matters.\",\n  \"phase3\": \"Now picture it. You walk into the Google office tomorrow. You sit down across from the product team. There's a pause before the first question \u2014 that small, quiet beat before anyone speaks. That beat is yours. Don't rush it. Then the question comes, and you do the thing you actually do well as a Product Manager: you slow down, you ask what problem you're really solving, you think out loud. Not performing. Just thinking. The way you would on any normal Tuesday. You're not trying to be perfect. You're just being clear.\",\n  \"phase4\": \"Think back to a time you were trusted with something that mattered \u2014 a project, a decision, a moment where someone believed in your thinking and you came through. You didn't have to be extraordinary. You just had to be steady and honest. You did that. The same clarity that carried you then walks into Google tomorrow.\",\n  \"phase5\": \"You are ready for Google. Tomorrow you will sit down as a Product Manager and think clearly out loud. That is enough. That is what they're listening for.\"\n}\n```",
+    "data": {
+      "phase1": "Close your eyes. You're carrying a lot right now \u2014 that eight out of ten is real. Let it be there. Now breathe in slow through your nose, and out slower through your mouth. In slow. Out slower. Again. Your body knows how to do this. One more breath, and feel yourself land.",
+      "phase2": "You've been running toward this moment, and that effort is heavy. Before we go anywhere else, I want you to know that's being seen. Now feel where you're sitting. Feel your feet on the ground. You are here, not in tomorrow yet. You are safe right now. That matters.",
+      "phase3": "Now picture it. You walk into the Google office tomorrow. You sit down across from the product team. There's a pause before the first question \u2014 that small, quiet beat before anyone speaks. That beat is yours. Don't rush it. Then the question comes, and you do the thing you actually do well as a Product Manager: you slow down, you ask what problem you're really solving, you think out loud. Not performing. Just thinking. The way you would on any normal Tuesday. You're not trying to be perfect. You're just being clear.",
+      "phase4": "Think back to a time you were trusted with something that mattered \u2014 a project, a decision, a moment where someone believed in your thinking and you came through. You didn't have to be extraordinary. You just had to be steady and honest. You did that. The same clarity that carried you then walks into Google tomorrow.",
+      "phase5": "You are ready for Google. Tomorrow you will sit down as a Product Manager and think clearly out loud. That is enough. That is what they're listening for."
+    },
+    "json_valid": true,
+    "latency": 5.41,
+    "finish_reason": "end_turn",
+    "input_tokens": 2474,
+    "output_tokens": 388,
+    "cost_usd": 0.003531
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}

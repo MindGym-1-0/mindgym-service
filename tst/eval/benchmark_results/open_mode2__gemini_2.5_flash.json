@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "open_mode2",
+    "label": "Open Mode 2 (general reset)",
+    "inputs": {
+      "preparation_for": "general_reset",
+      "company": null,
+      "role": null,
+      "current_feeling": "unsure",
+      "anxiety_level_before": 4,
+      "desired_feeling": "clear_minded",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "gemini-2.5-flash",
+  "result": {
+    "raw": "{\n  \"phase1\": \"Right now, just bring your attention to your breath. A slow, steady inhale, then a slightly longer, softer exhale. Not trying to change anything, just noticing the rhythm. Feel the gentle rise and fall. Let it quiet the edges of any uncertainty you're carrying. One more deep, slow breath in, and release, letting whatever doesn't serve you right now simply drift away. You are just breathing, here.\",\n  \"phase2\": \"Feel your feet on the floor, solid beneath you. Notice the weight of your body, held and supported. This moment, right here, is steady. Even with questions swirling, there is a quiet strength available to you. You are present. You are here, now.\",\n  \"phase3\": \"Now, let's look ahead. Picture your next few days, not as a blur of tasks, but as a path you walk with intention. See yourself waking up, choosing a small, clear action for the day \u2013 perhaps a single focused hour of work, a thoughtful message sent, or simply taking a moment to plan without pressure. This isn't about solving everything at once. It's about taking one steady step, then the next. See that first clear step, feel the grounded decision behind it. You\u2019re not rushing. You're simply moving forward, deliberately, creating clarity as you go.\",\n  \"phase4\": \"Recall a time when you felt uncertain, perhaps at the beginning of a challenging project or a new learning curve, yet you kept showing up. You leaned into the process, gathered information, found your footing, and ultimately, you made progress. That deep capability to move through the unknown, to find your way to clarity, is who you are. That quiet resolve lives within you, ready to guide your next steps.\",\n  \"phase5\": \"The path ahead clarifies with each step. You have everything you need to find your steady direction. Go, choose your next clear action.\"\n}",
+    "data": {
+      "phase1": "Right now, just bring your attention to your breath. A slow, steady inhale, then a slightly longer, softer exhale. Not trying to change anything, just noticing the rhythm. Feel the gentle rise and fall. Let it quiet the edges of any uncertainty you're carrying. One more deep, slow breath in, and release, letting whatever doesn't serve you right now simply drift away. You are just breathing, here.",
+      "phase2": "Feel your feet on the floor, solid beneath you. Notice the weight of your body, held and supported. This moment, right here, is steady. Even with questions swirling, there is a quiet strength available to you. You are present. You are here, now.",
+      "phase3": "Now, let's look ahead. Picture your next few days, not as a blur of tasks, but as a path you walk with intention. See yourself waking up, choosing a small, clear action for the day \u2013 perhaps a single focused hour of work, a thoughtful message sent, or simply taking a moment to plan without pressure. This isn't about solving everything at once. It's about taking one steady step, then the next. See that first clear step, feel the grounded decision behind it. You\u2019re not rushing. You're simply moving forward, deliberately, creating clarity as you go.",
+      "phase4": "Recall a time when you felt uncertain, perhaps at the beginning of a challenging project or a new learning curve, yet you kept showing up. You leaned into the process, gathered information, found your footing, and ultimately, you made progress. That deep capability to move through the unknown, to find your way to clarity, is who you are. That quiet resolve lives within you, ready to guide your next steps.",
+      "phase5": "The path ahead clarifies with each step. You have everything you need to find your steady direction. Go, choose your next clear action."
+    },
+    "json_valid": true,
+    "latency": 11.96,
+    "finish_reason": "1",
+    "input_tokens": 2235,
+    "output_tokens": 415,
+    "cost_usd": 0.000292
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}

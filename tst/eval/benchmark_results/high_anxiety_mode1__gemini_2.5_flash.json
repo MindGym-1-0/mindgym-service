@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "high_anxiety_mode1",
+    "label": "High-anxiety Mode 1 (interview)",
+    "inputs": {
+      "preparation_for": "interview_tomorrow",
+      "company": "Google",
+      "role": "Product Manager",
+      "current_feeling": "overwhelmed",
+      "anxiety_level_before": 8,
+      "desired_feeling": "calm",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "gemini-2.5-flash",
+  "result": {
+    "raw": "{\n  \"phase1\": \"You're feeling overwhelmed right now, and an eight out of ten is a lot to carry. Just for these next few moments, give yourself permission to simply be still. Breathe in slowly through your nose... and out even slower through your mouth. No need to change anything, no need to perform. Just let the breath find its own gentle rhythm. In... and out. That's all for now.\",\n  \"phase2\": \"This heavy feeling you're carrying, this overwhelm, it's real. Now, without judgment, just feel your feet on the floor beneath you. Notice the simple contact. Feel the chair supporting your body, the weight of yourself held in this space. You don't need to do anything else right now but notice these anchors. You are right here, held, in this moment.\",\n  \"phase3\": \"Now, let's turn your attention gently to tomorrow. Picture yourself at Google, in the interview room. You're settling into your seat, grounded. There's that brief, quiet moment before the first question is even asked \u2013 that beat of calm before it all begins. It's not empty; it's full of your steady presence. You take a breath. Then the question comes. And you do what a great Product Manager does: you pause, you clarify the core problem, you think out loud with clarity, showing your process. Not performing, just solving, with that same clear thinking you bring to your best work every day.\",\n  \"phase4\": \"Think back to a time \u2013 it could be from a past project, a challenging presentation, or even a personal situation \u2013 when you had to navigate complexity, when you felt the pressure, and yet you held your focus. You stayed clear, you articulated your thoughts, and you saw it through. Remember how that felt, that steady capability, that deep knowing you could handle it. That same inner strength, that same clarity, is available to you tomorrow at Google.\",\n  \"phase5\": \"Tomorrow, you walk into Google as the Product Manager you already are. You engage with clarity, you share your story, and you demonstrate your true capabilities. That's all you need to do.\"\n}",
+    "data": {
+      "phase1": "You're feeling overwhelmed right now, and an eight out of ten is a lot to carry. Just for these next few moments, give yourself permission to simply be still. Breathe in slowly through your nose... and out even slower through your mouth. No need to change anything, no need to perform. Just let the breath find its own gentle rhythm. In... and out. That's all for now.",
+      "phase2": "This heavy feeling you're carrying, this overwhelm, it's real. Now, without judgment, just feel your feet on the floor beneath you. Notice the simple contact. Feel the chair supporting your body, the weight of yourself held in this space. You don't need to do anything else right now but notice these anchors. You are right here, held, in this moment.",
+      "phase3": "Now, let's turn your attention gently to tomorrow. Picture yourself at Google, in the interview room. You're settling into your seat, grounded. There's that brief, quiet moment before the first question is even asked \u2013 that beat of calm before it all begins. It's not empty; it's full of your steady presence. You take a breath. Then the question comes. And you do what a great Product Manager does: you pause, you clarify the core problem, you think out loud with clarity, showing your process. Not performing, just solving, with that same clear thinking you bring to your best work every day.",
+      "phase4": "Think back to a time \u2013 it could be from a past project, a challenging presentation, or even a personal situation \u2013 when you had to navigate complexity, when you felt the pressure, and yet you held your focus. You stayed clear, you articulated your thoughts, and you saw it through. Remember how that felt, that steady capability, that deep knowing you could handle it. That same inner strength, that same clarity, is available to you tomorrow at Google.",
+      "phase5": "Tomorrow, you walk into Google as the Product Manager you already are. You engage with clarity, you share your story, and you demonstrate your true capabilities. That's all you need to do."
+    },
+    "json_valid": true,
+    "latency": 11.25,
+    "finish_reason": "1",
+    "input_tokens": 2350,
+    "output_tokens": 465,
+    "cost_usd": 0.000316
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}

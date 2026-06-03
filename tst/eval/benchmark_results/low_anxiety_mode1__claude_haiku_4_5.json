@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "low_anxiety_mode1",
+    "label": "Low-anxiety Mode 1 (recruiter call)",
+    "inputs": {
+      "preparation_for": "recruiter_call",
+      "company": "Stripe",
+      "role": "Software Engineer",
+      "current_feeling": "anxious but hopeful",
+      "anxiety_level_before": 3,
+      "desired_feeling": "confident",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "claude-haiku-4-5",
+  "result": {
+    "raw": "```json\n{\n  \"phase1\": \"Close your eyes. Breathe in slow through your nose, hold for a beat, then out slower through your mouth. Again. In slow, out slower. Let your shoulders fall away from your ears. You're exactly where you need to be right now.\",\n  \"phase2\": \"Feel your feet on the ground. Notice the chair holding you. You're carrying a little nervous energy\u2014that's good. It means you care. That energy is fuel, not a warning. You're here, you're present, and you're ready to show up as yourself.\",\n  \"phase3\": \"Now picture it. You're on the call with the Stripe recruiter tomorrow. There's that first moment\u2014after the hello, before they launch into their pitch. That pause. In that pause, you breathe. Then they ask: tell us about yourself, or why Stripe interests you. And you do what you actually do well as a Software Engineer: you speak clearly about a problem you've solved, something you shipped, something you learned building it. Not polished. Just honest and direct. You don't oversell. You let your work speak.\",\n  \"phase4\": \"Think back to a time you explained something technical to someone who didn't know you yet\u2014a peer, a manager, a new team\u2014and they got it. They saw what you were saying. They trusted it. That clarity you brought then, that same directness and care, walks into the Stripe call tomorrow. You've done this before. Your voice carries weight.\",\n  \"phase5\": \"You pick up tomorrow, you listen, you tell them what matters to you as a Software Engineer and why Stripe is the place. You leave them wanting to move forward. That's enough.\"\n}\n```",
+    "data": {
+      "phase1": "Close your eyes. Breathe in slow through your nose, hold for a beat, then out slower through your mouth. Again. In slow, out slower. Let your shoulders fall away from your ears. You're exactly where you need to be right now.",
+      "phase2": "Feel your feet on the ground. Notice the chair holding you. You're carrying a little nervous energy\u2014that's good. It means you care. That energy is fuel, not a warning. You're here, you're present, and you're ready to show up as yourself.",
+      "phase3": "Now picture it. You're on the call with the Stripe recruiter tomorrow. There's that first moment\u2014after the hello, before they launch into their pitch. That pause. In that pause, you breathe. Then they ask: tell us about yourself, or why Stripe interests you. And you do what you actually do well as a Software Engineer: you speak clearly about a problem you've solved, something you shipped, something you learned building it. Not polished. Just honest and direct. You don't oversell. You let your work speak.",
+      "phase4": "Think back to a time you explained something technical to someone who didn't know you yet\u2014a peer, a manager, a new team\u2014and they got it. They saw what you were saying. They trusted it. That clarity you brought then, that same directness and care, walks into the Stripe call tomorrow. You've done this before. Your voice carries weight.",
+      "phase5": "You pick up tomorrow, you listen, you tell them what matters to you as a Software Engineer and why Stripe is the place. You leave them wanting to move forward. That's enough."
+    },
+    "json_valid": true,
+    "latency": 6.05,
+    "finish_reason": "end_turn",
+    "input_tokens": 2433,
+    "output_tokens": 386,
+    "cost_usd": 0.00349
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}

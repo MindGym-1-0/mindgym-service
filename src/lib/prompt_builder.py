@@ -14,6 +14,8 @@ def build_prompt(
     company: str | None,
     role: str | None,
     feeling_note: str | None = None,
+    first_name: str | None = None,
+    user_context: dict | None = None,
 ) -> str:
     """Combine system and user prompts into a single string to send to Gemini."""
     is_mode1 = bool(company and role)
@@ -36,6 +38,9 @@ def build_prompt(
         company=company,
         role=role,
         feeling_note=feeling_note,
+        first_name=first_name,
+        user_context=user_context,
+        anxiety_level_before=anxiety_level_before,
     )
 
     return f"{system}\n\n{user}"

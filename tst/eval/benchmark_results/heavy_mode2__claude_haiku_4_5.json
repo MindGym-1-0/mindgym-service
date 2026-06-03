@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "heavy_mode2",
+    "label": "Heavy Mode 2 (rejection recovery)",
+    "inputs": {
+      "preparation_for": "rejection_recovery",
+      "company": null,
+      "role": null,
+      "current_feeling": "discouraged",
+      "anxiety_level_before": 6,
+      "desired_feeling": "grounded",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "claude-haiku-4-5",
+  "result": {
+    "raw": "```json\n{\n  \"phase1\": \"Close your eyes. Breathe in slow. Hold it. Now out slower \u2014 let the air leave completely. Again. In slow, out slower. You just took hard news. Your nervous system knows it. Let it settle for a moment. One more breath. That's all you need to do right now.\",\n  \"phase2\": \"You are here. The rejection is real, and so are you. This one outcome \u2014 this single result \u2014 is not the verdict on you. It is data. One company, one moment, one decision that was not yours to make. You are still whole. You are still moving.\",\n  \"phase3\": \"Picture this: tomorrow morning, or the day after, whenever you are ready. You do one small thing. You open the search again. You read one job posting. You send one message. You do not need to feel ready. You do not need to feel brave. You just do the next small action, the way you have done hard things before. That small step \u2014 just that one \u2014 is enough. The search continues. You continue.\",\n  \"phase4\": \"Think of a time you came back from something that stung. A failure, a setback, a moment you wanted to quit. And you didn't. You showed up anyway. You kept going. That resilience \u2014 the part of you that does not stop \u2014 that is still in you right now. It did not leave when this rejection came. It is the same engine that keeps you moving forward.\",\n  \"phase5\": \"This rejection does not define your next move. Your next move does. You are grounded. You are still in the search. Rest today. Tomorrow, you take the next step.\"\n}\n```",
+    "data": {
+      "phase1": "Close your eyes. Breathe in slow. Hold it. Now out slower \u2014 let the air leave completely. Again. In slow, out slower. You just took hard news. Your nervous system knows it. Let it settle for a moment. One more breath. That's all you need to do right now.",
+      "phase2": "You are here. The rejection is real, and so are you. This one outcome \u2014 this single result \u2014 is not the verdict on you. It is data. One company, one moment, one decision that was not yours to make. You are still whole. You are still moving.",
+      "phase3": "Picture this: tomorrow morning, or the day after, whenever you are ready. You do one small thing. You open the search again. You read one job posting. You send one message. You do not need to feel ready. You do not need to feel brave. You just do the next small action, the way you have done hard things before. That small step \u2014 just that one \u2014 is enough. The search continues. You continue.",
+      "phase4": "Think of a time you came back from something that stung. A failure, a setback, a moment you wanted to quit. And you didn't. You showed up anyway. You kept going. That resilience \u2014 the part of you that does not stop \u2014 that is still in you right now. It did not leave when this rejection came. It is the same engine that keeps you moving forward.",
+      "phase5": "This rejection does not define your next move. Your next move does. You are grounded. You are still in the search. Rest today. Tomorrow, you take the next step."
+    },
+    "json_valid": true,
+    "latency": 7.18,
+    "finish_reason": "end_turn",
+    "input_tokens": 2337,
+    "output_tokens": 377,
+    "cost_usd": 0.003378
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}

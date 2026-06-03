@@ -1,0 +1,37 @@
+{
+  "scenario": {
+    "id": "low_anxiety_mode1",
+    "label": "Low-anxiety Mode 1 (recruiter call)",
+    "inputs": {
+      "preparation_for": "recruiter_call",
+      "company": "Stripe",
+      "role": "Software Engineer",
+      "current_feeling": "anxious but hopeful",
+      "anxiety_level_before": 3,
+      "desired_feeling": "confident",
+      "time_available": "10 min",
+      "feeling_note": null
+    }
+  },
+  "model": "gemini-2.5-flash",
+  "result": {
+    "raw": "{\n  \"phase1\": \"Close your eyes, if that feels comfortable. Take a slow, steady breath in through your nose, feeling it fill your chest. Hold for a moment, then exhale slowly through your mouth, letting any tension soften. Repeat that, finding a natural rhythm. This is your foundation.\",\n  \"phase2\": \"You're feeling that familiar hum of nervous energy, paired with a clear sense of what's possible. Let both feelings be here. Notice the subtle rhythm of your body, the solid ground beneath you. You are present, right here, ready to shape what's next.\",\n  \"phase3\": \"Now, let's step into the call itself. Picture the precise moment you connect\u2014you hear their voice, you offer a clear, confident 'Hello.' There's a brief, natural pause. In that pause, you feel your focus sharpen. Then, you begin to articulate, simply and directly, why becoming a Software Engineer at Stripe is the right next step for you. It's your story, told with warmth and conviction. You speak to the impact you want to make, connecting your skills not just to the role, but to Stripe's mission, clearly and concisely. You\u2019re not performing; you\u2019re sharing.\",\n  \"phase4\": \"Think of a time when you clearly articulated a complex idea to someone unfamiliar with it, and they truly grasped it. Or a moment when you met someone new and effortlessly built a genuine connection, leaving them with a strong, positive impression of you. Recall that feeling of being understood, of making your point with both clarity and warmth. That precise capability \u2013 the ability to connect and be heard \u2013 is deep within you. It\u2019s a part of you, ready to surface.\",\n  \"phase5\": \"You pick up. You share your story. You show Stripe why you are the Software Engineer they need to speak with again.\"\n}",
+    "data": {
+      "phase1": "Close your eyes, if that feels comfortable. Take a slow, steady breath in through your nose, feeling it fill your chest. Hold for a moment, then exhale slowly through your mouth, letting any tension soften. Repeat that, finding a natural rhythm. This is your foundation.",
+      "phase2": "You're feeling that familiar hum of nervous energy, paired with a clear sense of what's possible. Let both feelings be here. Notice the subtle rhythm of your body, the solid ground beneath you. You are present, right here, ready to shape what's next.",
+      "phase3": "Now, let's step into the call itself. Picture the precise moment you connect\u2014you hear their voice, you offer a clear, confident 'Hello.' There's a brief, natural pause. In that pause, you feel your focus sharpen. Then, you begin to articulate, simply and directly, why becoming a Software Engineer at Stripe is the right next step for you. It's your story, told with warmth and conviction. You speak to the impact you want to make, connecting your skills not just to the role, but to Stripe's mission, clearly and concisely. You\u2019re not performing; you\u2019re sharing.",
+      "phase4": "Think of a time when you clearly articulated a complex idea to someone unfamiliar with it, and they truly grasped it. Or a moment when you met someone new and effortlessly built a genuine connection, leaving them with a strong, positive impression of you. Recall that feeling of being understood, of making your point with both clarity and warmth. That precise capability \u2013 the ability to connect and be heard \u2013 is deep within you. It\u2019s a part of you, ready to surface.",
+      "phase5": "You pick up. You share your story. You show Stripe why you are the Software Engineer they need to speak with again."
+    },
+    "json_valid": true,
+    "latency": 10.46,
+    "finish_reason": "1",
+    "input_tokens": 2309,
+    "output_tokens": 401,
+    "cost_usd": 0.000293
+  },
+  "det_checks": {
+    "pass": true,
+    "failures": []
+  }
+}
