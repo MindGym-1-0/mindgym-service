@@ -30,7 +30,7 @@ def sample_interview_row(fake_user_id: UUID) -> dict[str, object]:
         "notes": None,
         "outcome": "pending",
         "check_in_attempts": 0,
-        "next_checkin_at": None,
+        "next_check_in_at": None,
         "created_at": "2026-06-01T00:00:00+00:00",
     }
 
@@ -102,7 +102,7 @@ def test_patch_interview_outcome_success(
     assert body["id"] == sample_interview_row["id"]
     assert body["outcome"] == outcome
     assert body["check_in_attempts"] == updated_row["check_in_attempts"]
-    assert body["next_checkin_at"] == updated_row["next_checkin_at"]
+    assert body["next_check_in_at"] == updated_row["next_check_in_at"]
 
 
 def test_patch_interview_outcome_from_not_ready_increments_attempts(
@@ -116,7 +116,7 @@ def test_patch_interview_outcome_from_not_ready_increments_attempts(
     updated_row = dict(existing_row)
     updated_row["outcome"] = "awaiting"
     updated_row["check_in_attempts"] = 1
-    updated_row["next_checkin_at"] = "2026-06-04T12:00:00+00:00"
+    updated_row["next_check_in_at"] = "2026-06-04T12:00:00+00:00"
 
     qb.execute.side_effect = [
         SimpleNamespace(data=[existing_row]),
@@ -133,7 +133,7 @@ def test_patch_interview_outcome_from_not_ready_increments_attempts(
     body = resp.json()
     assert body["check_in_attempts"] == 1
     assert body["outcome"] == "awaiting"
-    assert body["next_checkin_at"] is not None
+    assert body["next_check_in_at"] is not None
 
 
 def test_patch_interview_outcome_from_not_ready_threshold_sets_no_offer(
@@ -148,7 +148,7 @@ def test_patch_interview_outcome_from_not_ready_threshold_sets_no_offer(
     updated_row = dict(existing_row)
     updated_row["check_in_attempts"] = 3
     updated_row["outcome"] = "no_offer"
-    updated_row["next_checkin_at"] = None
+    updated_row["next_check_in_at"] = None
 
     qb.execute.side_effect = [
         SimpleNamespace(data=[existing_row]),
@@ -165,7 +165,7 @@ def test_patch_interview_outcome_from_not_ready_threshold_sets_no_offer(
     body = resp.json()
     assert body["check_in_attempts"] == 3
     assert body["outcome"] == "no_offer"
-    assert body["next_checkin_at"] is None
+    assert body["next_check_in_at"] is None
 
 
 def test_patch_interview_outcome_missing_or_not_owned_returns_404(
@@ -196,6 +196,46 @@ def test_patch_interview_outcome_invalid_outcome_returns_422(
     )
 
     assert resp.status_code == 422
+    qb.execute.assert_not_called()
+
+
+def test_patch_interview_outcome_from_not_ready_requires_no_offer(
+    api_client, sample_interview_row: dict[str, object]
+):
+    client, qb, _sb = api_client
+
+    resp = client.patch(
+        f"/api/interviews/{sample_interview_row['id']}/outcome",
+        json={"outcome": "offer", "from_not_ready": True},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 422
+    assert (
+        resp.json()["detail"]
+        == "from_not_ready can only be used with outcome='no_offer'."
+    )
+    qb.update.assert_not_called()
+    qb.execute.assert_not_called()
+
+
+@pytest.mark.parametrize("outcome", ["offer", "awaiting", "pending"])
+def test_patch_interview_outcome_rejects_from_not_ready_for_non_no_offer(
+    api_client, sample_interview_row: dict[str, object], outcome: str
+):
+    client, qb, _sb = api_client
+
+    resp = client.patch(
+        f"/api/interviews/{sample_interview_row['id']}/outcome",
+        json={"outcome": outcome, "from_not_ready": True},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 422
+    assert (
+        resp.json()["detail"]
+        == "from_not_ready can only be used with outcome='no_offer'."
+    )
     qb.execute.assert_not_called()
 
 
