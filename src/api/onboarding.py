@@ -19,6 +19,59 @@ router = APIRouter(prefix="/api", tags=["onboarding"])
 logger = logging.getLogger(__name__)
 
 
+@router.post("/onboard/save", status_code=status.HTTP_200_OK)
+async def save_onboarding(
+    request: OnboardingRequest,
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Save onboarding fields to DB without generating a session.
+
+    Used by 'Go to Dashboard' — persists all user answers so session
+    prompts can use them later, without triggering any Gemini calls.
+    """
+    user_id = current_user["id"]
+    record = {
+        "id": user_id,
+        "goal": "",
+        "stage": "exploring",
+        "anxiety_level": request.baseline_anxiety,
+        "employment_status": request.employment_status,
+        "unemployed_duration": request.unemployed_duration,
+        "job_timeline": request.job_timeline,
+        "target_role_category": request.target_role_category,
+        "target_role_note": request.target_role_note,
+        "company_types": request.company_types,
+        "applications_sent_min": request.applications_sent_min,
+        "applications_sent_max": request.applications_sent_max,
+        "recruiter_contacts": request.recruiter_contacts,
+        "first_round_interviews": request.first_round_interviews,
+        "final_round_interviews": request.final_round_interviews,
+        "offers": request.offers,
+        "emotional_challenge": request.emotional_challenge,
+        "baseline_anxiety": request.baseline_anxiety,
+        "onboarding_completed_at": datetime.utcnow().isoformat(),
+    }
+    try:
+        client = get_supabase_admin_client()
+        if client is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database client not available",
+            )
+        await asyncio.to_thread(
+            lambda: client.table("users").upsert(record, on_conflict="id").execute()
+        )
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("save_onboarding failed for user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to save onboarding: {exc}",
+        ) from exc
+
+
 @router.post(
     "/onboard",
     response_model=OnboardingResponse,
