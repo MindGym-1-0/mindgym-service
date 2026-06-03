@@ -39,6 +39,9 @@ async def onboard(
     user_id = current_user["id"]
     record = {
         "id": user_id,
+        "goal": "",
+        "stage": "exploring",
+        "anxiety_level": request.baseline_anxiety,
         "employment_status": request.employment_status,
         "unemployed_duration": request.unemployed_duration,
         "job_timeline": request.job_timeline,

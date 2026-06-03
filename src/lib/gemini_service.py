@@ -186,7 +186,7 @@ def analyze_onboarding(
 
         response = model.generate_content(
             prompt,
-            generation_config=genai_module.GenerationConfig(max_output_tokens=600),
+            generation_config=genai_module.GenerationConfig(max_output_tokens=8192),
         )
 
         raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
@@ -194,6 +194,7 @@ def analyze_onboarding(
         return data
 
     except Exception:
+        logger.exception("analyze_onboarding failed")
         return None
 
 
@@ -245,7 +246,7 @@ def generate_onboarding_script(
 
         response = model.generate_content(
             prompt,
-            generation_config=genai_module.GenerationConfig(max_output_tokens=600),
+            generation_config=genai_module.GenerationConfig(max_output_tokens=8192),
         )
 
         raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()

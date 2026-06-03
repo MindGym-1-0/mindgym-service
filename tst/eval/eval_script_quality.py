@@ -117,8 +117,16 @@ def collect_inputs() -> dict:
     user_context = {
         "employment_status": "laid_off",
         "unemployed_duration": "3m",
+        "job_timeline": "asap",
+        "applications_sent_min": 10,
+        "applications_sent_max": 15,
+        "recruiter_contacts": 2,
+        "first_round_interviews": 0,
+        "final_round_interviews": 0,
         "emotional_challenge": "rejection_silence",
+        "target_role_category": "product_management",
         "target_role_note": "Senior PM in fintech",
+        "company_types": ["startup", "scale_up"],
         "baseline_anxiety": 7,
     } if include_context else None
 

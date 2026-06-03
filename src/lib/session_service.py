@@ -117,7 +117,7 @@ async def _fetch_user_context(user_id: str) -> dict | None:
     try:
         result = await asyncio.to_thread(
             lambda: client.table("users")
-            .select("employment_status, unemployed_duration, emotional_challenge, target_role_note, baseline_anxiety")
+            .select("employment_status, unemployed_duration, job_timeline, applications_sent_min, applications_sent_max, recruiter_contacts, first_round_interviews, final_round_interviews, emotional_challenge, target_role_category, target_role_note, company_types, baseline_anxiety")
             .eq("id", user_id)
             .maybe_single()
             .execute()

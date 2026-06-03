@@ -18,6 +18,110 @@ _DURATION_TEXT: dict[str, str] = {
     "1y+": "over a year",
 }
 
+_ROLE_CATEGORY_TEXT: dict[str, str] = {
+    "product_design_ux": "a product design or UX role",
+    "product_management": "a product management role",
+    "software_engineering": "a software engineering role",
+    "data_analytics": "a data or analytics role",
+    "marketing": "a marketing role",
+    "sales": "a sales role",
+    "operations": "an operations role",
+    "finance": "a finance role",
+    "people_hr": "a people or HR role",
+    "leadership_executive": "a leadership or executive role",
+}
+
+_TIMELINE_TEXT: dict[str, str] = {
+    "asap": "They need to land something soon — the urgency is real.",
+    "3m": "They're aiming to land something in the next few months.",
+    "6m": "They have some runway — working toward a move in the next six months.",
+    "12m": "They're not in a rush — exploring options over the next year or so.",
+}
+
+
+def _build_company_type_sentence(company_types: list[str] | None) -> str:
+    """Describe the type of environment the user is targeting — only when there's a clear lean.
+
+    Mixed preferences (e.g. startup + enterprise) produce no useful signal for Maya, so we
+    return empty string in that case rather than forcing a vague observation.
+    """
+    if not company_types:
+        return ""
+
+    types = set(company_types) - {"any"}
+    if not types:
+        return ""
+
+    small = types & {"startup", "scale_up"}
+    large = types & {"large_tech", "enterprise"}
+
+    if small and large:
+        return ""  # No clear lean — don't say anything
+
+    if small:
+        return "They're primarily targeting startups and scale-ups."
+    if large == {"large_tech"}:
+        return "They're targeting large tech companies."
+    if large == {"enterprise"}:
+        return "They're targeting enterprise companies."
+    return "They're targeting larger, established companies."
+
+
+def _derive_pipeline_signal(ctx: dict | None) -> str | None:
+    """Return one sentence describing the user's most actionable gap, or None.
+
+    Checks in priority order — returns the first match. Treats missing/None
+    fields as 0 so the logic never raises. Returns None when there's not enough
+    data to point clearly to a gap.
+    """
+    if not ctx:
+        return None
+
+    apps = ctx.get("applications_sent_max") or 0
+    contacts = ctx.get("recruiter_contacts") or 0
+    first_rounds = ctx.get("first_round_interviews") or 0
+    final_rounds = ctx.get("final_round_interviews") or 0
+
+    if apps > 20 and contacts == 0:
+        return "They've sent many applications but haven't connected with any recruiters yet."
+    if apps > 10 and first_rounds == 0:
+        return "They've been applying but haven't reached an interview yet."
+    if contacts > 0 and first_rounds == 0:
+        return "They've made recruiter contacts but haven't converted to interviews."
+    if first_rounds > 0 and final_rounds == 0:
+        return "They've had first-round interviews but haven't advanced further."
+    if first_rounds > 0:
+        return "They've had first-round interviews — they're getting in the door."
+    return None
+
+
+def _build_pipeline_sentence(user_context: dict) -> str:
+    """Translate funnel stats into one sentence about where they are in the search.
+
+    Reads bottom-up: finals → first rounds → apps. Returns empty string when
+    there's not enough data to say anything meaningful.
+    """
+    apps = user_context.get("applications_sent_max") or user_context.get("applications_sent_min")
+    first_rounds = user_context.get("first_round_interviews") or 0
+    final_rounds = user_context.get("final_round_interviews") or 0
+
+    if apps is None:
+        return ""
+
+    if final_rounds >= 2:
+        return "They've made it to final rounds — they're clearly competitive, but not landing offers yet."
+    if final_rounds == 1:
+        return "They've had a final-round interview — getting close, but not there yet."
+    if first_rounds >= 3:
+        return "They're getting first-round interviews but not breaking through to finals yet."
+    if first_rounds >= 1:
+        return "They've had some first-round interviews — early traction, still building momentum."
+    if apps >= 30:
+        return "They've sent a high volume of applications with almost no response — the silence has been heavy."
+    if apps >= 10:
+        return "They've been applying steadily but haven't gotten interviews yet — the lack of traction is wearing."
+    return "They're early in their search, just starting to put themselves out there."
+
 
 def _build_about_block(user_context: dict | None, anxiety_level_before: int) -> str:
     """Translate onboarding fields into a short prose paragraph Maya can use.
@@ -32,8 +136,11 @@ def _build_about_block(user_context: dict | None, anxiety_level_before: int) -> 
 
     status = user_context.get("employment_status")
     duration = user_context.get("unemployed_duration")
+    timeline = user_context.get("job_timeline")
     challenge = user_context.get("emotional_challenge")
+    role_category = user_context.get("target_role_category")
     role_note = user_context.get("target_role_note")
+    company_types = user_context.get("company_types")
     baseline = user_context.get("baseline_anxiety")
 
     if not any([status, challenge, role_note]):
@@ -50,13 +157,32 @@ def _build_about_block(user_context: dict | None, anxiety_level_before: int) -> 
     elif status in ("unemployed", "laid_off"):
         sentences.append("They're currently unemployed and actively searching.")
 
+    if timeline:
+        text = _TIMELINE_TEXT.get(timeline, "")
+        if text:
+            sentences.append(text)
+
+    pipeline = _build_pipeline_sentence(user_context)
+    if pipeline:
+        sentences.append(pipeline)
+
     if challenge:
         text = _EMOTIONAL_CHALLENGE_TEXT.get(challenge, "")
         if text:
             sentences.append(text)
 
-    if role_note:
+    if role_category == "not_sure":
+        sentences.append("They haven't settled on a direction yet — that uncertainty is part of what they're carrying.")
+    elif role_note:
         sentences.append(f"They're aiming for {role_note}.")
+    elif role_category:
+        category_phrase = _ROLE_CATEGORY_TEXT.get(role_category, "")
+        if category_phrase:
+            sentences.append(f"They're targeting {category_phrase}.")
+
+    company_type_sentence = _build_company_type_sentence(company_types)
+    if company_type_sentence:
+        sentences.append(company_type_sentence)
 
     if baseline is not None:
         delta = anxiety_level_before - baseline
@@ -66,6 +192,10 @@ def _build_about_block(user_context: dict | None, anxiety_level_before: int) -> 
             sentences.append("They're calmer than usual today.")
         else:
             sentences.append("Today's anxiety is close to their normal level.")
+
+    pipeline_signal = _derive_pipeline_signal(user_context)
+    if pipeline_signal:
+        sentences.append(pipeline_signal)
 
     if not sentences:
         return ""
