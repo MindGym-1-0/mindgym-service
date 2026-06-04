@@ -192,14 +192,14 @@ def _build_about_block(user_context: dict | None, anxiety_level_before: int) -> 
         if text:
             sentences.append(text)
 
-    pipeline = _build_pipeline_sentence(user_context)
-    if pipeline:
-        sentences.append(pipeline)
-
     if challenge:
         text = _EMOTIONAL_CHALLENGE_TEXT.get(challenge, "")
         if text:
             sentences.append(text)
+
+    pipeline = _build_pipeline_sentence(user_context)
+    if pipeline:
+        sentences.append(pipeline)
 
     if role_category == "not_sure":
         sentences.append("They haven't settled on a direction yet — that uncertainty is part of what they're carrying.")
@@ -223,19 +223,13 @@ def _build_about_block(user_context: dict | None, anxiety_level_before: int) -> 
         else:
             sentences.append("Today's anxiety is close to their normal level.")
 
-    pipeline_signal = _derive_pipeline_signal(user_context)
-    if pipeline_signal:
-        sentences.append(pipeline_signal)
-
     if not sentences:
         return ""
 
     return (
         "About this person: " + " ".join(sentences) + "\n"
-        "Let this context naturally inform your tone and acknowledgment — especially in phase 2, "
-        "which should open by naming what this person has been carrying (not the label, but what it "
-        "feels like in human terms). Do not recite onboarding facts. Let them shape how you speak "
-        "to this person."
+        "Use this as emotional context. Do not recite these facts. "
+        "Translate them into what this person is carrying, especially in phase2."
     )
 
 
@@ -273,8 +267,7 @@ def _build_situation_line(
         prep += f" \u2014 {role} at {company}"
 
     return (
-        f"{who} {prep}. Right now they feel {current_feeling}, "
-        f"and they want to feel {desired_feeling} by the end."
+        f"{who} {prep}. They feel {current_feeling} and want to leave {desired_feeling}."
     )
 
 
@@ -299,22 +292,20 @@ def build_user_prompt(
     emotional_calibration is rendered here (not in system prompt) so the
     system prompt stays static for Vellum and prompt caching.
     """
-    is_mode1 = bool(company and role)
+    is_event_linked = bool(company and role)
 
     situation_line = _build_situation_line(
         first_name, preparation_for, current_feeling, desired_feeling, company, role
     )
     about_block = _build_about_block(user_context, anxiety_level_before)
-    about_section = f"\n{about_block}\n" if about_block else ""
-    calibration_section = f"\n{build_calibration_block(emotional_calibration)}\n" if emotional_calibration else ""
 
-    mode1_context = f"Company: {company}\nRole: {role}" if is_mode1 else ''
+    mode1_context = f"Company: {company}\nRole: {role}" if is_event_linked else ""
 
     mode1_company_rule = (
         f'- phase3 MUST name "{company}" and "{role}" explicitly. '
         f'Not "the company" or "the interview" — use the actual names.\n'
         f'- phase5 MUST name "{company}" and "{role}" explicitly.'
-    ) if is_mode1 else ''
+    ) if is_event_linked else ""
 
     # NOTE: max_output_tokens caps all sessions at the same budget, so
     # time_available cannot meaningfully change script LENGTH. We nudge density
@@ -326,21 +317,31 @@ def build_user_prompt(
         "15 min": "A slightly more spacious pace — let key moments land.",
     }.get(time_available, "A measured pace.")
 
-    critical_rules = f"""
-CRITICAL RULES FOR THIS SESSION:
-{mode1_company_rule}
-- Generic output is a product defect. Be specific to this user's emotional state and session type.
-"""
+    feeling_detail = f'\nIn their own words: "{feeling_note}"' if feeling_note else ""
 
-    feeling_detail = f'\nIn their own words: "{feeling_note}"' if feeling_note else ''
+    critical_rules = (
+        f"CRITICAL RULES FOR THIS SESSION:\n"
+        f"{mode1_company_rule}\n"
+        f"- Generic output is a product defect. Be specific to this user's emotional state and session type."
+    )
 
-    return f"""{situation_line}
-{about_section}{calibration_section}
---- SESSION INPUTS ---
-Preparing for: {preparation_for}
-Currently feeling: {current_feeling}{feeling_detail}
-Wants to feel by the end: {desired_feeling}
-Time available: {time_available} — {pacing}
-{mode1_context}
-{critical_rules}
-Now write the session."""
+    session_inputs = (
+        f"--- SESSION INPUTS ---\n"
+        f"Preparing for: {preparation_for}\n"
+        f"Currently feeling: {current_feeling}{feeling_detail}\n"
+        f"Wants to feel by the end: {desired_feeling}\n"
+        f"Time available: {time_available} — {pacing}\n"
+        f"{mode1_context}"
+    )
+
+    sections = []
+    if emotional_calibration:
+        sections.append(build_calibration_block(emotional_calibration))
+    sections.append(situation_line)
+    if about_block:
+        sections.append(about_block)
+    sections.append(session_inputs)
+    sections.append(critical_rules)
+    sections.append("Now write the session.")
+
+    return "\n\n".join(s.strip() for s in sections if s.strip())
