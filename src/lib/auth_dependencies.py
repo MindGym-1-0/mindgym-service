@@ -56,12 +56,20 @@ async def get_current_user(
 
     if settings.resolved_supabase_jwt_secret:
         try:
-            jwt.decode(
-                token,
-                settings.resolved_supabase_jwt_secret,
-                algorithms=["HS256"],
-                options={"verify_aud": False},
-            )
+            header = jwt.get_unverified_header(token)
+            alg = header.get("alg", "")
+            if alg in ("HS256", "HS384", "HS512"):
+                jwt.decode(
+                    token,
+                    settings.resolved_supabase_jwt_secret,
+                    algorithms=["HS256", "HS384", "HS512"],
+                    options={"verify_aud": False},
+                )
+            else:
+                # Asymmetric algorithm (ES256, RS256, etc.) — skip local
+                # verification and let fetch_authenticated_user validate via
+                # Supabase API which has the correct public key.
+                logger.debug("JWT uses asymmetric alg=%s — skipping local verify", alg)
         except jwt.PyJWTError as exc:
             logger.warning("get_current_user: JWT decode failed: %s", exc)
             raise HTTPException(
