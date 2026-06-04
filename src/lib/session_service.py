@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 
 from src.lib.fallbacks import get_fallback_script
-from src.lib.gemini_service import generate_script
+from src.lib.openai_service import generate_script
 from src.lib.supabase_client import get_supabase_admin_client
 from src.types.session import (
     SessionCompleteRequest,
