@@ -30,6 +30,7 @@ def build_calibration_block(ec: dict) -> str:
     lines.append(f"Primary need: {ec['primary_need']}")
     return "\n".join(lines)
 
+
 _EMOTIONAL_CHALLENGE_TEXT: dict[str, str] = {
     "rejection_silence": "The hardest part of their search has been applying and hearing nothing back — the silence.",
     "interview_anxiety": "Their biggest challenge is the anxiety that builds before interviews.",
