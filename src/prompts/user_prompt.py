@@ -1,5 +1,35 @@
 """User prompt — this user's specific session context and inputs."""
 
+
+def build_calibration_block(ec: dict) -> str:
+    """Build the [SESSION CALIBRATION] block for the user prompt.
+
+    Compact, ASCII-only format — the system prompt instructs Maya to treat
+    this block as binding directives for the session.
+    """
+    arc = ec['tone_arc']
+    tone_arc_line = (
+        f"phase1: {arc['phase1']} | phase2: {arc['phase2']} | "
+        f"phase3: {arc['phase3']} | phase4: {arc['phase4']} | phase5: {arc['phase5']}"
+    )
+
+    lines = [
+        "[SESSION CALIBRATION]",
+        f"Anxiety level: {ec['anxiety_level_before']}/10",
+        f"Overall tone: {ec['tone']}",
+        f"Tone arc: {tone_arc_line}",
+    ]
+
+    if ec['acknowledge_emotion']:
+        lines += [
+            "EMOTIONAL WITNESSING RULE ACTIVE:",
+            "phase2 MUST open by acknowledging what this person is carrying.",
+            "Do not begin coaching content before this acknowledgment.",
+        ]
+
+    lines.append(f"Primary need: {ec['primary_need']}")
+    return "\n".join(lines)
+
 _EMOTIONAL_CHALLENGE_TEXT: dict[str, str] = {
     "rejection_silence": "The hardest part of their search has been applying and hearing nothing back — the silence.",
     "interview_anxiety": "Their biggest challenge is the anxiety that builds before interviews.",
@@ -259,12 +289,15 @@ def build_user_prompt(
     first_name: str | None = None,
     user_context: dict | None = None,
     anxiety_level_before: int = 5,
+    emotional_calibration: dict | None = None,
 ) -> str:
     """Build the user prompt — everything specific to this session.
 
     user_context holds onboarding fields fetched from the users table.
     Defaults to None — prompt is identical to today when not provided.
     anxiety_level_before is needed here to compute the baseline delta.
+    emotional_calibration is rendered here (not in system prompt) so the
+    system prompt stays static for Vellum and prompt caching.
     """
     is_mode1 = bool(company and role)
 
@@ -273,6 +306,7 @@ def build_user_prompt(
     )
     about_block = _build_about_block(user_context, anxiety_level_before)
     about_section = f"\n{about_block}\n" if about_block else ""
+    calibration_section = f"\n{build_calibration_block(emotional_calibration)}\n" if emotional_calibration else ""
 
     mode1_context = f"Company: {company}\nRole: {role}" if is_mode1 else ''
 
@@ -301,7 +335,7 @@ CRITICAL RULES FOR THIS SESSION:
     feeling_detail = f'\nIn their own words: "{feeling_note}"' if feeling_note else ''
 
     return f"""{situation_line}
-{about_section}
+{about_section}{calibration_section}
 --- SESSION INPUTS ---
 Preparing for: {preparation_for}
 Currently feeling: {current_feeling}{feeling_detail}
