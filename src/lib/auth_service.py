@@ -156,6 +156,24 @@ async def login_with_email_password(email: str, password: str) -> dict[str, Any]
     return _build_auth_payload(response)
 
 
+async def login_with_google_id_token(id_token: str) -> dict[str, Any]:
+    """Authenticate a Google ID token with Supabase and normalize the session payload."""
+
+    client = get_supabase_client()
+
+    try:
+        response = await asyncio.to_thread(
+            client.auth.sign_in_with_id_token,
+            {"provider": "google", "token": id_token},
+        )
+    except Exception as exc:
+        logger.exception("Supabase Google token sign-in failed")
+        raise UpstreamAuthServiceError("Google authentication failed") from exc
+
+    _validate_login_response(response, "google_oauth")
+    return _build_auth_payload(response)
+
+
 async def signup_with_email_password(
     email: str,
     password: str,
