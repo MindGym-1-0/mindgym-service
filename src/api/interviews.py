@@ -13,6 +13,7 @@ from src.types.interview import (
     InterviewCreate,
     InterviewListResponse,
     InterviewOutcome,
+    InterviewOutcomeResponse,
     InterviewOutcomeUpdate,
     InterviewResponse,
 )
@@ -25,6 +26,7 @@ INTERVIEW_SELECT_FIELDS = (
     "outcome,check_in_attempts,next_check_in_at,created_at"
 )
 MAX_CHECK_IN_ATTEMPTS = 3
+INTERVIEW_OUTCOME_SELECT_FIELDS = "id,outcome,check_in_attempts,next_check_in_at"
 
 
 @router.get("", response_model=InterviewListResponse)
@@ -103,13 +105,13 @@ async def create_interview(
     return InterviewResponse.model_validate(result.data[0])
 
 
-@router.patch("/{interview_id}/outcome", response_model=InterviewResponse)
+@router.patch("/{interview_id}/outcome", response_model=InterviewOutcomeResponse)
 async def update_interview_outcome(
     interview_id: UUID,
     body: InterviewOutcomeUpdate,
     current_user_id: CurrentUserId,
     token: CurrentUserToken,
-) -> InterviewResponse:
+) -> InterviewOutcomeResponse:
     sb = get_supabase_user_client(token)
     user_id = str(current_user_id)
 
@@ -122,7 +124,7 @@ async def update_interview_outcome(
     try:
         existing = await asyncio.to_thread(
             sb.table("interviews")
-            .select(INTERVIEW_SELECT_FIELDS)
+            .select(INTERVIEW_OUTCOME_SELECT_FIELDS)
             .eq("id", str(interview_id))
             .eq("user_id", user_id)
             .limit(1)
@@ -164,7 +166,7 @@ async def update_interview_outcome(
             .update(updates)
             .eq("id", str(interview_id))
             .eq("user_id", user_id)
-            .select(INTERVIEW_SELECT_FIELDS)
+            .select(INTERVIEW_OUTCOME_SELECT_FIELDS)
             .execute
         )
     except Exception:
@@ -174,7 +176,64 @@ async def update_interview_outcome(
     if not result.data:
         raise HTTPException(status_code=404, detail="Interview not found.")
 
-    return InterviewResponse.model_validate(result.data[0])
+    return InterviewOutcomeResponse.model_validate(result.data[0])
+
+
+@router.patch("/{interview_id}/snooze-checkin", response_model=InterviewOutcomeResponse)
+async def snooze_interview_checkin(
+    interview_id: UUID,
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
+) -> InterviewOutcomeResponse:
+    sb = get_supabase_user_client(token)
+    user_id = str(current_user_id)
+
+    try:
+        existing = await asyncio.to_thread(
+            sb.table("interviews")
+            .select(INTERVIEW_OUTCOME_SELECT_FIELDS)
+            .eq("id", str(interview_id))
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute
+        )
+    except Exception:
+        logger.exception("Failed to fetch interview for snooze.")
+        raise HTTPException(status_code=500, detail="Unable to snooze interview check-in.") from None
+
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Interview not found.")
+
+    current_row = existing.data[0]
+    current_attempts = int(current_row.get("check_in_attempts") or 0)
+    next_attempts = current_attempts + 1
+    updates: dict[str, object] = {"check_in_attempts": next_attempts}
+
+    if next_attempts >= MAX_CHECK_IN_ATTEMPTS:
+        updates["outcome"] = InterviewOutcome.NO_OFFER.value
+        updates["next_check_in_at"] = None
+    else:
+        updates["next_check_in_at"] = (
+            datetime.now(timezone.utc) + timedelta(days=1)
+        ).isoformat()
+
+    try:
+        result = await asyncio.to_thread(
+            sb.table("interviews")
+            .update(updates)
+            .eq("id", str(interview_id))
+            .eq("user_id", user_id)
+            .select(INTERVIEW_OUTCOME_SELECT_FIELDS)
+            .execute
+        )
+    except Exception:
+        logger.exception("Failed to persist interview snooze update.")
+        raise HTTPException(status_code=500, detail="Unable to snooze interview check-in.") from None
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Interview not found.")
+
+    return InterviewOutcomeResponse.model_validate(result.data[0])
 
 
 @router.delete(

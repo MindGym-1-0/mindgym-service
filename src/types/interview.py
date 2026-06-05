@@ -31,6 +31,15 @@ class InterviewOutcomeUpdate(BaseModel):
     from_not_ready: bool = False
 
 
+class InterviewOutcomeResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    outcome: InterviewOutcome | None = None
+    check_in_attempts: int | None = None
+    next_check_in_at: datetime | None = None
+
+
 class InterviewResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

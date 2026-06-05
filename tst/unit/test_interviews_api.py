@@ -250,3 +250,95 @@ def test_patch_interview_outcome_invalid_uuid_path_returns_422(api_client):
 
     assert resp.status_code == 422
     qb.execute.assert_not_called()
+
+
+def test_patch_interview_snooze_checkin_sets_next_check_in_at(
+    api_client, sample_interview_row: dict[str, object]
+):
+    client, qb, _sb = api_client
+
+    updated_row = {
+        "id": sample_interview_row["id"],
+        "outcome": sample_interview_row["outcome"],
+        "check_in_attempts": 1,
+        "next_check_in_at": "2026-06-05T12:00:00+00:00",
+    }
+
+    qb.execute.side_effect = [
+        SimpleNamespace(
+            data=[
+                {
+                    "id": sample_interview_row["id"],
+                    "outcome": sample_interview_row["outcome"],
+                    "check_in_attempts": 0,
+                    "next_check_in_at": None,
+                }
+            ]
+        ),
+        SimpleNamespace(data=[updated_row]),
+    ]
+
+    resp = client.patch(
+        f"/api/interviews/{sample_interview_row['id']}/snooze-checkin",
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == sample_interview_row["id"]
+    assert body["check_in_attempts"] == 1
+    assert body["outcome"] == sample_interview_row["outcome"]
+    assert body["next_check_in_at"] is not None
+
+
+def test_patch_interview_snooze_checkin_third_attempt_sets_no_offer(
+    api_client, sample_interview_row: dict[str, object]
+):
+    client, qb, _sb = api_client
+
+    updated_row = {
+        "id": sample_interview_row["id"],
+        "outcome": "no_offer",
+        "check_in_attempts": 3,
+        "next_check_in_at": None,
+    }
+
+    qb.execute.side_effect = [
+        SimpleNamespace(
+            data=[
+                {
+                    "id": sample_interview_row["id"],
+                    "outcome": "pending",
+                    "check_in_attempts": 2,
+                    "next_check_in_at": "2026-06-04T12:00:00+00:00",
+                }
+            ]
+        ),
+        SimpleNamespace(data=[updated_row]),
+    ]
+
+    resp = client.patch(
+        f"/api/interviews/{sample_interview_row['id']}/snooze-checkin",
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["check_in_attempts"] == 3
+    assert body["outcome"] == "no_offer"
+    assert body["next_check_in_at"] is None
+
+
+def test_patch_interview_snooze_checkin_missing_or_not_owned_returns_404(
+    api_client, sample_interview_row: dict[str, object]
+):
+    client, qb, _sb = api_client
+
+    qb.execute.return_value = SimpleNamespace(data=[])
+
+    resp = client.patch(
+        f"/api/interviews/{sample_interview_row['id']}/snooze-checkin",
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 404
