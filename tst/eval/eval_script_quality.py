@@ -1,10 +1,7 @@
-"""Interactive script quality evaluator — run this manually to inspect Gemini output.
+"""Interactive script quality evaluator — run this manually to inspect OpenAI output.
 
 Usage:
     python tst/eval/eval_script_quality.py
-
-To test a different Gemini model:
-    GEMINI_MODEL=gemini-2.0-flash python tst/eval/eval_script_quality.py
 """
 
 from __future__ import annotations
@@ -19,11 +16,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
-import google.generativeai as genai  # noqa: E402
-
 from src.lib.config import settings  # noqa: E402
 from src.lib.gemini_service import is_hype_in_phase1  # noqa: E402
-from src.lib.prompt_builder import build_prompt  # noqa: E402
+from src.lib.prompt_builder import build_prompt_parts  # noqa: E402
 from src.types.session import SessionScript  # noqa: E402
 
 
@@ -170,10 +165,10 @@ def run_scenario(inputs: dict) -> None:
     anxiety_level_before = inputs["anxiety_level_before"]
 
     try:
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel(settings.gemini_model)
+        from openai import OpenAI
+        client = OpenAI(api_key=settings.openai_api_key)
 
-        prompt = build_prompt(
+        system, user = build_prompt_parts(
             preparation_for=inputs["preparation_for"],
             current_feeling=inputs["current_feeling"],
             desired_feeling=inputs["desired_feeling"],
@@ -186,10 +181,19 @@ def run_scenario(inputs: dict) -> None:
             user_context=inputs.get("user_context"),
         )
 
-        response = model.generate_content(prompt)
-        raw_text = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
+        print(f"\n  System prompt ({len(system)} chars) | User prompt ({len(user)} chars)")
 
-        print(f"\n  Raw Gemini response:\n  {raw_text}\n")
+        response = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            response_format={"type": "json_object"},
+        )
+        raw_text = response.choices[0].message.content or ""
+
+        print(f"\n  Raw OpenAI response:\n  {raw_text}\n")
 
         try:
             data = json.loads(raw_text)
@@ -232,14 +236,14 @@ def run_scenario(inputs: dict) -> None:
         print(f"\n  Phase 5: {script.phase5}")
 
     except Exception as e:
-        print(f"\n  !! Gemini call failed: {type(e).__name__}: {e}")
+        print(f"\n  !! OpenAI call failed: {type(e).__name__}: {e}")
         print("  !! Fallback would be used in production.")
 
 
 def main() -> None:
     print(f"\n{_divider()}")
     print("  MindGym Script Quality Evaluator")
-    print(f"  Model: {settings.gemini_model} (Gemini)")
+    print(f"  Model: {settings.openai_model} (OpenAI)")
     print(_divider())
 
     while True:

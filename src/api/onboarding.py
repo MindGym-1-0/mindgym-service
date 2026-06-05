@@ -11,7 +11,7 @@ from src.types.models import OnboardingRequest, OnboardingResponse
 from src.lib.prompt_builder import derive_preparation_for
 from src.types.models import OnboardingGapAnalysis, OnboardingFirstSession
 from src.lib.session_service import insert_onboarding_session
-from src.lib.gemini_service import analyze_onboarding, generate_onboarding_script
+from src.lib.openai_service import analyze_onboarding, generate_onboarding_script
 from src.lib.fallbacks import get_fallback_script
 from datetime import datetime
 

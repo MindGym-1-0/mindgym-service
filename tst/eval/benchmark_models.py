@@ -158,7 +158,7 @@ def build_prompt_parts(inputs: dict) -> tuple[str, str]:
         desired_feeling=inputs["desired_feeling"],
         anxiety_level_before=inputs["anxiety_level_before"],
     )
-    system = build_system_prompt(emotional_calibration=ec, is_mode1=is_mode1)
+    system = build_system_prompt(is_event_linked=is_mode1)
     user = build_user_prompt(
         preparation_for=inputs["preparation_for"],
         current_feeling=inputs["current_feeling"],
@@ -167,6 +167,7 @@ def build_prompt_parts(inputs: dict) -> tuple[str, str]:
         company=inputs.get("company"),
         role=inputs.get("role"),
         feeling_note=inputs.get("feeling_note"),
+        emotional_calibration=ec,
     )
     return system, user
 

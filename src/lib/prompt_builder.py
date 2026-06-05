@@ -5,6 +5,48 @@ from src.prompts.system_prompt import build_system_prompt
 from src.prompts.user_prompt import build_user_prompt
 
 
+def build_prompt_parts(
+    preparation_for: str,
+    current_feeling: str,
+    desired_feeling: str,
+    time_available: str,
+    anxiety_level_before: int,
+    company: str | None,
+    role: str | None,
+    feeling_note: str | None = None,
+    first_name: str | None = None,
+    user_context: dict | None = None,
+) -> tuple[str, str]:
+    """Return (system_prompt, user_prompt) as separate strings.
+
+    Used by OpenAI service which expects system/user roles separately.
+    """
+    is_event_linked = bool(company and role)
+
+    emotional_calibration = build_emotional_calibration(
+        current_feeling=current_feeling,
+        desired_feeling=desired_feeling,
+        anxiety_level_before=anxiety_level_before,
+    )
+
+    system = build_system_prompt(is_event_linked=is_event_linked)
+    user = build_user_prompt(
+        preparation_for=preparation_for,
+        current_feeling=current_feeling,
+        desired_feeling=desired_feeling,
+        time_available=time_available,
+        company=company,
+        role=role,
+        feeling_note=feeling_note,
+        first_name=first_name,
+        user_context=user_context,
+        anxiety_level_before=anxiety_level_before,
+        emotional_calibration=emotional_calibration,
+    )
+
+    return system, user
+
+
 def build_prompt(
     preparation_for: str,
     current_feeling: str,
@@ -18,7 +60,7 @@ def build_prompt(
     user_context: dict | None = None,
 ) -> str:
     """Combine system and user prompts into a single string to send to Gemini."""
-    is_mode1 = bool(company and role)
+    is_event_linked = bool(company and role)
 
     emotional_calibration = build_emotional_calibration(
         current_feeling=current_feeling,
@@ -26,10 +68,7 @@ def build_prompt(
         anxiety_level_before=anxiety_level_before,
     )
 
-    system = build_system_prompt(
-        emotional_calibration=emotional_calibration,
-        is_mode1=is_mode1,
-    )
+    system = build_system_prompt(is_event_linked=is_event_linked)
     user = build_user_prompt(
         preparation_for=preparation_for,
         current_feeling=current_feeling,
@@ -41,6 +80,7 @@ def build_prompt(
         first_name=first_name,
         user_context=user_context,
         anxiety_level_before=anxiety_level_before,
+        emotional_calibration=emotional_calibration,
     )
 
     return f"{system}\n\n{user}"
@@ -150,11 +190,13 @@ def build_onboarding_script_prompt(
 
     Generate their first personalised mental health session.
 
-    Based on this, respond ONLY in JSON with no extra text:
+    Write their first personalised 5-phase mental performance session. Follow the phase rules exactly: phase1 is calm breathing (60-90s), phase2 is present-moment grounding (45-60s), phase3 is vivid visualization anchored to ONE specific picturable moment (90-120s), phase4 anchors a DIFFERENT past event showing underlying capability (45-60s), phase5 is a short punchy send-off naming a concrete next step (30s).
+
+    Respond ONLY in JSON with no extra text:
     {{
-        "phase1": "60-90 seconds of calm breathing...",
-        "phase2": "45-60 seconds of grounding...",
-        "phase3": "90-120 seconds of visualization tailored to their situation...",
-        "phase4": "45-60 seconds acnchoring their capability...",
-        "phase5": "30 second confidence send-off specific to this person..."
+        "phase1": "...",
+        "phase2": "...",
+        "phase3": "...",
+        "phase4": "...",
+        "phase5": "..."
     }}"""
