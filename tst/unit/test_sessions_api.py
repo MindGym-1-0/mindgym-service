@@ -1,8 +1,9 @@
 """Unit tests for sessions API route handlers."""
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
+from src.lib.elevenlabs_service import ElevenLabsError
 from src.main import app
 from src.lib.auth_dependencies import get_current_user
 from src.types.session import (
@@ -278,4 +279,125 @@ def test_patch_user_me_returns_401_when_unauthenticated() -> None:
     """PATCH /api/users/me must return 401 without auth."""
     client = TestClient(app)
     response = client.patch('/api/users/me', json={'goal': 'something'})
+    assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# GET /api/sessions/{session_id}/audio/{phase}
+# ---------------------------------------------------------------------------
+
+def _configured_settings() -> MagicMock:
+    m = MagicMock()
+    m.elevenlabs_api_key = 'test-key'
+    m.elevenlabs_voice_id = 'test-voice'
+    return m
+
+
+async def _fake_audio_stream(_text: str):
+    yield b'mp3bytes'
+
+
+async def _error_audio_stream(_text: str):
+    raise ElevenLabsError('ElevenLabs unavailable')
+    yield  # makes this an async generator
+
+
+@pytest.mark.unit
+def test_get_phase_audio_returns_200_with_audio_mpeg(client) -> None:
+    """GET /audio/{phase} must return 200, audio/mpeg, and Cache-Control: no-store."""
+    with (
+        patch('src.api.sessions.fetch_phase_text', new_callable=AsyncMock, return_value='Close your eyes.'),
+        patch('src.api.sessions.stream_phase_audio', side_effect=_fake_audio_stream),
+        patch('src.api.sessions.get_settings', return_value=_configured_settings()),
+    ):
+        response = client.get('/api/sessions/session-abc/audio/1')
+
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'audio/mpeg'
+    assert response.headers['cache-control'] == 'no-store'
+    assert response.content == b'mp3bytes'
+
+
+@pytest.mark.unit
+def test_get_phase_audio_returns_422_when_phase_is_zero(client) -> None:
+    """GET /audio/0 must return 422 — phase must be between 1 and 5."""
+    response = client.get('/api/sessions/session-abc/audio/0')
+    assert response.status_code == 422
+
+
+@pytest.mark.unit
+def test_get_phase_audio_returns_422_when_phase_is_six(client) -> None:
+    """GET /audio/6 must return 422 — phase must be between 1 and 5."""
+    response = client.get('/api/sessions/session-abc/audio/6')
+    assert response.status_code == 422
+
+
+@pytest.mark.unit
+def test_get_phase_audio_returns_404_when_session_not_found(client) -> None:
+    """GET /audio/{phase} must return 404 when session does not exist."""
+    with patch(
+        'src.api.sessions.fetch_phase_text',
+        new_callable=AsyncMock,
+        side_effect=LookupError('Session not found.'),
+    ):
+        response = client.get('/api/sessions/missing-id/audio/1')
+    assert response.status_code == 404
+
+
+@pytest.mark.unit
+def test_get_phase_audio_returns_404_when_session_belongs_to_another_user(client) -> None:
+    """GET /audio/{phase} must return 404 when session belongs to a different user."""
+    with patch(
+        'src.api.sessions.fetch_phase_text',
+        new_callable=AsyncMock,
+        side_effect=LookupError('Session not found.'),
+    ):
+        response = client.get('/api/sessions/other-user-session/audio/2')
+    assert response.status_code == 404
+
+
+@pytest.mark.unit
+def test_get_phase_audio_returns_400_when_phase_text_is_empty(client) -> None:
+    """GET /audio/{phase} must return 400 when phase text is empty in the DB."""
+    with patch(
+        'src.api.sessions.fetch_phase_text',
+        new_callable=AsyncMock,
+        side_effect=ValueError('Phase 3 text is empty.'),
+    ):
+        response = client.get('/api/sessions/session-abc/audio/3')
+    assert response.status_code == 400
+
+
+@pytest.mark.unit
+def test_get_phase_audio_returns_503_when_elevenlabs_not_configured(client) -> None:
+    """GET /audio/{phase} must return 503 when ElevenLabs credentials are missing."""
+    unconfigured = MagicMock()
+    unconfigured.elevenlabs_api_key = None
+    unconfigured.elevenlabs_voice_id = 'test-voice'
+
+    with (
+        patch('src.api.sessions.fetch_phase_text', new_callable=AsyncMock, return_value='Close your eyes.'),
+        patch('src.api.sessions.get_settings', return_value=unconfigured),
+    ):
+        response = client.get('/api/sessions/session-abc/audio/1')
+    assert response.status_code == 503
+
+
+@pytest.mark.unit
+def test_get_phase_audio_returns_503_when_elevenlabs_raises(client) -> None:
+    """GET /audio/{phase} must return 503 when ElevenLabs service raises."""
+    with (
+        patch('src.api.sessions.fetch_phase_text', new_callable=AsyncMock, return_value='Close your eyes.'),
+        patch('src.api.sessions.stream_phase_audio', side_effect=_error_audio_stream),
+        patch('src.api.sessions.get_settings', return_value=_configured_settings()),
+    ):
+        response = client.get('/api/sessions/session-abc/audio/1')
+    assert response.status_code == 503
+
+
+@pytest.mark.unit
+def test_get_phase_audio_returns_401_when_unauthenticated() -> None:
+    """GET /audio/{phase} must return 401 without auth."""
+    client = TestClient(app)
+    response = client.get('/api/sessions/session-abc/audio/1')
     assert response.status_code == 401
