@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     gemini_model: str = Field(default="gemini-1.5-flash", alias="GEMINI_MODEL")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o", alias="OPENAI_MODEL")
+    elevenlabs_api_key: str | None = Field(default=None, alias="ELEVENLABS_API_KEY")
+    elevenlabs_voice_id: str | None = Field(default=None, alias="ELEVENLABS_VOICE_ID")
     supabase_jwt_secret: str | None = Field(default=None, alias="SUPABASE_JWT_SECRET")
     legacy_jwt_secret: str | None = Field(default=None, alias="JWT_SECRET")
     app_env: str = Field(default="development", alias="APP_ENV")
