@@ -24,7 +24,7 @@ from src.lib.auth_service import (
     login_with_google_id_token,
     signup_with_email_password,
 )
-from src.lib.config import get_settings, settings
+from src.lib.config import get_settings
 from src.lib.oauth import (
     exchange_auth_code_for_token,
     get_google_auth_url,
