@@ -280,6 +280,32 @@ async def complete_session(user_id: str, request: SessionCompleteRequest) -> Ses
     )
 
 
+async def fetch_phase_text(user_id: str, session_id: str, phase: int) -> str:
+    """Fetch the text for one phase from ai_sessions, scoped to the requesting user.
+
+    Raises LookupError if the session does not exist or belongs to another user.
+    Raises ValueError if the phase text is empty.
+    """
+    phase_col = f"phase{phase}"
+    client = get_supabase_admin_client()
+    result = await asyncio.to_thread(
+        lambda: client.table("ai_sessions")
+        .select(f"id, user_id, {phase_col}")
+        .eq("id", session_id)
+        .maybe_single()
+        .execute()
+    )
+    row = getattr(result, "data", None)
+    if not row:
+        raise LookupError(f"Session {session_id!r} not found.")
+    if row.get("user_id") and row["user_id"] != user_id:
+        raise LookupError(f"Session {session_id!r} not found.")
+    text = (row.get(phase_col) or "").strip()
+    if not text:
+        raise ValueError(f"Phase {phase} text is empty for session {session_id!r}.")
+    return text
+
+
 async def insert_onboarding_session(
     user_id: str,
     preparation_for: str,

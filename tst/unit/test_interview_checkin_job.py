@@ -143,7 +143,7 @@ def test_run_interview_checkin_notification_job_filters_and_reschedules(monkeypa
                     "interview_date": "2026-06-01T14:00:00+00:00",
                     "outcome": "pending",
                     "check_in_attempts": 1,
-                    "next_check_in_at": "2026-06-05T12:00:00+00:00",
+                    "next_check_in_at": "2099-06-05T12:00:00+00:00",
                 },
                 {
                     "id": "iv-closed",

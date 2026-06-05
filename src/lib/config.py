@@ -41,9 +41,11 @@ class Settings(BaseSettings):
         default=None, alias="SUPABASE_SERVICE_ROLE_KEY"
     )
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
-    gemini_model: str = Field(default="gemini-1.5-flash", alias="GEMINI_MODEL")
+    gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o", alias="OPENAI_MODEL")
+    elevenlabs_api_key: str | None = Field(default=None, alias="ELEVENLABS_API_KEY")
+    elevenlabs_voice_id: str | None = Field(default=None, alias="ELEVENLABS_VOICE_ID")
     supabase_jwt_secret: str | None = Field(default=None, alias="SUPABASE_JWT_SECRET")
     legacy_jwt_secret: str | None = Field(default=None, alias="JWT_SECRET")
     app_env: str = Field(default="development", alias="APP_ENV")
@@ -51,6 +53,9 @@ class Settings(BaseSettings):
     auth_cookie_samesite: str = Field(default="lax", alias="AUTH_COOKIE_SAMESITE")
     auth_cookie_domain: str | None = Field(default=None, alias="AUTH_COOKIE_DOMAIN")
     internal_cron_secret: str | None = Field(default=None, alias="INTERNAL_CRON_SECRET")
+    google_client_id: str | None = Field(default=None, alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str | None = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
+    google_redirect_uri: str | None = Field(default=None, alias="GOOGLE_REDIRECT_URI")
 
     @property
     def resolved_supabase_jwt_secret(self) -> str | None:
