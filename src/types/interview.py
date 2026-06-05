@@ -51,7 +51,7 @@ class InterviewResponse(BaseModel):
     event_type: str
     job_id: str | None = None
     notes: str | None = None
-    outcome: InterviewOutcome | None = None
+    outcome: InterviewOutcome = InterviewOutcome.PENDING
     check_in_attempts: int | None = None
     next_check_in_at: datetime | None = None
     created_at: datetime

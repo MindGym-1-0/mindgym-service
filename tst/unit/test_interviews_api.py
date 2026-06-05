@@ -342,3 +342,70 @@ def test_patch_interview_snooze_checkin_missing_or_not_owned_returns_404(
     )
 
     assert resp.status_code == 404
+
+
+@pytest.mark.parametrize("outcome", ["offer", "no_offer"])
+def test_patch_interview_snooze_checkin_rejects_closed_outcomes(
+    api_client, sample_interview_row: dict[str, object], outcome: str
+):
+    client, qb, _sb = api_client
+
+    qb.execute.return_value = SimpleNamespace(
+        data=[
+            {
+                "id": sample_interview_row["id"],
+                "outcome": outcome,
+                "check_in_attempts": 1,
+                "next_check_in_at": None,
+            }
+        ]
+    )
+
+    resp = client.patch(
+        f"/api/interviews/{sample_interview_row['id']}/snooze-checkin",
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 422
+    assert (
+        resp.json()["detail"]
+        == "Interview check-in can only be snoozed while outcome is pending or awaiting."
+    )
+
+
+def test_patch_interview_snooze_checkin_at_max_keeps_attempts_and_forces_no_offer(
+    api_client, sample_interview_row: dict[str, object]
+):
+    client, qb, _sb = api_client
+
+    updated_row = {
+        "id": sample_interview_row["id"],
+        "outcome": "no_offer",
+        "check_in_attempts": 3,
+        "next_check_in_at": None,
+    }
+
+    qb.execute.side_effect = [
+        SimpleNamespace(
+            data=[
+                {
+                    "id": sample_interview_row["id"],
+                    "outcome": "awaiting",
+                    "check_in_attempts": 3,
+                    "next_check_in_at": "2026-06-04T12:00:00+00:00",
+                }
+            ]
+        ),
+        SimpleNamespace(data=[updated_row]),
+    ]
+
+    resp = client.patch(
+        f"/api/interviews/{sample_interview_row['id']}/snooze-checkin",
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["check_in_attempts"] == 3
+    assert body["outcome"] == "no_offer"
+    assert body["next_check_in_at"] is None

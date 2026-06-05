@@ -138,8 +138,19 @@ async def update_interview_outcome(
         raise HTTPException(status_code=404, detail="Interview not found.")
 
     current_row = existing.data[0]
+    current_outcome = current_row.get("outcome")
+    if current_outcome not in (
+        None,
+        InterviewOutcome.PENDING.value,
+        InterviewOutcome.AWAITING.value,
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Interview check-in can only be snoozed while outcome is pending or awaiting.",
+        )
+
     current_attempts = int(current_row.get("check_in_attempts") or 0)
-    updates: dict[str, object] = {}
+    updates: dict[str, str | int | None] = {}
 
     if (
         body.outcome == InterviewOutcome.NO_OFFER
@@ -205,17 +216,34 @@ async def snooze_interview_checkin(
         raise HTTPException(status_code=404, detail="Interview not found.")
 
     current_row = existing.data[0]
-    current_attempts = int(current_row.get("check_in_attempts") or 0)
-    next_attempts = current_attempts + 1
-    updates: dict[str, object] = {"check_in_attempts": next_attempts}
+    current_outcome = current_row.get("outcome")
+    if current_outcome not in (
+        None,
+        InterviewOutcome.PENDING.value,
+        InterviewOutcome.AWAITING.value,
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Interview check-in can only be snoozed while outcome is pending or awaiting.",
+        )
 
-    if next_attempts >= MAX_CHECK_IN_ATTEMPTS:
+    current_attempts = int(current_row.get("check_in_attempts") or 0)
+    updates: dict[str, str | int | None] = {}
+
+    if current_attempts >= MAX_CHECK_IN_ATTEMPTS:
+        updates["check_in_attempts"] = current_attempts
         updates["outcome"] = InterviewOutcome.NO_OFFER.value
         updates["next_check_in_at"] = None
     else:
-        updates["next_check_in_at"] = (
-            datetime.now(timezone.utc) + timedelta(days=1)
-        ).isoformat()
+        next_attempts = current_attempts + 1
+        updates["check_in_attempts"] = next_attempts
+        if next_attempts >= MAX_CHECK_IN_ATTEMPTS:
+            updates["outcome"] = InterviewOutcome.NO_OFFER.value
+            updates["next_check_in_at"] = None
+        else:
+            updates["next_check_in_at"] = (
+                datetime.now(timezone.utc) + timedelta(days=1)
+            ).isoformat()
 
     try:
         result = await asyncio.to_thread(
