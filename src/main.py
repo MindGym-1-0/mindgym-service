@@ -12,6 +12,7 @@ from src.api.auth import router as auth_router
 from src.api.auth import v1_router as auth_v1_router
 from src.api.coach import router as coach_router
 from src.api.daily_focus import router as daily_focus_router
+from src.api.internal import router as internal_router
 from src.api.interviews import router as interviews_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(
         interviews_router, prefix="/api/interviews", tags=["interviews"]
     )
+    app.include_router(internal_router, prefix="/api/internal", tags=["internal"])
 
     # Core user optimization routers
     app.include_router(
