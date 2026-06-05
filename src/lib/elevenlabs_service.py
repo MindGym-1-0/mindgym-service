@@ -14,7 +14,7 @@ MAYA_VOICE_SETTINGS: dict[str, object] = {
     "stability": 0.50,         # lower = more natural prosody, warmer feel
     "similarity_boost": 0.80,  # higher = more of Serena's natural richness/timbre
     "style": 0.10,             # gentle positive lilt without theatrics
-    "use_speaker_boost": True, # keeps voice presence and richness
+    "use_speaker_boost": True,  # keeps voice presence and richness
 }
 
 ELEVENLABS_MODEL = "eleven_multilingual_v2"
