@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 from fastapi import APIRouter, Header, HTTPException
 
 from src.lib.config import settings
@@ -10,7 +12,9 @@ router = APIRouter()
 
 def _require_valid_cron_secret(provided_secret: str | None) -> None:
     expected_secret = getattr(settings, "internal_cron_secret", None)
-    if not expected_secret or provided_secret != expected_secret:
+    if not expected_secret or not provided_secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not secrets.compare_digest(provided_secret, expected_secret):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
