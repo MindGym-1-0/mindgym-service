@@ -287,11 +287,23 @@ async def google_callback(code: str | None = None, error: str | None = None, res
             raise ValueError("Google OAuth token exchange did not return an id_token")
 
         auth_result = await login_with_google_id_token(id_token)
-    except Exception as exc:
-        logger.exception("Google OAuth callback failed")
+    except ValueError as exc:
+        logger.exception("Google OAuth callback failed: invalid data")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Google authentication failed",
+        ) from exc
+    except (UpstreamAuthServiceError, AuthenticationError) as exc:
+        logger.exception("Google OAuth callback failed: upstream error")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Google OAuth callback failed: unexpected error")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected error during Google authentication",
         ) from exc
 
     _set_auth_cookies(response, auth_result)
