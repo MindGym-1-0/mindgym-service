@@ -126,6 +126,16 @@ def test_run_interview_checkin_notification_job_filters_and_reschedules(monkeypa
                     "next_check_in_at": "2026-06-02T12:00:00+00:00",
                 },
                 {
+                    "id": "iv-eligible-awaiting",
+                    "user_id": "user-5",
+                    "company": "Helio",
+                    "role": "Researcher",
+                    "interview_date": "2026-06-01T13:30:00+00:00",
+                    "outcome": "awaiting",
+                    "check_in_attempts": 2,
+                    "next_check_in_at": "2026-06-03T12:00:00+00:00",
+                },
+                {
                     "id": "iv-not-yet-due",
                     "user_id": "user-3",
                     "company": "Zenith",
@@ -164,14 +174,15 @@ def test_run_interview_checkin_notification_job_filters_and_reschedules(monkeypa
 
     summary = asyncio.run(job_module.run_interview_checkin_notification_job())
 
-    assert summary["eligible"] == 2
+    assert summary["eligible"] == 3
     assert summary["sent"] == 0
-    assert summary["skipped"] == 2
+    assert summary["skipped"] == 3
     assert summary["failed"] == 0
-    assert summary["rescheduled"] == 2
+    assert summary["rescheduled"] == 3
     assert {update["id"] for update in client.updates} == {
         "iv-eligible-null",
         "iv-eligible-pending",
+        "iv-eligible-awaiting",
     }
 
 

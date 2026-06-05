@@ -21,7 +21,7 @@ INTERVIEW_CHECKIN_JOB_LIMIT = 200
 
 def _is_eligible_for_checkin(row: dict[str, Any], now: datetime) -> bool:
     outcome = row.get("outcome")
-    if outcome not in (None, "pending"):
+    if outcome not in (None, "pending", "awaiting"):
         return False
 
     attempts = int(row.get("check_in_attempts") or 0)
@@ -80,8 +80,10 @@ async def run_interview_checkin_notification_job() -> dict[str, int]:
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
 
-    # We treat both NULL and 'pending' outcomes as eligible because the current schema
-    # defaults new rows to 'pending' while older task wording referenced NULL.
+    # We treat NULL, 'pending', and 'awaiting' outcomes as eligible because the current
+    # schema defaults new rows to 'pending', older task wording referenced NULL, and
+    # 'awaiting' means the user is still waiting for a decision and should receive
+    # due follow-up check-ins.
     candidate_result = await asyncio.to_thread(
         client.table("interviews")
         .select(INTERVIEW_CHECKIN_JOB_SELECT_FIELDS)
