@@ -264,8 +264,8 @@ async def google_login() -> RedirectResponse:
         ) from exc
 
 
-@router.get("/google/callback", response_model=AuthResponse)
-async def google_callback(code: str | None = None, error: str | None = None, response: Response = None) -> AuthResponse:
+@router.get("/google/callback")
+async def google_callback(code: str | None = None, error: str | None = None) -> RedirectResponse:
     """Receive the code from Google, exchange it for an ID token, and sign in with Supabase."""
 
     if error:
@@ -306,10 +306,17 @@ async def google_callback(code: str | None = None, error: str | None = None, res
             detail="Unexpected error during Google authentication",
         ) from exc
 
-    _set_auth_cookies(response, auth_result)
     logger.info("Google OAuth login successful")
 
-    return _as_auth_response(auth_result, message="Google login successful")
+    session = auth_result.get("session") or {}
+    access_token = session.get("access_token", "")
+    refresh_token = session.get("refresh_token", "")
+
+    frontend_url = get_settings().frontend_url
+    redirect_url = f"{frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}"
+
+    logger.info("Google OAuth login successful, redirecting to frontend")
+    return RedirectResponse(url=redirect_url)
 
 
 @router.get("/me", response_model=AuthResponse)
