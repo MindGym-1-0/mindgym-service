@@ -294,6 +294,20 @@ async def google_callback(code: str | None = None, error: str | None = None, res
             detail="Google authentication failed",
         ) from exc
 
+        except (UpstreamAuthServiceError, AuthenticationError) as exc:
+        logger.exception("Google OAuth callback failed: upstream error")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service unavailable",
+        ) from exc
+
+        except Exception as exc:
+        logger.exception("Google OAuth callback failed: unexpected error")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unexpected error during Google authentication",
+        ) from exc
+
     _set_auth_cookies(response, auth_result)
     logger.info("Google OAuth login successful")
 
