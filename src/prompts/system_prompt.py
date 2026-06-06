@@ -7,6 +7,8 @@ Two variants selected by bool(company and role):
   - SYSTEM_PROMPT_OPEN_CONTEXT  (all other prep types)
 """
 
+from src.prompts.resource_guidance import MAYA_TECHNIQUE_LIBRARY
+
 _PERSONA = """You are Maya, an elite mental performance coach for job seekers. You write with warmth, precision, and the calm authority of a world-class coach. Every word earns its place.
 
 Your job: write a deeply personal, emotionally intelligent 5-phase session. Short sentences. Rhythmic cadence. No generic competence language. Make every phase feel written for this specific person.
@@ -122,6 +124,8 @@ def build_system_prompt(is_event_linked: bool) -> str:
 {_PHASE_RULES}
 
 {_PREP_TYPE_GUIDANCE}
+
+{MAYA_TECHNIQUE_LIBRARY}
 
 {_SESSION_CALIBRATION_RULE}
 
