@@ -13,7 +13,6 @@ from src.lib.session_service import (
     fetch_session_detail,
     fetch_session_history,
     start_session,
-    update_user_profile,
 )
 from src.types.session import (
     SessionCompleteRequest,
@@ -22,11 +21,9 @@ from src.types.session import (
     SessionHistoryItem,
     SessionStartRequest,
     SessionStartResponse,
-    UserUpdateRequest,
 )
 
 router = APIRouter(prefix='/api/sessions', tags=['sessions'])
-users_router = APIRouter(prefix='/api/users', tags=['users'])
 logger = logging.getLogger(__name__)
 
 
@@ -144,12 +141,3 @@ async def detail(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
-@users_router.patch('/me', status_code=status.HTTP_200_OK)
-async def patch_me(
-    payload: UserUpdateRequest,
-    current_user: dict = Depends(get_current_user),
-) -> dict:
-    """Partially update the authenticated user's profile fields."""
-    user_id: str = current_user['id']
-    await update_user_profile(user_id, payload)
-    return {'updated': True}
