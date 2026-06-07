@@ -19,7 +19,7 @@ from src.api.jobs_id import router as jobs_id_router
 from src.api.mood_logs import router as mood_logs_router
 from src.api.onboarding import router as onboarding_router
 from src.api.sessions import router as sessions_router
-from src.api.sessions import users_router as users_router
+from src.api.users import router as users_router
 from src.api.streaks import router as streaks_router
 from src.api.weekly_mission import router as weekly_mission_router
 from src.lib import config
