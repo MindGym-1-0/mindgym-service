@@ -24,3 +24,4 @@ class InsightsResponse(BaseModel):
     top_insights: List[TopInsightItem]
     secondary_insights: List[SecondaryInsightItem]
     hiring_funnel_gap: Optional[HiringFunnelGap] = None
+    
