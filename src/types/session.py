@@ -89,9 +89,9 @@ class SessionHistoryItem(BaseModel):
 class SessionDetail(BaseModel):
     id: str
     preparation_for: str
-    current_feeling: str
-    desired_feeling: str
-    time_available: str
+    current_feeling: str | None = None
+    desired_feeling: str | None = None
+    time_available: str | None = None
     company: str | None = None
     role: str | None = None
     feeling_note: str | None = None
