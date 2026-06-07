@@ -107,6 +107,7 @@ def create_app() -> FastAPI:
     app.include_router(
         interviews_router, prefix="/api/interviews", tags=["interviews"]
     )
+    app.include_router(internal_router, prefix="/api/internal", tags=["internal"])
 
     # Core user optimization routers
     app.include_router(
