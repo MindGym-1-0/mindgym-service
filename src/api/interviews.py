@@ -146,7 +146,7 @@ async def update_interview_outcome(
     ):
         raise HTTPException(
             status_code=422,
-            detail="Interview check-in can only be snoozed while outcome is pending or awaiting.",
+            detail="Outcome is already finalized and cannot be updated.",
         )
 
     current_attempts = int(current_row.get("check_in_attempts") or 0)

@@ -35,7 +35,7 @@ class InterviewOutcomeResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: str
-    outcome: InterviewOutcome | None = None
+    outcome: InterviewOutcome = InterviewOutcome.PENDING
     check_in_attempts: int | None = None
     next_check_in_at: datetime | None = None
 
