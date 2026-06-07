@@ -12,11 +12,13 @@ from src.api.auth import router as auth_router
 from src.api.auth import v1_router as auth_v1_router
 from src.api.coach import router as coach_router
 from src.api.daily_focus import router as daily_focus_router
+from src.api.insights import router as insights_router
 from src.api.interviews import router as interviews_router
 from src.api.jobs import router as jobs_router
 from src.api.jobs_id import router as jobs_id_router
 from src.api.mood_logs import router as mood_logs_router
 from src.api.onboarding import router as onboarding_router
+from src.api.progress import router as progress_router
 from src.api.sessions import router as sessions_router
 from src.api.sessions import users_router as users_router
 from src.api.streaks import router as streaks_router
@@ -31,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Handles startup validation routines cleanly via modern lifespan architecture
+    """Handles startup validation routines via modern lifespan architecture.
 
     🚀 Everything here runs on application STARTUP.
     """
@@ -42,16 +44,14 @@ async def lifespan(app: FastAPI):
 
     yield  # ⏸️ Application serves traffic while paused here
 
-    # 🛑 Everything here runs on application SHUTDOWN (Optional)
-
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application"""
     app = FastAPI(
         title="MindGym Service",
-        description="Backend API for MindGym - AI-powered job search companion",
+        description="Backend API for MindGym - AI job search companion",
         version="0.1.0",
-        lifespan=lifespan,  # Hooking up the clean, warning-free lifespan manager
+        lifespan=lifespan,
     )
 
     # Combine both CORS origins requirements
@@ -84,15 +84,25 @@ def create_app() -> FastAPI:
     app.include_router(auth_v1_router, prefix="/api/v1")
 
     # Include Job Tracker features under the required specification
-    app.include_router(jobs_router, prefix="/api/applications", tags=["jobs"])
-    app.include_router(jobs_id_router, prefix="/api/applications", tags=["jobs"])
+    app.include_router(
+        jobs_router, prefix="/api/applications", tags=["jobs"]
+    )
+    app.include_router(
+        jobs_id_router, prefix="/api/applications", tags=["jobs"]
+    )
 
     # Session and user profile routes
     app.include_router(sessions_router)
     app.include_router(users_router)
 
+    # Progress, Analytics, and AI Insights routes
+    app.include_router(progress_router, prefix="/api", tags=["progress"])
+    app.include_router(insights_router, tags=["insights"])
+
     # Streaks and Core Platform routers
-    app.include_router(streaks_router, prefix="/api/streaks", tags=["streaks"])
+    app.include_router(
+        streaks_router, prefix="/api/streaks", tags=["streaks"]
+    )
     app.include_router(coach_router, prefix="/api/coach", tags=["coach"])
     app.include_router(
         interviews_router, prefix="/api/interviews", tags=["interviews"]
