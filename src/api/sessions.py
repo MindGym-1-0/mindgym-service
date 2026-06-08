@@ -1,12 +1,16 @@
 """Session route handlers — thin wrappers around session_service."""
+import asyncio
 import logging
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 
+from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.auth_dependencies import get_current_user
 from src.lib.config import get_settings
 from src.lib.elevenlabs_service import ElevenLabsError, prepare_tts_text, stream_phase_audio
+from src.lib.supabase import get_supabase_user_client
 from src.lib.session_service import (
     complete_session,
     fetch_phase_text,
@@ -30,15 +34,62 @@ users_router = APIRouter(prefix='/api/users', tags=['users'])
 logger = logging.getLogger(__name__)
 
 
+async def _fetch_owned_interview_context(
+    interview_id: UUID,
+    user_id: str,
+    token: str,
+) -> dict[str, str]:
+    sb = get_supabase_user_client(token)
+
+    try:
+        result = await asyncio.to_thread(
+            sb.table("interviews")
+            .select("id,company,role")
+            .eq("id", str(interview_id))
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute
+        )
+    except Exception:
+        logger.exception("Failed to fetch interview context for session start.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Unable to start session.',
+        ) from None
+
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Interview not found.')
+
+    row = result.data[0]
+    return {
+        'company': str(row.get('company') or '').strip(),
+        'role': str(row.get('role') or '').strip(),
+    }
+
+
 @router.post('/start', response_model=SessionStartResponse, status_code=status.HTTP_201_CREATED)
 async def start(
     payload: SessionStartRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
 ) -> SessionStartResponse:
     """Generate a new AI session script and persist it."""
-    user_id: str = current_user['id']
+    user_id = str(current_user_id)
+    resolved_payload = payload
+
+    if (
+        payload.preparation_for == 'rejection_recovery'
+        and payload.interview_id is not None
+    ):
+        interview_context = await _fetch_owned_interview_context(
+            payload.interview_id,
+            user_id,
+            token,
+        )
+        resolved_payload = payload.model_copy(update=interview_context)
+
     try:
-        return await start_session(user_id, payload)
+        return await start_session(user_id, resolved_payload)
     except RuntimeError as exc:
         logger.error('session generation failed user_id=%s: %s', user_id, exc)
         raise HTTPException(

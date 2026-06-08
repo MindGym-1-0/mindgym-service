@@ -1,10 +1,15 @@
 """Unit tests for sessions API route handlers."""
+from types import SimpleNamespace
+from uuid import UUID
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import src.api.sessions as sessions_module
+from src.lib.auth import require_current_user_id, require_current_user_token
 from src.lib.elevenlabs_service import ElevenLabsError
-from src.main import app
 from src.lib.auth_dependencies import get_current_user
 from src.types.session import (
     SessionCompleteResponse,
@@ -14,7 +19,9 @@ from src.types.session import (
     SessionStartResponse,
 )
 
-_FAKE_USER = {'id': 'user-123', 'email': 'test@example.com'}
+_FAKE_USER = {'id': '11111111-1111-1111-1111-111111111111', 'email': 'test@example.com'}
+_FAKE_USER_ID = UUID(_FAKE_USER['id'])
+_FAKE_TOKEN = 'fake-token'
 _FAKE_SCRIPT = SessionScript(
     phase1='Close your eyes and take a slow breath.',
     phase2='Feel the ground beneath you, steady and real.',
@@ -73,9 +80,50 @@ _START_PAYLOAD = {
 _COMPLETE_PAYLOAD = {'session_id': 'session-abc', 'anxiety_level_after': 8}
 
 
+class _FakeInterviewQuery:
+    def __init__(self, rows: list[dict]):
+        self._rows = rows
+        self.filters: list[tuple[str, object]] = []
+
+    def select(self, _fields: str):
+        return self
+
+    def eq(self, field: str, value: object):
+        self.filters.append((field, value))
+        return self
+
+    def limit(self, _value: int):
+        return self
+
+    def execute(self):
+        rows = list(self._rows)
+        for field, value in self.filters:
+            rows = [row for row in rows if row.get(field) == value]
+        return SimpleNamespace(data=rows[:1])
+
+
+class _FakeInterviewClient:
+    def __init__(self, rows: list[dict]):
+        self.rows = rows
+
+    def table(self, table_name: str):
+        assert table_name == 'interviews'
+        return _FakeInterviewQuery(self.rows)
+
+
+def _build_test_app() -> FastAPI:
+    app = FastAPI()
+    app.include_router(sessions_module.router)
+    app.include_router(sessions_module.users_router)
+    return app
+
+
 @pytest.fixture
 def client():
+    app = _build_test_app()
     app.dependency_overrides[get_current_user] = lambda: _FAKE_USER
+    app.dependency_overrides[require_current_user_id] = lambda: _FAKE_USER_ID
+    app.dependency_overrides[require_current_user_token] = lambda: _FAKE_TOKEN
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -100,7 +148,7 @@ def test_start_session_returns_201_with_script(client) -> None:
 @pytest.mark.unit
 def test_start_session_returns_401_when_unauthenticated() -> None:
     """POST /api/sessions/start must return 401 when no auth token is provided."""
-    client = TestClient(app)
+    client = TestClient(_build_test_app())
     response = client.post('/api/sessions/start', json=_START_PAYLOAD)
     assert response.status_code == 401
 
@@ -150,6 +198,80 @@ def test_start_session_allows_missing_company_for_general_reset(client) -> None:
     assert response.status_code == 201
 
 
+@pytest.mark.unit
+def test_start_session_rejection_recovery_uses_company_and_role_from_interview(client) -> None:
+    """POST /api/sessions/start must hydrate company and role from the owned interview."""
+    recovery_payload = {
+        'preparation_for': 'rejection_recovery',
+        'current_feeling': 'discouraged',
+        'desired_feeling': 'grounded',
+        'time_available': '10 min',
+        'anxiety_level_before': 7,
+        'interview_id': '22222222-2222-2222-2222-222222222222',
+        'company': 'WrongCo',
+        'role': 'WrongRole',
+    }
+    recovery_response = SessionStartResponse(
+        session_id='session-recovery',
+        script=_FAKE_SCRIPT,
+        mode='rejection_recovery',
+    )
+
+    fake_client = _FakeInterviewClient(
+        [
+            {
+                'id': '22222222-2222-2222-2222-222222222222',
+                'user_id': _FAKE_USER['id'],
+                'company': 'Stripe',
+                'role': 'PM',
+            }
+        ]
+    )
+
+    with (
+        patch('src.api.sessions.get_supabase_user_client', return_value=fake_client),
+        patch(
+            'src.api.sessions.start_session',
+            new_callable=AsyncMock,
+            return_value=recovery_response,
+        ) as mock_start,
+    ):
+        response = client.post('/api/sessions/start', json=recovery_payload)
+
+    assert response.status_code == 201
+    called_user_id, called_payload = mock_start.await_args.args
+    assert called_user_id == _FAKE_USER['id']
+    assert called_payload.preparation_for == 'rejection_recovery'
+    assert str(called_payload.interview_id) == recovery_payload['interview_id']
+    assert called_payload.company == 'Stripe'
+    assert called_payload.role == 'PM'
+
+
+@pytest.mark.unit
+def test_start_session_rejection_recovery_returns_404_when_interview_missing(client) -> None:
+    """POST /api/sessions/start must return 404 when the linked interview is missing."""
+    recovery_payload = {
+        'preparation_for': 'rejection_recovery',
+        'current_feeling': 'discouraged',
+        'desired_feeling': 'grounded',
+        'time_available': '10 min',
+        'anxiety_level_before': 7,
+        'interview_id': '22222222-2222-2222-2222-222222222222',
+    }
+
+    fake_client = _FakeInterviewClient([])
+
+    with (
+        patch('src.api.sessions.get_supabase_user_client', return_value=fake_client),
+        patch('src.api.sessions.start_session', new_callable=AsyncMock) as mock_start,
+    ):
+        response = client.post('/api/sessions/start', json=recovery_payload)
+
+    assert response.status_code == 404
+    assert response.json() == {'detail': 'Interview not found.'}
+    mock_start.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # POST /api/sessions/complete
 # ---------------------------------------------------------------------------
@@ -179,7 +301,7 @@ def test_complete_session_returns_404_when_not_found(client) -> None:
 @pytest.mark.unit
 def test_complete_session_returns_401_when_unauthenticated() -> None:
     """POST /api/sessions/complete must return 401 without auth."""
-    client = TestClient(app)
+    client = TestClient(_build_test_app())
     response = client.post('/api/sessions/complete', json=_COMPLETE_PAYLOAD)
     assert response.status_code == 401
 
@@ -214,7 +336,7 @@ def test_get_history_returns_empty_list_when_no_sessions(client) -> None:
 @pytest.mark.unit
 def test_get_history_returns_401_when_unauthenticated() -> None:
     """GET /api/sessions/history must return 401 without auth."""
-    client = TestClient(app)
+    client = TestClient(_build_test_app())
     response = client.get('/api/sessions/history')
     assert response.status_code == 401
 
@@ -247,7 +369,7 @@ def test_get_session_detail_returns_404_when_not_found(client) -> None:
 @pytest.mark.unit
 def test_get_session_detail_returns_401_when_unauthenticated() -> None:
     """GET /api/sessions/{session_id} must return 401 without auth."""
-    client = TestClient(app)
+    client = TestClient(_build_test_app())
     response = client.get('/api/sessions/session-abc')
     assert response.status_code == 401
 
@@ -277,7 +399,7 @@ def test_patch_user_me_accepts_partial_update(client) -> None:
 @pytest.mark.unit
 def test_patch_user_me_returns_401_when_unauthenticated() -> None:
     """PATCH /api/users/me must return 401 without auth."""
-    client = TestClient(app)
+    client = TestClient(_build_test_app())
     response = client.patch('/api/users/me', json={'goal': 'something'})
     assert response.status_code == 401
 
@@ -398,6 +520,6 @@ def test_get_phase_audio_returns_503_when_elevenlabs_raises(client) -> None:
 @pytest.mark.unit
 def test_get_phase_audio_returns_401_when_unauthenticated() -> None:
     """GET /audio/{phase} must return 401 without auth."""
-    client = TestClient(app)
+    client = TestClient(_build_test_app())
     response = client.get('/api/sessions/session-abc/audio/1')
     assert response.status_code == 401

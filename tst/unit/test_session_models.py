@@ -1,6 +1,7 @@
 """Unit tests for session Pydantic models"""
 import pytest
 from pydantic import ValidationError
+from uuid import UUID
 
 from src.types.session import (
     SessionCompleteRequest,
@@ -24,6 +25,7 @@ def test_session_start_request_valid():
     )
     assert req.preparation_for == 'interview_tomorrow'
     assert req.anxiety_level_before == 7
+    assert req.interview_id is None
 
 
 def test_session_start_request_all_preparation_for_values():
@@ -167,6 +169,18 @@ def test_session_start_request_company_and_role_provided():
     )
     assert req.company == 'Google'
     assert req.role == 'Staff Engineer'
+
+
+def test_session_start_request_accepts_optional_interview_id():
+    req = SessionStartRequest(
+        preparation_for='rejection_recovery',
+        current_feeling='discouraged',
+        desired_feeling='grounded',
+        time_available='10 min',
+        anxiety_level_before=7,
+        interview_id='22222222-2222-2222-2222-222222222222',
+    )
+    assert req.interview_id == UUID('22222222-2222-2222-2222-222222222222')
 
 
 # --- SessionCompleteRequest ---
