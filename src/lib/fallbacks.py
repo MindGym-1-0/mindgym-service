@@ -18,6 +18,7 @@ def get_fallback_script(
     """
     c = company or _COMPANY_DEFAULT
     r = role or _ROLE_DEFAULT
+    has_event_context = bool(company and role)
 
     templates = {
         'general_reset': SessionScript(
@@ -88,10 +89,14 @@ def get_fallback_script(
                 "You are safe. This moment is hard, but it is not the end of your story."
             ),
             phase3=(
-                "This rejection is one closed door on a path that has many more ahead. "
-                "Think about what you learned from this process — the conversations, the preparation, the growth. "
-                "None of that disappears with a no. You are more ready now than you were before you started. "
-                "The right opportunity is still out there, and you are still moving toward it."
+                (
+                    f"This rejection from the {r} opportunity at {c} is one closed door on a path that has many more ahead. "
+                    if has_event_context
+                    else "This rejection is one closed door on a path that has many more ahead. "
+                )
+                + "Think about what you learned from this process — the conversations, the preparation, the growth. "
+                + "None of that disappears with a no. You are more ready now than you were before you started. "
+                + "The right opportunity is still out there, and you are still moving toward it."
             ),
             phase4=(
                 "Think of something you have overcome before — a setback that felt final but wasn't. "
@@ -103,6 +108,7 @@ def get_fallback_script(
                 "Rest today. Come back stronger tomorrow."
             ),
         ),
+
         'salary_negotiation': SessionScript(
             phase1=(
                 "Close your eyes. Breathe in for four counts, hold for two, out for six. "

@@ -98,3 +98,29 @@ def test_unknown_preparation_for_raises_value_error() -> None:
             company=None,
             role=None,
         )
+
+
+@pytest.mark.unit
+def test_rejection_recovery_mentions_company_and_role_when_available() -> None:
+    """Rejection recovery fallback should use interview context when it exists."""
+    script = get_fallback_script(
+        preparation_for='rejection_recovery',
+        company='Stripe',
+        role='Product Manager',
+    )
+    full_text = ' '.join([script.phase1, script.phase2, script.phase3, script.phase4, script.phase5])
+    assert 'Stripe' in full_text
+    assert 'Product Manager' in full_text
+
+
+@pytest.mark.unit
+def test_rejection_recovery_stays_generic_without_company_and_role() -> None:
+    """Rejection recovery fallback should still work cleanly without event context."""
+    script = get_fallback_script(
+        preparation_for='rejection_recovery',
+        company=None,
+        role=None,
+    )
+    full_text = ' '.join([script.phase1, script.phase2, script.phase3, script.phase4, script.phase5])
+    assert 'this company' not in full_text
+    assert 'this role' not in full_text
