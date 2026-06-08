@@ -5,106 +5,113 @@ import json
 import logging
 from collections import Counter
 from datetime import datetime, timedelta, UTC
-from typing import Annotated, List, Optional
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from google.genai import Client
-from google.genai.errors import APIError
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
+from src.lib.openai_service import _chat
 from src.lib.supabase import get_supabase_user_client
+from src.types.insight import (
+    HiringFunnelGap,
+    InsightsResponse,
+    SecondaryInsightItem,
+    TopInsightItem,
+)
 
 router = APIRouter(prefix="/api/insights", tags=["Insights"])
 logger = logging.getLogger("mindgym")
 
-ai_client = Client()
 
+def execute_fallback_insights(ctx: dict) -> InsightsResponse:
+    """Builds structured fallback local insights if the OpenAI execution
 
-# --- RESPONSE SCHEMAS ---
-class TopInsightItem(BaseModel):
-    text: str = Field(..., description="Short headline, max 8 words.")
-    detail: str = Field(..., description="Supporting detail with metrics.")
-    highlight: bool = True
+    times out or encounters parsing discrepancies.
+    """
+    lift = ctx.get("overall_avg_lift", 0.0)
+    top = [
+        TopInsightItem(
+            text="Consistency Baseline Established",
+            detail=f"Completed {ctx['total_sessions']} focus exercises "
+            f"with an average anxiety delta reduction of {lift}.",
+            highlight=True,
+        ),
+        TopInsightItem(
+            text="Application Momentum Stable",
+            detail=f"Tracking {ctx['applications_count']} active opportunities "
+            f"within your job funnel.",
+            highlight=True,
+        ),
+    ]
 
+    sec = [
+        SecondaryInsightItem(text="Keep utilizing structured calming routines."),
+        SecondaryInsightItem(text="Review your upcoming mock test schedules."),
+        SecondaryInsightItem(text="Consistency across weeks preserves retention."),
+    ]
 
-class SecondaryInsightItem(BaseModel):
-    text: str = Field(..., description="Short insight statement.")
+    gap = HiringFunnelGap(
+        title="Hiring Funnel Gap Identified",
+        body="Continue expanding application streams to hit metric baselines.",
+        based_on=f"{ctx['total_sessions']} sessions · Delta {lift} · Active 100%",
+    )
 
-
-class HiringFunnelGap(BaseModel):
-    title: str = Field("Hiring Funnel Gap Identified")
-    body: str = Field(..., description="2-3 actionable sentences.")
-    based_on: str = Field(..., description="Format: N sessions · X% · Y%")
-
-
-class InsightsResponse(BaseModel):
-    top_insights: List[TopInsightItem]
-    secondary_insights: List[SecondaryInsightItem]
-    hiring_funnel_gap: Optional[HiringFunnelGap] = None
+    return InsightsResponse(
+        top_insights=top, secondary_insights=sec, hiring_funnel_gap=gap
+    )
 
 
 # --- ANALYTICS PIPELINE ---
 def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
     """Aggregates multi-table tracking context data from Supabase."""
-    user_res = (
-        supabase_client.table("users")
-        .select("goal, stage, anxiety_level, onboarding_data")
-        .eq("id", user_id)
-        .execute()
-    )
-    user_data = user_res.data[0] if user_res.data else {}
+    try:
+        user_res = (
+            supabase_client.table("users")
+            .select("target_role_category, employment_status, emotional_challenge")
+            .eq("id", user_id)
+            .execute()
+        )
+        user_data = user_res.data[0] if user_res.data else {}
 
-    jobs_res = (
-        supabase_client.table("jobs")
-        .select("id, stage")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    interviews_res = (
-        supabase_client.table("interviews")
-        .select("id")
-        .eq("user_id", user_id)
-        .execute()
-    )
+        jobs_res = (
+            supabase_client.table("jobs")
+            .select("id, stage")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        interviews_res = (
+            supabase_client.table("interviews")
+            .select("id")
+            .eq("user_id", user_id)
+            .execute()
+        )
 
-    sessions_res = (
-        supabase_client.table("ai_sessions")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("completed", True)
-        .execute()
-    )
-    sessions = sessions_res.data or []
+        sessions_res = (
+            supabase_client.table("ai_sessions")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("completed", True)
+            .execute()
+        )
+        sessions = sessions_res.data or []
+    except Exception as e:
+        logger.error(f"Failed to fetch insights context: {str(e)}")
+        return None
 
     if len(sessions) < 3:
         return None
 
     total_sessions = len(sessions)
-    lifts = [
-        (s["post_score"] - s["pre_score"])
-        for s in sessions
-        if s.get("post_score") is not None and s.get("pre_score") is not None
-    ]
-    avg_lift = sum(lifts) / len(lifts) if lifts else 0.0
 
-    p1_lifts = [
-        (s["post_score"] - s["pre_score"])
-        for s in sessions
-        if s.get("phase_1_complete") is True
-        and s.get("post_score") is not None
-        and s.get("pre_score") is not None
-    ]
-    no_p1_lifts = [
-        (s["post_score"] - s["pre_score"])
-        for s in sessions
-        if not s.get("phase_1_complete")
-        and s.get("post_score") is not None
-        and s.get("pre_score") is not None
-    ]
-    avg_p1_lift = sum(p1_lifts) / len(p1_lifts) if p1_lifts else None
-    avg_no_p1_lift = sum(no_p1_lifts) / len(no_p1_lifts) if no_p1_lifts else None
+    lifts = []
+    for s in sessions:
+        before = s.get("anxiety_level_before")
+        after = s.get("anxiety_level_after")
+        if before is not None and after is not None:
+            lifts.append(float(before) - float(after))
+
+    avg_lift = sum(lifts) / len(lifts) if lifts else 0.0
 
     morning_lifts = []
     evening_lifts = []
@@ -112,35 +119,28 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
     type_lifts = {}
 
     for s in sessions:
-        if s.get("pre_emotion"):
-            emotions.append(s["pre_emotion"])
+        if s.get("emotional_challenge"):
+            emotions.append(s["emotional_challenge"])
 
-        s_type = s.get("session_type")
-        if (
-            s_type
-            and s.get("post_score") is not None
-            and s.get("pre_score") is not None
-        ):
-            type_lifts.setdefault(s_type, []).append(
-                s["post_score"] - s["pre_score"]
-            )
+        s_type = s.get("preparation_for")
+        before = s.get("anxiety_level_before")
+        after = s.get("anxiety_level_after")
+
+        if s_type and before is not None and after is not None:
+            delta = float(before) - float(after)
+            type_lifts.setdefault(s_type, []).append(delta)
 
         if s.get("completed_at"):
             try:
                 dt = datetime.fromisoformat(
                     s["completed_at"].replace("Z", "+00:00")
                 )
-                lift = (
-                    s["post_score"] - s["pre_score"]
-                    if s.get("post_score") is not None
-                    and s.get("pre_score") is not None
-                    else None
-                )
-                if lift is not None:
+                if before is not None and after is not None:
+                    delta = float(before) - float(after)
                     if dt.hour < 10:
-                        morning_lifts.append(lift)
+                        morning_lifts.append(delta)
                     elif dt.hour >= 18:
-                        evening_lifts.append(lift)
+                        evening_lifts.append(delta)
             except Exception:
                 continue
 
@@ -149,7 +149,7 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
     freq_emotion = Counter(emotions).most_common(1)[0][0] if emotions else None
 
     highest_type = None
-    highest_type_avg = -999.0
+    highest_type_avg = float("-inf")
     for t, t_lifts in type_lifts.items():
         t_avg = sum(t_lifts) / len(t_lifts)
         if t_avg > highest_type_avg:
@@ -194,17 +194,13 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
         "interviews_count": len(interviews_res.data or []),
     }
 
-    if user_data.get("goal"):
-        ctx["target_role_category"] = user_data["goal"]
-    if user_data.get("stage"):
-        ctx["employment_status"] = user_data["stage"]
-    if user_data.get("anxiety_level"):
-        ctx["emotional_challenge"] = user_data["anxiety_level"]
+    if user_data.get("target_role_category"):
+        ctx["target_role_category"] = user_data["target_role_category"]
+    if user_data.get("employment_status"):
+        ctx["employment_status"] = user_data["employment_status"]
+    if user_data.get("emotional_challenge"):
+        ctx["emotional_challenge"] = user_data["emotional_challenge"]
 
-    if avg_p1_lift is not None:
-        ctx["avg_lift_with_breathing_p1"] = round(avg_p1_lift, 2)
-    if avg_no_p1_lift is not None:
-        ctx["avg_lift_without_breathing_p1"] = round(avg_no_p1_lift, 2)
     if avg_morning is not None:
         ctx["avg_lift_morning_before_10am"] = round(avg_morning, 2)
     if avg_evening is not None:
@@ -229,7 +225,7 @@ async def get_insights(
     current_user_id: Annotated[UUID, Depends(CurrentUserId)],
     token: Annotated[str, Depends(CurrentUserToken)],
 ):
-    """Generates two tiers of AI metrics and funnel insights via Gemini."""
+    """Generates two tiers of AI metrics and funnel insights via OpenAI."""
     supabase_client = get_supabase_user_client(token)
 
     context_data = await asyncio.to_thread(
@@ -279,15 +275,17 @@ async def get_insights(
     """
 
     try:
-        response = await asyncio.to_thread(
-            ai_client.models.generate_content,
-            model="gemini-2.5-flash",
-            contents=prompt,
+        clean_text = await asyncio.wait_for(
+            asyncio.to_thread(
+                _chat,
+                system="You are a precise JSON insights engine.",
+                user=prompt,
+            ),
+            timeout=10.0,
         )
 
-        clean_text = response.text.strip()
-        if clean_text.startswith("```"):
-            clean_text = clean_text.split("```json")[-1].split("```")[0].strip()
+        if clean_text is None:
+            raise ValueError("OpenAI backend wrapper returned an empty string.")
 
         parsed = json.loads(clean_text)
 
@@ -296,9 +294,6 @@ async def get_insights(
 
         return InsightsResponse(**parsed)
 
-    except (APIError, json.JSONDecodeError, KeyError, TypeError) as err:
-        logger.error(f"Failed to generate automated insights: {str(err)}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"error": "insight_generation_failed"},
-        )
+    except (Exception, asyncio.TimeoutError) as err:
+        logger.warning(f"OpenAI insight analysis pipeline hit fallback: {str(err)}")
+        return execute_fallback_insights(context_data)

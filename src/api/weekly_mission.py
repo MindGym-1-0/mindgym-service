@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, status
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
@@ -15,15 +15,11 @@ from src.types.weekly_mission import (
     WeeklyMissionGenerateResponse,
 )
 
-# Modern Google GenAI SDK imports
-from google import genai
-from google.genai import types
-
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Performance Optimization: Instantiated client once at module level
-ai_client = genai.Client()
+openai_client = AsyncOpenAI()
 
 
 def get_target_monday() -> date:
@@ -166,7 +162,7 @@ async def generate_weekly_mission(
     }
 
     # ------------------------------------------
-    # STEP 2 — BUILD THE GEMINI PROMPT
+    # STEP 2 — BUILD THE OPENAI PROMPT
     # ------------------------------------------
     prompt = f"""
     You are an expert career performance optimization AI.
@@ -175,49 +171,54 @@ async def generate_weekly_mission(
     User Context:
     - Career Goal: {user_profile.get('goal')}
     - Application Stage: {user_profile.get('stage')}
-    - Current Active Pipeline Jobs: {json.dumps(active_jobs)}
+    - Current Active Pipeline Jobs: {active_jobs}
     - Activity Volume This Week: {session_count} completed sessions
     - Completed Targets from Last Week: {prev_completion_count}/3
 
     Requirements:
     - Focus heavily on pipeline gaps, performance gaps, or momentum drop-offs.
     - Write highly concrete strings. Avoid generic platitudes.
-    - Return your response exclusively as valid JSON matching the schema.
     """
 
     generated_actions = None
 
     # ------------------------------------------
-    # STEP 3 & 4 — CALL GEMINI WITH TIMEOUT
+    # STEP 3 & 4 — CALL OPENAI WITH TIMEOUT
     # ------------------------------------------
     try:
-        response = await asyncio.wait_for(
-            asyncio.to_thread(
-                ai_client.models.generate_content,
-                model="gemini-2.5-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=GeminiMissionOutput,
-                ),
+        # Native async call utilizing the modern structured output parsing engine
+        completion = await asyncio.wait_for(
+            openai_client.beta.chat.completions.parse(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a helpful assistant that outputs "
+                            "structured operational data tasks."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                response_format=GeminiMissionOutput,
             ),
             timeout=4.0,
         )
 
-        raw_json = json.loads(response.text.strip())
+        parsed_response = completion.choices[0].message.parsed
 
-        if (
-            raw_json.get("action_1")
-            and raw_json.get("action_2")
-            and raw_json.get("action_3")
-        ):
-            generated_actions = raw_json
+        if parsed_response and parsed_response.action_1:
+            generated_actions = {
+                "action_1": parsed_response.action_1,
+                "action_2": parsed_response.action_2,
+                "action_3": parsed_response.action_3,
+            }
         else:
-            logger.warning("Gemini structure incomplete. Going to fallback.")
+            logger.warning("OpenAI parsing validation failed. Using fallback.")
             generated_actions = execute_fallback_generation(context_package)
 
     except (asyncio.TimeoutError, Exception) as gen_error:
-        logger.error(f"Gemini generation engine bypassed: {str(gen_error)}")
+        logger.error(f"OpenAI generation engine bypassed: {str(gen_error)}")
         generated_actions = execute_fallback_generation(context_package)
 
     # ------------------------------------------

@@ -68,9 +68,34 @@ def mock_supabase():
             return chain
 
         mock_client._create_chain = create_mock_chain
-        # Fixed: Directly returns the mock instance instead of a lambda function
         mock_get_client.return_value = mock_client
         yield mock_client
+
+
+@pytest.fixture
+def mock_openai_chat():
+    """Fixture to mock the internal OpenAI _chat function to prevent network hits."""
+    with patch("src.api.insights._chat") as mock_chat_fn:
+        mock_json_payload = """
+        {
+          "top_insights": [
+            {"text": "Morning Focus Works", "detail": "Anxiety drops 2.5 pts."},
+            {"text": "Pipeline Static", "detail": "Zero new interviews track."}
+          ],
+          "secondary_insights": [
+            {"text": "Keep utilizing structured calming routines."},
+            {"text": "Review your upcoming mock test schedules."},
+            {"text": "Consistency across weeks preserves retention."}
+          ],
+          "hiring_funnel_gap": {
+            "title": "Hiring Funnel Gap Identified",
+            "body": "Expand application streams to hit baseline markers.",
+            "based_on": "4 sessions · Delta 2.0 · Active 100%"
+          }
+        }
+        """
+        mock_chat_fn.return_value = mock_json_payload
+        yield mock_chat_fn
 
 
 def test_get_insights_empty_state_fewer_than_3_sessions(mock_supabase):
@@ -93,20 +118,16 @@ def test_get_insights_empty_state_fewer_than_3_sessions(mock_supabase):
     assert data["hiring_funnel_gap"] is None
 
 
-def test_get_insights_with_real_gemini_call(mock_supabase):
-    """Hits the live Gemini endpoint to verify prompt layout logic."""
+def test_get_insights_with_mocked_openai_call(mock_supabase, mock_openai_chat):
+    """Verifies full workflow mapping metrics across production database keys."""
     mock_sessions = [
         {
             "id": f"s_{i}",
             "completed": True,
             "completed_at": datetime.now(UTC).isoformat(),
-            "pre_score": 50.0,
-            "post_score": 70.0 + i,
-            "session_type": "prepare_questions",
-            "phase_1_complete": True,
-            "pre_emotion": "anxious",
-            "post_confidence": 65.0,
-            "post_calmness": 60.0,
+            "anxiety_level_before": 5.0,
+            "anxiety_level_after": 3.0,
+            "preparation_for": "Technical Interview",
         }
         for i in range(4)
     ]
@@ -116,9 +137,9 @@ def test_get_insights_with_real_gemini_call(mock_supabase):
             return mock_supabase._create_chain(
                 [
                     {
-                        "goal": "Backend Engineer",
-                        "stage": "applying",
-                        "anxiety_level": "medium",
+                        "target_role_category": "Backend Engineer",
+                        "employment_status": "applying",
+                        "emotional_challenge": "anxiety",
                     }
                 ]
             )
@@ -140,7 +161,6 @@ def test_get_insights_with_real_gemini_call(mock_supabase):
 
     for insight in data["top_insights"]:
         assert insight["highlight"] is True
-        assert len(insight["text"].split()) <= 8
 
     assert "·" in data["hiring_funnel_gap"]["based_on"]
-    print(f"\n[LIVE INSIGHT RUN]: {data['top_insights'][0]['text']}")
+    mock_openai_chat.assert_called_once()

@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Literal, Optional
-from google import genai
-from fastapi import APIRouter, HTTPException, Query, status
+from datetime import datetime, timedelta, UTC
+from typing import Annotated, Literal
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
+from src.lib.openai_service import _chat
 from src.lib.supabase import get_supabase_user_client
 from src.types.progress import (
     ConfidenceDataPoint,
@@ -18,32 +20,26 @@ from src.types.progress import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
-
-# Performance Optimization: Instantiated client once at module level
-ai_client = genai.Client()
+# Fixed: Router prefix removed to avoid /api/api/progress path resolution errors
+router = APIRouter(tags=["Progress"])
 
 
 def execute_fallback_logic(
-    lowest_dimension: str, final_states: Dict[str, float]
+    lowest_dimension: str, final_states: dict[str, float]
 ) -> GeminiProgressInsight:
-    """Generates a contextual fallback insight if Gemini fails."""
+    """Generates a contextual fallback insight if the AI provider fails."""
     logger.warning("Executing local fallback logic for progress insight.")
     dim_capitalized = lowest_dimension.capitalize()
 
     if final_states.get(lowest_dimension, 0) == 0:
         return GeminiProgressInsight(
-            key_insight=(
-                f"No sessions recorded for {lowest_dimension} yet. "
-                f"Try dedicating your next session to it."
-            )
+            key_insight=f"No sessions recorded for {lowest_dimension} yet. "
+            f"Try dedicating your next session to it."
         )
 
     return GeminiProgressInsight(
-        key_insight=(
-            f"{dim_capitalized} is your current focus area. "
-            f"Consistency this week will help push it higher."
-        )
+        key_insight=f"{dim_capitalized} is your current focus area. "
+        f"Consistency this week will help push it higher."
     )
 
 
@@ -54,17 +50,16 @@ def execute_fallback_logic(
     summary="Get aggregated user session metrics, trends, and insights",
 )
 async def get_progress(
-    current_user_id: CurrentUserId,
-    token: CurrentUserToken,
+    current_user_id: Annotated[UUID, Depends(CurrentUserId)],
+    token: Annotated[str, Depends(CurrentUserToken)],
     period: Literal["week", "month", "all"] = Query("week"),
 ):
     sb = get_supabase_user_client(token)
     user_uuid_str = str(current_user_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # STEP 1: Fetch data from Supabase using thread executors
     try:
-        # Fetch current streak (Always absolute, never filtered by period)
         streak_res = await asyncio.to_thread(
             sb.table("streaks")
             .select("current_streak")
@@ -72,18 +67,18 @@ async def get_progress(
             .maybe_single()
             .execute
         )
-        day_streak = streak_res.data.get("current_streak", 0) if streak_res.data else 0
+        day_streak = (
+            streak_res.data.get("current_streak", 0) if streak_res.data else 0
+        )
 
-        # Determine timeframe filtering boundaries
         start_date = None
         if period == "week":
             start_date = now - timedelta(days=7)
         elif period == "month":
             start_date = now - timedelta(days=30)
 
-        # Query completed sessions
         query = (
-            sb.table("sessions")
+            sb.table("ai_sessions")
             .select("*")
             .eq("user_id", user_uuid_str)
             .eq("completed", True)
@@ -103,7 +98,6 @@ async def get_progress(
             detail="Failed to look up user progress history.",
         )
 
-    # Clean escape hatch handling the 0 sessions scenario safely
     if not sessions:
         return ProgressResponse(
             avg_confidence=0.0,
@@ -127,13 +121,13 @@ async def get_progress(
     }
 
     for s in sessions:
-        post_score = s.get("post_score") or 0.0
-        pre_score = s.get("pre_score") or 0.0
-        total_lift += post_score - pre_score
+        post_score = s.get("post_score") or s.get("anxiety_level_after") or 0.0
+        pre_score = s.get("pre_score") or s.get("anxiety_level_before") or 0.0
+        total_lift += float(post_score) - float(pre_score)
 
         for dimension in state_metrics.keys():
-            val = s.get(dimension)
-            if val is not None:  # Skips null data parameters completely
+            val = s.get(dimension) or s.get(f"post_{dimension}")
+            if val is not None:
                 state_metrics[dimension]["sum"] += float(val)
                 state_metrics[dimension]["count"] += 1
 
@@ -148,28 +142,38 @@ async def get_progress(
     avg_confidence = final_states["confidence"]
 
     # STEP 3: Compile Time Series Maps (confidence_over_time)
-    confidence_over_time: List[ConfidenceDataPoint] = []
+    confidence_over_time: list[ConfidenceDataPoint] = []
 
     if period == "week":
-        days_map: Dict[str, List[float]] = {}
+        days_map: dict[str, list[float]] = {}
         for s in sessions:
-            dt = datetime.fromisoformat(s["completed_at"].replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(
+                s["completed_at"].replace("Z", "+00:00")
+            )
             day_label = dt.strftime("%a")
-            days_map.setdefault(day_label, []).append(s.get("confidence") or 0.0)
+            days_map.setdefault(day_label, []).append(
+                s.get("confidence") or s.get("post_confidence") or 0.0
+            )
 
         current_day_label = now.strftime("%a")
         for day_label, vals in days_map.items():
             label = "Today" if day_label == current_day_label else day_label
             confidence_over_time.append(
-                ConfidenceDataPoint(day=label, value=round(sum(vals) / len(vals), 1))
+                ConfidenceDataPoint(
+                    day=label, value=round(sum(vals) / len(vals), 1)
+                )
             )
 
     elif period == "month":
-        weeks_map: Dict[str, List[float]] = {}
+        weeks_map: dict[str, list[float]] = {}
         for s in sessions:
-            dt = datetime.fromisoformat(s["completed_at"].replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(
+                s["completed_at"].replace("Z", "+00:00")
+            )
             week_label = f"Wk {dt.isocalendar()[1]}"
-            weeks_map.setdefault(week_label, []).append(s.get("confidence") or 0.0)
+            weeks_map.setdefault(week_label, []).append(
+                s.get("confidence") or s.get("post_confidence") or 0.0
+            )
 
         for week_label, vals in weeks_map.items():
             confidence_over_time.append(
@@ -178,12 +182,16 @@ async def get_progress(
                 )
             )
 
-    else:  # period == "all"
-        months_map: Dict[str, List[float]] = {}
+    else:
+        months_map: dict[str, list[float]] = {}
         for s in sessions:
-            dt = datetime.fromisoformat(s["completed_at"].replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(
+                s["completed_at"].replace("Z", "+00:00")
+            )
             month_label = dt.strftime("%b")
-            months_map.setdefault(month_label, []).append(s.get("confidence") or 0.0)
+            months_map.setdefault(month_label, []).append(
+                s.get("confidence") or s.get("post_confidence") or 0.0
+            )
 
         for month_label, vals in months_map.items():
             confidence_over_time.append(
@@ -192,7 +200,7 @@ async def get_progress(
                 )
             )
 
-    # STEP 4: Build Prompt & Call Gemini Model
+    # STEP 4: Build Prompt & Execute OpenAI chat sequence
     lowest_dimension = min(final_states, key=final_states.get)
 
     prompt = f"""
@@ -211,35 +219,32 @@ async def get_progress(
     3. The text constraint is strict: it must be under 20 words total.
     """
 
-    validated_insight: Optional[GeminiProgressInsight] = None
     try:
+        raw_text = await asyncio.wait_for(
+            asyncio.to_thread(
+                _chat,
+                system="You are a precise JSON coaching metrics assistant.",
+                user=prompt,
+            ),
+            timeout=4.0,
+        )
 
-        async def call_gemini_api():
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: ai_client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=prompt,
-                    config={
-                        "response_mime_type": "application/json",
-                        "response_schema": GeminiProgressInsight,
-                    },
-                ),
-            )
-            return response.text
+        if raw_text is None:
+            raise ValueError("OpenAI pipeline failed to return response string.")
 
-        raw_text = await asyncio.wait_for(call_gemini_api(), timeout=4.0)
         parsed_json = json.loads(raw_text.strip())
         validated_insight = GeminiProgressInsight(**parsed_json)
     except (asyncio.TimeoutError, Exception) as err:
-        logger.error(f"Gemini insight generation failed: {repr(err)}")
-        validated_insight = execute_fallback_logic(lowest_dimension, final_states)
+        logger.error(f"OpenAI progress insight calculation failed: {repr(err)}")
+        validated_insight = execute_fallback_logic(
+            lowest_dimension, final_states
+        )
 
     if not validated_insight or not validated_insight.key_insight:
-        validated_insight = execute_fallback_logic(lowest_dimension, final_states)
+        validated_insight = execute_fallback_logic(
+            lowest_dimension, final_states
+        )
 
-    # Enforce strict word capping on the returned raw string response
     clean_insight_str = " ".join(validated_insight.key_insight.split()[:20])
 
     # STEP 5: Package and Return Data
