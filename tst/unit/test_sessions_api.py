@@ -272,6 +272,52 @@ def test_start_session_rejection_recovery_returns_404_when_interview_missing(cli
     mock_start.assert_not_awaited()
 
 
+@pytest.mark.unit
+def test_start_session_rejection_recovery_normalizes_blank_company_and_role_to_none(client) -> None:
+    """POST /api/sessions/start should turn blank interview company/role into None."""
+    recovery_payload = {
+        'preparation_for': 'rejection_recovery',
+        'current_feeling': 'discouraged',
+        'desired_feeling': 'grounded',
+        'time_available': '10 min',
+        'anxiety_level_before': 7,
+        'interview_id': '22222222-2222-2222-2222-222222222222',
+        'company': 'WrongCo',
+        'role': 'WrongRole',
+    }
+    recovery_response = SessionStartResponse(
+        session_id='session-recovery',
+        script=_FAKE_SCRIPT,
+        mode='rejection_recovery',
+    )
+
+    fake_client = _FakeInterviewClient(
+        [
+            {
+                'id': '22222222-2222-2222-2222-222222222222',
+                'user_id': _FAKE_USER['id'],
+                'company': '   ',
+                'role': '',
+            }
+        ]
+    )
+
+    with (
+        patch('src.api.sessions.get_supabase_user_client', return_value=fake_client),
+        patch(
+            'src.api.sessions.start_session',
+            new_callable=AsyncMock,
+            return_value=recovery_response,
+        ) as mock_start,
+    ):
+        response = client.post('/api/sessions/start', json=recovery_payload)
+
+    assert response.status_code == 201
+    _called_user_id, called_payload = mock_start.await_args.args
+    assert called_payload.company is None
+    assert called_payload.role is None
+
+
 # ---------------------------------------------------------------------------
 # POST /api/sessions/complete
 # ---------------------------------------------------------------------------

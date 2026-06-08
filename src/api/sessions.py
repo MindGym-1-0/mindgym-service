@@ -38,7 +38,7 @@ async def _fetch_owned_interview_context(
     interview_id: UUID,
     user_id: str,
     token: str,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     sb = get_supabase_user_client(token)
 
     try:
@@ -61,9 +61,11 @@ async def _fetch_owned_interview_context(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Interview not found.')
 
     row = result.data[0]
+    company = str(row.get('company') or '').strip() or None
+    role = str(row.get('role') or '').strip() or None
     return {
-        'company': str(row.get('company') or '').strip(),
-        'role': str(row.get('role') or '').strip(),
+        'company': company,
+        'role': role,
     }
 
 
