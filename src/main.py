@@ -96,8 +96,8 @@ def create_app() -> FastAPI:
     app.include_router(sessions_router)
     app.include_router(users_router)
 
-    # Progress, Analytics, and AI Insights routes
-    app.include_router(progress_router, prefix="/api", tags=["progress"])
+    # Progress, Analytics, and AI Insights routes (Prefixes handled inside modules)
+    app.include_router(progress_router, tags=["progress"])
     app.include_router(insights_router, tags=["insights"])
 
     # Streaks and Core Platform routers
@@ -120,9 +120,7 @@ def create_app() -> FastAPI:
         daily_focus_router, prefix="/api/daily-focus", tags=["Daily Focus"]
     )
     app.include_router(
-        weekly_mission_router,
-        prefix="/api/weekly-mission",
-        tags=["Weekly Mission"],
+        weekly_mission_router, tags=["Weekly Mission"]
     )
 
     @app.get("/")
