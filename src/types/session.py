@@ -2,7 +2,7 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SessionStartRequest(BaseModel):
@@ -25,14 +25,14 @@ class SessionStartRequest(BaseModel):
         'anxious but hopeful',
     ]
     feeling_note: str | None = Field(None, max_length=500)
-    desired_feeling: Literal[
+    desired_feeling: list[Literal[
         'calm',
         'grounded',
         'confident',
         'focused',
         'clear_minded',
         'composed',
-    ]
+    ]]
     time_available: Literal['5 min', '10 min', '15 min']
     anxiety_level_before: int = Field(..., ge=1, le=10)
     interview_id: UUID | None = None
@@ -40,6 +40,15 @@ class SessionStartRequest(BaseModel):
     role: str | None = None
 
     _MODE1_TYPES = {'interview_tomorrow', 'recruiter_call'}
+
+    @field_validator('desired_feeling')
+    @classmethod
+    def validate_desired_feeling(cls, v: list) -> list:
+        if len(v) < 1:
+            raise ValueError('desired_feeling must have at least 1 selection')
+        if len(v) > 2:
+            raise ValueError('desired_feeling allows at most 2 selections')
+        return v
 
     @model_validator(mode='after')
     def require_company_and_role_for_mode1(self) -> 'SessionStartRequest':

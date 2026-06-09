@@ -17,7 +17,7 @@ def test_session_start_request_valid():
     req = SessionStartRequest(
         preparation_for='interview_tomorrow',
         current_feeling='unsure',
-        desired_feeling='confident',
+        desired_feeling=['confident'],
         time_available='10 min',
         anxiety_level_before=7,
         company='Google',
@@ -43,7 +43,7 @@ def test_session_start_request_all_preparation_for_values():
         kwargs = dict(
             preparation_for=value,
             current_feeling='unsure',
-            desired_feeling='calm',
+            desired_feeling=['calm'],
             time_available='5 min',
             anxiety_level_before=5,
         )
@@ -59,7 +59,7 @@ def test_session_start_request_invalid_preparation_for():
         SessionStartRequest(
             preparation_for='interview_today',
             current_feeling='unsure',
-            desired_feeling='confident',
+            desired_feeling=['confident'],
             time_available='10 min',
             anxiety_level_before=7,
         )
@@ -70,7 +70,7 @@ def test_session_start_request_anxiety_level_before_boundary_valid():
         req = SessionStartRequest(
             preparation_for='general_reset',
             current_feeling='exhausted',
-            desired_feeling='calm',
+            desired_feeling=['calm'],
             time_available='5 min',
             anxiety_level_before=score,
         )
@@ -105,11 +105,44 @@ def test_session_start_request_all_desired_feeling_values():
         req = SessionStartRequest(
             preparation_for='general_reset',
             current_feeling='anxious but hopeful',
-            desired_feeling=value,
+            desired_feeling=[value],
             time_available='5 min',
             anxiety_level_before=5,
         )
-        assert req.desired_feeling == value
+        assert req.desired_feeling == [value]
+
+
+def test_session_start_request_desired_feeling_two_values():
+    req = SessionStartRequest(
+        preparation_for='general_reset',
+        current_feeling='anxious but hopeful',
+        desired_feeling=['calm', 'focused'],
+        time_available='5 min',
+        anxiety_level_before=5,
+    )
+    assert req.desired_feeling == ['calm', 'focused']
+
+
+def test_session_start_request_desired_feeling_too_many():
+    with pytest.raises(ValidationError):
+        SessionStartRequest(
+            preparation_for='general_reset',
+            current_feeling='anxious but hopeful',
+            desired_feeling=['calm', 'focused', 'grounded'],
+            time_available='5 min',
+            anxiety_level_before=5,
+        )
+
+
+def test_session_start_request_desired_feeling_empty():
+    with pytest.raises(ValidationError):
+        SessionStartRequest(
+            preparation_for='general_reset',
+            current_feeling='anxious but hopeful',
+            desired_feeling=[],
+            time_available='5 min',
+            anxiety_level_before=5,
+        )
 
 
 def test_session_start_request_invalid_desired_feeling():
@@ -117,7 +150,7 @@ def test_session_start_request_invalid_desired_feeling():
         SessionStartRequest(
             preparation_for='general_reset',
             current_feeling='anxious but hopeful',
-            desired_feeling='happy',
+            desired_feeling=['happy'],
             time_available='5 min',
             anxiety_level_before=5,
         )
@@ -128,7 +161,7 @@ def test_session_start_request_all_time_available_values():
         req = SessionStartRequest(
             preparation_for='general_reset',
             current_feeling='anxious but hopeful',
-            desired_feeling='calm',
+            desired_feeling=['calm'],
             time_available=value,
             anxiety_level_before=5,
         )
@@ -140,7 +173,7 @@ def test_session_start_request_invalid_time_available():
         SessionStartRequest(
             preparation_for='general_reset',
             current_feeling='anxious but hopeful',
-            desired_feeling='calm',
+            desired_feeling=['calm'],
             time_available='20 min',
             anxiety_level_before=5,
         )
@@ -151,7 +184,7 @@ def test_session_start_request_company_and_role_required_for_mode1():
         SessionStartRequest(
             preparation_for='interview_tomorrow',
             current_feeling='unsure',
-            desired_feeling='confident',
+            desired_feeling=['confident'],
             time_available='10 min',
             anxiety_level_before=7,
         )
@@ -161,7 +194,7 @@ def test_session_start_request_company_and_role_provided():
     req = SessionStartRequest(
         preparation_for='interview_tomorrow',
         current_feeling='unsure',
-        desired_feeling='confident',
+        desired_feeling=['confident'],
         time_available='10 min',
         anxiety_level_before=7,
         company='Google',
@@ -175,7 +208,7 @@ def test_session_start_request_accepts_optional_interview_id():
     req = SessionStartRequest(
         preparation_for='rejection_recovery',
         current_feeling='discouraged',
-        desired_feeling='grounded',
+        desired_feeling=['grounded'],
         time_available='10 min',
         anxiety_level_before=7,
         interview_id='22222222-2222-2222-2222-222222222222',

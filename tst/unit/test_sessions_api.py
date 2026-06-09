@@ -72,7 +72,7 @@ _FAKE_DETAIL = SessionDetail(
 _START_PAYLOAD = {
     'preparation_for': 'interview_tomorrow',
     'current_feeling': 'overwhelmed',
-    'desired_feeling': 'confident',
+    'desired_feeling': ['confident'],
     'time_available': '10 min',
     'anxiety_level_before': 3,
     'company': 'Stripe',
@@ -189,7 +189,7 @@ def test_start_session_allows_missing_company_for_general_reset(client) -> None:
     general_payload = {
         'preparation_for': 'general_reset',
         'current_feeling': 'overwhelmed',
-        'desired_feeling': 'calm',
+        'desired_feeling': ['calm'],
         'time_available': '5 min',
         'anxiety_level_before': 5,
     }
@@ -205,7 +205,7 @@ def test_start_session_rejection_recovery_uses_company_and_role_from_interview(c
     recovery_payload = {
         'preparation_for': 'rejection_recovery',
         'current_feeling': 'discouraged',
-        'desired_feeling': 'grounded',
+        'desired_feeling': ['grounded'],
         'time_available': '10 min',
         'anxiety_level_before': 7,
         'interview_id': '22222222-2222-2222-2222-222222222222',
@@ -254,7 +254,7 @@ def test_start_session_rejection_recovery_returns_404_when_interview_missing(cli
     recovery_payload = {
         'preparation_for': 'rejection_recovery',
         'current_feeling': 'discouraged',
-        'desired_feeling': 'grounded',
+        'desired_feeling': ['grounded'],
         'time_available': '10 min',
         'anxiety_level_before': 7,
         'interview_id': '22222222-2222-2222-2222-222222222222',
@@ -279,7 +279,7 @@ def test_start_session_rejection_recovery_normalizes_blank_company_and_role_to_n
     recovery_payload = {
         'preparation_for': 'rejection_recovery',
         'current_feeling': 'discouraged',
-        'desired_feeling': 'grounded',
+        'desired_feeling': ['grounded'],
         'time_available': '10 min',
         'anxiety_level_before': 7,
         'interview_id': '22222222-2222-2222-2222-222222222222',

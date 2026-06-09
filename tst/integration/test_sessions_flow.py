@@ -169,7 +169,7 @@ def test_session_happy_path_real_supabase_real_gemini(client, admin_client, test
     start_payload = {
         "preparation_for": "interview_tomorrow",
         "current_feeling": "overwhelmed",
-        "desired_feeling": "confident",
+        "desired_feeling": ["confident"],
         "time_available": "5 min",
         "anxiety_level_before": 2,
         "company": "Stripe",
@@ -254,7 +254,7 @@ def test_start_session_uses_fallback_when_gemini_returns_none(
     start_payload = {
         "preparation_for": "interview_tomorrow",
         "current_feeling": "overwhelmed",
-        "desired_feeling": "confident",
+        "desired_feeling": ["confident"],
         "time_available": "5 min",
         "anxiety_level_before": 2,
         "company": "Stripe",
@@ -312,7 +312,7 @@ def test_user_cannot_view_or_complete_another_users_session(
     start_payload = {
         "preparation_for": "interview_tomorrow",
         "current_feeling": "overwhelmed",
-        "desired_feeling": "confident",
+        "desired_feeling": ["confident"],
         "time_available": "5 min",
         "anxiety_level_before": 2,
         "company": "Stripe",
@@ -349,7 +349,7 @@ def test_event_specific_session_requires_company_and_role(client):
     start_payload = {
         "preparation_for": "interview_tomorrow",
         "current_feeling": "overwhelmed",
-        "desired_feeling": "confident",
+        "desired_feeling": ["confident"],
         "time_available": "5 min",
         "anxiety_level_before": 2,
     }
