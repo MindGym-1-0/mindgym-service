@@ -23,12 +23,12 @@ async def get_user_subscription(user_id: str) -> UserSubscription:
         UserSubscription object with current tier info
     """
     supabase = get_supabase_client()
-    
+
     try:
         response = supabase.table('users').select(
             'subscription_tier, subscription_started_at, subscription_renewal_at, subscription_canceled_at'
         ).eq('id', user_id).single().execute()
-        
+
         if not response.data:
             # Default to free tier if not found (shouldn't happen for valid users)
             return UserSubscription(
@@ -36,7 +36,7 @@ async def get_user_subscription(user_id: str) -> UserSubscription:
                 tier=SubscriptionTier.FREE,
                 started_at=datetime.now(),
             )
-        
+
         data = response.data
         return UserSubscription(
             user_id=user_id,
@@ -67,7 +67,7 @@ async def get_subscription_response(user_id: str) -> SubscriptionResponse:
     subscription = await get_user_subscription(user_id)
     features = get_tier_features(subscription.tier)
     usage = await get_current_usage(user_id)
-    
+
     return SubscriptionResponse(
         subscription=subscription,
         features=features,
@@ -91,14 +91,14 @@ async def get_current_usage(user_id: str) -> dict:
         response = supabase.table('subscription_usage').select(
             'sessions_used, interviews_used'
         ).eq('user_id', user_id).eq('period', current_period).single().execute()
-        
+
         if response.data:
             return {
                 'sessions_used_this_month': response.data.get('sessions_used', 0),
                 'interviews_used_this_month': response.data.get('interviews_used', 0),
                 'billing_period': current_period,
             }
-        
+
         # No usage record yet this month
         return {
             'sessions_used_this_month': 0,
@@ -122,14 +122,14 @@ async def can_create_session(user_id: str) -> tuple[bool, str | None]:
     """
     subscription = await get_user_subscription(user_id)
     features = get_tier_features(subscription.tier)
-    
+
     # If unlimited sessions, always allow
     if features.sessions_per_month is None:
         return True, None
-    
+
     usage = await get_current_usage(user_id)
     sessions_used = usage.get('sessions_used_this_month', 0)
-    
+
     if sessions_used >= features.sessions_per_month:
         return False, (
             f"You've reached your limit of {features.sessions_per_month} sessions per month. "
@@ -147,14 +147,14 @@ async def can_create_interview(user_id: str) -> tuple[bool, str | None]:
     """
     subscription = await get_user_subscription(user_id)
     features = get_tier_features(subscription.tier)
-    
+
     # If unlimited interviews, always allow
     if features.max_interviews_tracked is None:
         return True, None
-    
+
     usage = await get_current_usage(user_id)
     interviews_used = usage.get('interviews_used_this_month', 0)
-    
+
     if interviews_used >= features.max_interviews_tracked:
         return False, (
             f"You've reached your limit of {features.max_interviews_tracked} interview(s) you can track. "
@@ -205,13 +205,13 @@ async def increment_interview_usage(user_id: str) -> None:
     """
     supabase = get_supabase_client()
     current_period = date.today().strftime('%Y-%m')
-    
+
     try:
         # First, try to fetch existing record
         existing = supabase.table('subscription_usage').select('interviews_used').eq(
             'user_id', user_id
         ).eq('period', current_period).execute()
-        
+
         if existing.data:
             # Update existing record
             supabase.table('subscription_usage').update({
@@ -244,7 +244,7 @@ async def set_subscription_tier(user_id: str, tier: SubscriptionTier) -> bool:
     if not supabase:
         logger.error("Admin client unavailable for subscription update")
         return False
-    
+
     try:
         now = datetime.now().isoformat()
         supabase.table('users').update({
