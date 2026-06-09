@@ -64,7 +64,7 @@ async def get_progress(
             .execute
         )
         day_streak = (
-            streak_res.data.get("current_streak", 0) if streak_res.data else 0
+            streak_res.data.get("current_streak", 0) if streak_res and streak_res.data else 0
         )
 
         start_date = None
