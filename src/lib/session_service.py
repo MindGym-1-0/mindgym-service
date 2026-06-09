@@ -122,7 +122,13 @@ async def _fetch_user_context(user_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return getattr(result, "data", None) or None
+        data = getattr(result, "data", None) or None
+        if data is None:
+            return None
+        raw_challenge = data.get("emotional_challenge")
+        if isinstance(raw_challenge, list):
+            return {**data, "emotional_challenge": " and ".join(raw_challenge)}
+        return data
     except Exception:
         logger.warning("Failed to fetch user context for user_id=%s — session will proceed without it", user_id)
         return None

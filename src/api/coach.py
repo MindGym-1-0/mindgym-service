@@ -168,7 +168,11 @@ def _build_gemini_prompt(
     )
     employment_status = str(user_context.get("employment_status") or "Not provided")
     target_role_category = str(user_context.get("target_role_category") or "Not provided")
-    emotional_challenge = str(user_context.get("emotional_challenge") or "Not provided")
+    _raw_challenge = user_context.get("emotional_challenge")
+    emotional_challenge = (
+        " and ".join(_raw_challenge) if isinstance(_raw_challenge, list)
+        else str(_raw_challenge or "Not provided")
+    )
     baseline_anxiety = user_context.get("baseline_anxiety")
     baseline_anxiety_text = (
         str(baseline_anxiety) if baseline_anxiety is not None else "Not provided"
@@ -962,7 +966,11 @@ async def create_coach_prep_plan(
         anxiety_level=user_context.get("anxiety_level"),
         employment_status=str(user_context.get("employment_status") or "Not provided"),
         target_role_category=str(user_context.get("target_role_category") or "Not provided"),
-        emotional_challenge=str(user_context.get("emotional_challenge") or "Not provided"),
+        emotional_challenge=(
+            " and ".join(user_context["emotional_challenge"])
+            if isinstance(user_context.get("emotional_challenge"), list)
+            else str(user_context.get("emotional_challenge") or "Not provided")
+        ),
         baseline_anxiety=(
             str(user_context.get("baseline_anxiety"))
             if user_context.get("baseline_anxiety") is not None

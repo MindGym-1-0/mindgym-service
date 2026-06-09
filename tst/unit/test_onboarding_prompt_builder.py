@@ -11,7 +11,7 @@ from src.lib.prompt_builder import derive_preparation_for, build_onboarding_prom
 def test_rejection_silence_returns_rejection_recovery() -> None:
     result = derive_preparation_for(
         employment_status="unemployed",
-        emotional_challenge="rejection_silence",
+        emotional_challenge=["rejection_silence"],
         job_timeline="3m",
     )
     assert result == "rejection_recovery"
@@ -21,7 +21,7 @@ def test_rejection_silence_returns_rejection_recovery() -> None:
 def test_burnout_returns_rejection_recovery() -> None:
     result = derive_preparation_for(
         employment_status="unemployed",
-        emotional_challenge="burnout",
+        emotional_challenge=["burnout"],
         job_timeline="3m",
     )
     assert result == "rejection_recovery"
@@ -31,7 +31,7 @@ def test_burnout_returns_rejection_recovery() -> None:
 def test_employed_returns_general_reset() -> None:
     result = derive_preparation_for(
         employment_status="employed",
-        emotional_challenge="interview_anxiety",
+        emotional_challenge=["interview_anxiety"],
         job_timeline="6m",
     )
     assert result == "general_reset"
@@ -41,7 +41,7 @@ def test_employed_returns_general_reset() -> None:
 def test_asap_timeline_returns_restarting_search() -> None:
     result = derive_preparation_for(
         employment_status="unemployed",
-        emotional_challenge="interview_anxiety",
+        emotional_challenge=["interview_anxiety"],
         job_timeline="asap",
     )
     assert result == "restarting_search"
@@ -51,7 +51,7 @@ def test_asap_timeline_returns_restarting_search() -> None:
 def test_fallback_returns_general_reset() -> None:
     result = derive_preparation_for(
         employment_status="unemployed",
-        emotional_challenge="uncertainty",
+        emotional_challenge=["uncertainty"],
         job_timeline="12m",
     )
     assert result == "general_reset"
@@ -62,8 +62,19 @@ def test_emotional_challenge_takes_priority_over_timeline() -> None:
     """rejection_silence should win over asap timeline."""
     result = derive_preparation_for(
         employment_status="unemployed",
-        emotional_challenge="rejection_silence",
+        emotional_challenge=["rejection_silence"],
         job_timeline="asap",
+    )
+    assert result == "rejection_recovery"
+
+
+@pytest.mark.unit
+def test_multi_challenge_triggers_rejection_recovery_when_any_matches() -> None:
+    """If one of two challenges is burnout, rejection_recovery should be returned."""
+    result = derive_preparation_for(
+        employment_status="unemployed",
+        emotional_challenge=["imposter_syndrome", "burnout"],
+        job_timeline="3m",
     )
     assert result == "rejection_recovery"
 
@@ -87,7 +98,7 @@ def test_build_onboarding_prompt_returns_string() -> None:
         first_round_interviews=2,
         final_round_interviews=1,
         offers=0,
-        emotional_challenge="rejection_silence",
+        emotional_challenge=["rejection_silence"],
         baseline_anxiety=7,
         preparation_for="rejection_recovery",
     )
@@ -110,7 +121,7 @@ def test_build_onboarding_prompt_includes_user_answers() -> None:
         first_round_interviews=1,
         final_round_interviews=0,
         offers=0,
-        emotional_challenge="imposter_syndrome",
+        emotional_challenge=["imposter_syndrome"],
         baseline_anxiety=5,
         preparation_for="general_reset",
     )
@@ -135,7 +146,7 @@ def test_build_onboarding_prompt_handles_none_duration() -> None:
         first_round_interviews=None,
         final_round_interviews=None,
         offers=None,
-        emotional_challenge="burnout",
+        emotional_challenge=["burnout"],
         baseline_anxiety=6,
         preparation_for="general_reset",
     )
@@ -161,7 +172,7 @@ def test_build_onboarding_script_prompt_returns_string() -> None:
         first_round_interviews=2,
         final_round_interviews=1,
         offers=0,
-        emotional_challenge="rejection_silence",
+        emotional_challenge=["rejection_silence"],
         baseline_anxiety=7,
         preparation_for="rejection_recovery",
     )
@@ -185,7 +196,7 @@ def test_build_onboarding_script_prompt_includes_preparation_for() -> None:
         first_round_interviews=3,
         final_round_interviews=2,
         offers=1,
-        emotional_challenge="interview_anxiety",
+        emotional_challenge=["interview_anxiety"],
         baseline_anxiety=8,
         preparation_for="restarting_search",
     )

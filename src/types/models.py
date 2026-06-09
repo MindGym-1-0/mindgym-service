@@ -1,7 +1,7 @@
 """Pydantic models for request and response validation"""
 
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 from pydantic import model_validator
 from src.types.session import SessionScript
@@ -48,8 +48,15 @@ class OnboardingRequest(BaseModel):
     first_round_interviews: int | None = None
     final_round_interviews: int | None = None
     offers: int | None = None
-    emotional_challenge: Literal["rejection_silence", "interview_anxiety", "imposter_syndrome", "burnout", "uncertainty", "financial_pressure"]
+    emotional_challenge: list[Literal["rejection_silence", "interview_anxiety", "imposter_syndrome", "burnout", "uncertainty", "financial_pressure"]] = Field(..., min_length=1)
     baseline_anxiety: int = Field(ge=1, le=10, description="Current anxiety level on a 1-10 scale")
+
+    @field_validator("emotional_challenge")
+    @classmethod
+    def validate_emotional_challenge(cls, v: list) -> list:
+        if len(v) > 2:
+            raise ValueError("emotional_challenge allows at most 2 selections")
+        return v
 
     @model_validator(mode="after")
     def check_unemployed_duration(self):
@@ -72,7 +79,7 @@ class OnboardingRequest(BaseModel):
                 "first_round_interviews": 2,
                 "final_round_interviews": 1,
                 "offers": 0,
-                "emotional_challenge": "rejection_silence",
+                "emotional_challenge": ["rejection_silence"],
                 "baseline_anxiety": 7,
             }
         }

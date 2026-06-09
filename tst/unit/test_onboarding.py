@@ -27,7 +27,7 @@ _VALID_PAYLOAD = {
     "first_round_interviews": 2,
     "final_round_interviews": 1,
     "offers": 0,
-    "emotional_challenge": "rejection_silence",
+    "emotional_challenge": ["rejection_silence"],
     "baseline_anxiety": 7,
 }
 
@@ -89,11 +89,8 @@ def test_onboard_returns_201_with_full_response(client) -> None:
          patch("src.api.onboarding.derive_preparation_for", return_value="rejection_recovery"), \
          patch("src.api.onboarding.insert_onboarding_session", new_callable=AsyncMock, return_value="session-abc"):
 
-        mock_asyncio.to_thread = AsyncMock(side_effect=[
-            None,             # upsert
-            _FAKE_GAP_ANALYSIS,  # analyze_onboarding
-            _FAKE_SCRIPT,        # generate_onboarding_script
-        ])
+        mock_asyncio.to_thread = AsyncMock(return_value=None)
+        mock_asyncio.wait_for = AsyncMock(return_value=(_FAKE_GAP_ANALYSIS, _FAKE_SCRIPT))
 
         response = client.post("/api/onboard", json=_VALID_PAYLOAD)
 
@@ -133,11 +130,8 @@ def test_onboard_allows_missing_duration_when_employed(client) -> None:
          patch("src.api.onboarding.derive_preparation_for", return_value="general_reset"), \
          patch("src.api.onboarding.insert_onboarding_session", new_callable=AsyncMock, return_value="session-abc"):
 
-        mock_asyncio.to_thread = AsyncMock(side_effect=[
-            None,
-            _FAKE_GAP_ANALYSIS,
-            _FAKE_SCRIPT,
-        ])
+        mock_asyncio.to_thread = AsyncMock(return_value=None)
+        mock_asyncio.wait_for = AsyncMock(return_value=(_FAKE_GAP_ANALYSIS, _FAKE_SCRIPT))
         response = client.post("/api/onboard", json=payload)
 
     assert response.status_code == 201
@@ -162,7 +156,7 @@ def test_onboard_rejects_empty_company_types(client) -> None:
 @pytest.mark.unit
 def test_onboard_rejects_invalid_emotional_challenge(client) -> None:
     """POST /api/onboard must return 422 for unknown emotional_challenge."""
-    payload = {**_VALID_PAYLOAD, "emotional_challenge": "loneliness"}
+    payload = {**_VALID_PAYLOAD, "emotional_challenge": ["loneliness"]}
     response = client.post("/api/onboard", json=payload)
     assert response.status_code == 422
 
@@ -191,11 +185,8 @@ def test_onboard_accepts_optional_target_role_note_as_none(client) -> None:
          patch("src.api.onboarding.derive_preparation_for", return_value="rejection_recovery"), \
          patch("src.api.onboarding.insert_onboarding_session", new_callable=AsyncMock, return_value="session-abc"):
 
-        mock_asyncio.to_thread = AsyncMock(side_effect=[
-            None,
-            _FAKE_GAP_ANALYSIS,
-            _FAKE_SCRIPT,
-        ])
+        mock_asyncio.to_thread = AsyncMock(return_value=None)
+        mock_asyncio.wait_for = AsyncMock(return_value=(_FAKE_GAP_ANALYSIS, _FAKE_SCRIPT))
         response = client.post("/api/onboard", json=payload)
 
     assert response.status_code == 201
