@@ -13,8 +13,6 @@ from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.openai_service import _chat
 from src.lib.supabase import get_supabase_user_client
 from src.types.progress import (
-    ConfidenceDataPoint,
-    EmotionalStates,
     GeminiProgressInsight,
     ProgressResponse,
 )
@@ -24,21 +22,23 @@ router = APIRouter(tags=["Progress"])
 
 
 def execute_fallback_logic(
-    lowest_dimension: str, final_states: dict[str, float]
+    sessions_done: int, avg_lift: float
 ) -> GeminiProgressInsight:
-    """Generates a contextual fallback insight if the AI provider fails."""
+    """Generates a contextual fallback insight based on core anxiety lift performance."""
     logger.warning("Executing local fallback logic for progress insight.")
-    dim_capitalized = lowest_dimension.capitalize()
-
-    if final_states.get(lowest_dimension, 0) == 0:
+    
+    if sessions_done == 0:
         return GeminiProgressInsight(
-            key_insight=f"No sessions recorded for {lowest_dimension} yet. "
-            f"Try dedicating your next session to it."
+            key_insight="Welcome to MindGym! Complete your first session today to kick off your progress insights."
         )
-
+    
+    if avg_lift > 0:
+        return GeminiProgressInsight(
+            key_insight=f"Great job! You're reducing anxiety by an average of {avg_lift} points per session. Keep it up."
+        )
+        
     return GeminiProgressInsight(
-        key_insight=f"{dim_capitalized} is your current focus area. "
-        f"Consistency this week will help push it higher."
+        key_insight="You're building consistency. Dedicating a few minutes to mindful breathing today can help turn things around."
     )
 
 
@@ -57,7 +57,7 @@ async def get_progress(
     user_uuid_str = str(current_user_id)
     now = datetime.now(UTC)
 
-    # STEP 1: Fetch data from Supabase using thread executors
+    # STEP 1: Fetch data from Supabase
     try:
         streak_res = await asyncio.to_thread(
             sb.table("streaks")
@@ -76,10 +76,9 @@ async def get_progress(
         elif period == "month":
             start_date = now - timedelta(days=30)
 
-        # FIX 1: Replaced non-existent boolean completed column with completed_at presence filter
         query = (
             sb.table("ai_sessions")
-            .select("*")
+            .select("anxiety_level_before", "anxiety_level_after", "completed_at")
             .eq("user_id", user_uuid_str)
             .not_.is_("completed_at", "null")
         )
@@ -100,124 +99,36 @@ async def get_progress(
 
     if not sessions:
         return ProgressResponse(
-            avg_confidence=0.0,
             sessions_done=0,
             day_streak=day_streak,
             avg_lift_per_session=0.0,
-            confidence_over_time=[],
-            emotional_states=EmotionalStates(),
             key_insight="",
         )
 
-    # STEP 2: Aggregate Metrics & Processing Loops
+    # STEP 2: Aggregate Verified Schema Metrics
     sessions_done = len(sessions)
     total_lift = 0.0
 
-    state_metrics = {
-        "confidence": {"sum": 0.0, "count": 0},
-        "clarity": {"sum": 0.0, "count": 0},
-        "calmness": {"sum": 0.0, "count": 0},
-        "focus": {"sum": 0.0, "count": 0},
-    }
-
     for s in sessions:
-        # FIX 2: Switched to post-migration schema column keys and corrected direction (before - after = lift)
         pre_score = s.get("anxiety_level_before") or 0.0
         post_score = s.get("anxiety_level_after") or 0.0
         total_lift += float(pre_score) - float(post_score)
 
-        for dimension in state_metrics.keys():
-            val = s.get(dimension) or s.get(f"post_{dimension}")
-            if val is not None:
-                state_metrics[dimension]["sum"] += float(val)
-                state_metrics[dimension]["count"] += 1
-
     avg_lift_per_session = round(total_lift / sessions_done, 1)
 
-    final_states = {}
-    for dim, data in state_metrics.items():
-        final_states[dim] = (
-            round(data["sum"] / data["count"], 1) if data["count"] > 0 else 0.0
-        )
-
-    avg_confidence = final_states["confidence"]
-
-    # STEP 3: Compile Time Series Maps (confidence_over_time)
-    confidence_over_time: list[ConfidenceDataPoint] = []
-
-    if period == "week":
-        days_map: dict[str, list[float]] = {}
-        for s in sessions:
-            dt = datetime.fromisoformat(
-                s["completed_at"].replace("Z", "+00:00")
-            )
-            day_label = dt.strftime("%a")
-            days_map.setdefault(day_label, []).append(
-                s.get("confidence") or s.get("post_confidence") or 0.0
-            )
-
-        current_day_label = now.strftime("%a")
-        for day_label, vals in days_map.items():
-            label = "Today" if day_label == current_day_label else day_label
-            confidence_over_time.append(
-                ConfidenceDataPoint(
-                    day=label, value=round(sum(vals) / len(vals), 1)
-                )
-            )
-
-    elif period == "month":
-        weeks_map: dict[str, list[float]] = {}
-        for s in sessions:
-            dt = datetime.fromisoformat(
-                s["completed_at"].replace("Z", "+00:00")
-            )
-            week_label = f"Wk {dt.isocalendar()[1]}"
-            weeks_map.setdefault(week_label, []).append(
-                s.get("confidence") or s.get("post_confidence") or 0.0
-            )
-
-        for week_label, vals in weeks_map.items():
-            confidence_over_time.append(
-                ConfidenceDataPoint(
-                    day=week_label, value=round(sum(vals) / len(vals), 1)
-                )
-            )
-
-    else:
-        months_map: dict[str, list[float]] = {}
-        for s in sessions:
-            dt = datetime.fromisoformat(
-                s["completed_at"].replace("Z", "+00:00")
-            )
-            month_label = dt.strftime("%b")
-            months_map.setdefault(month_label, []).append(
-                s.get("confidence") or s.get("post_confidence") or 0.0
-            )
-
-        for month_label, vals in months_map.items():
-            confidence_over_time.append(
-                ConfidenceDataPoint(
-                    day=month_label, value=round(sum(vals) / len(vals), 1)
-                )
-            )
-
-    # STEP 4: Build Prompt & Execute OpenAI chat sequence
-    lowest_dimension = min(final_states, key=final_states.get)
-
-    # FIX 3: Structured prompt to mandate raw JSON output matching the target schema to avoid JSONDecodeErrors
+    # STEP 3: Build Lean Prompt focused on actual data
     prompt = f"""
     You are an expert, supportive AI MindGym coach analyzing user progress.
     Review the metrics below and output an actionable coaching summary sentence.
 
     --- USER PROGRESS METRICS ---
-    Averages for current timeframe: {final_states}
-    Lowest performing dimension: {lowest_dimension}
     Total complete sessions: {sessions_done}
+    Average anxiety reduction lift per session: {avg_lift_per_session} points
     Current user day streak: {day_streak} days
 
     --- STRATEGIC CONSTRAINTS ---
-    1. Your answer must focus explicitly on improving: {lowest_dimension}.
-    2. Suggest a real, minor actionable next target goal.
+    1. Provide a concise, supportive translation of their anxiety reduction metrics or streak milestones.
+    2. Suggest a minor actionable target goal for their mental fitness routine.
     3. The coaching statement inside the key_insight property must be under 20 words total.
     4. You MUST output raw JSON matching this structure exactly. No markdown blocks.
 
@@ -243,24 +154,17 @@ async def get_progress(
         validated_insight = GeminiProgressInsight(**parsed_json)
     except (asyncio.TimeoutError, Exception) as err:
         logger.error(f"OpenAI progress insight calculation failed: {repr(err)}")
-        validated_insight = execute_fallback_logic(
-            lowest_dimension, final_states
-        )
+        validated_insight = execute_fallback_logic(sessions_done, avg_lift_per_session)
 
     if not validated_insight or not validated_insight.key_insight:
-        validated_insight = execute_fallback_logic(
-            lowest_dimension, final_states
-        )
+        validated_insight = execute_fallback_logic(sessions_done, avg_lift_per_session)
 
     clean_insight_str = " ".join(validated_insight.key_insight.split()[:20])
 
-    # STEP 5: Package and Return Data
+    # STEP 4: Package and Return Lean Data
     return ProgressResponse(
-        avg_confidence=avg_confidence,
         sessions_done=sessions_done,
         day_streak=day_streak,
         avg_lift_per_session=avg_lift_per_session,
-        confidence_over_time=confidence_over_time,
-        emotional_states=EmotionalStates(**final_states),
         key_insight=clean_insight_str,
     )
