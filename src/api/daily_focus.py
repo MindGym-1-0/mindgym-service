@@ -5,12 +5,14 @@ import json
 import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Dict, Optional
-from google import genai
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from src.api.streaks import increment_user_streak
 from src.lib.auth import CurrentUserId, CurrentUserToken
+# Fixed: Swapped out genai for the standardized openai helper from PR #64
+from src.lib.openai_service import _chat
 from src.lib.supabase import get_supabase_user_client
 from src.types.daily_focus import (
     ActionType,
@@ -21,12 +23,9 @@ from src.types.daily_focus import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Performance Optimization: Instantiated client once at module level
-ai_client = genai.Client()
-
 
 def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
-    """Generates a highly contextual fallback response if Gemini fails."""
+    """Generates a highly contextual fallback response if OpenAI fails."""
     logger.warning("Executing local fallback logic for daily focus.")
     today = date.today()
 
@@ -110,7 +109,9 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
     status_code=status.HTTP_200_OK,
     summary="Generate daily action focus items using pipeline context",
 )
-async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUserToken):
+async def generate_daily_focus(
+    current_user_id: CurrentUserId, token: CurrentUserToken
+):
     today_str = date.today().strftime("%Y-%m-%d")
     sb = get_supabase_user_client(token)
     user_uuid_str = str(current_user_id)
@@ -125,7 +126,6 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
         )
         user_profile = user_res.data[0] if user_res.data else {}
 
-        # Fixed: Modified 'stage' selection over to 'status' column layout
         jobs_res = await asyncio.to_thread(
             sb.table("jobs")
             .select("company, role, status, last_moved_at")
@@ -165,7 +165,9 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
             .execute
         )
         current_streak = (
-            streak_res.data[0].get("current_streak", 0) if streak_res.data else 0
+            streak_res.data[0].get("current_streak", 0)
+            if streak_res.data
+            else 0
         )
     except Exception as db_err:
         logger.error(f"Failed to fetch user context tables: {str(db_err)}")
@@ -199,36 +201,34 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
     Current Date: {today_str}
 
     --- BUSINESS RULE PRIORITY HEURISTICS ---
-    1. Urgent Interview Focus: If interview is in next 2 days, action_1 targets it.
+    1. Urgent Interview Focus: If interview is in next 2 days, action_1 targets.
     2. Stagnant Applications: If open items sat > 14 days, prioritize outreach.
     3. Low Pipeline Volume: If < 3 items are in 'applied' status, add new jobs.
     4. Feedback Loops: If stage moved but no debrief logged, prompt for debrief.
     """
 
-    # STEP 3 & 4: Call Gemini with formatting validation
+    # STEP 3 & 4: Call OpenAI chat service with formatting validation
     validated_output: Optional[GeminiDailyFocusOutput] = None
     try:
-
-        async def call_gemini_api():
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: ai_client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=prompt,
-                    config={
-                        "response_mime_type": "application/json",
-                        "response_schema": GeminiDailyFocusOutput,
-                    },
+        raw_text = await asyncio.wait_for(
+            asyncio.to_thread(
+                _chat,
+                system=(
+                    "You are a precise JSON career tracking metrics assistant. "
+                    "You must output valid JSON matching the requested keys."
                 ),
-            )
-            return response.text
+                user=prompt,
+            ),
+            timeout=4.0,
+        )
 
-        raw_text = await asyncio.wait_for(call_gemini_api(), timeout=4.0)
+        if raw_text is None:
+            raise ValueError("OpenAI pipeline returned a null response string.")
+
         parsed_json = json.loads(raw_text.strip())
         validated_output = GeminiDailyFocusOutput(**parsed_json)
     except (asyncio.TimeoutError, Exception) as err:
-        logger.error(f"Gemini focus generation failed: {repr(err)}")
+        logger.error(f"OpenAI daily focus generation failed: {repr(err)}")
         validated_output = execute_fallback_logic(context)
 
     if not validated_output or not validated_output.action_1_text:
@@ -275,7 +275,10 @@ async def generate_daily_focus(current_user_id: CurrentUserId, token: CurrentUse
         else:
             focus_payload["created_at"] = datetime.now(UTC).isoformat()
             db_result = await asyncio.to_thread(
-                sb.table("daily_focus").insert(focus_payload).select("*").execute
+                sb.table("daily_focus")
+                .insert(focus_payload)
+                .select("*")
+                .execute
             )
 
         return db_result.data[0]
@@ -351,7 +354,9 @@ async def complete_daily_focus(
             .eq("user_id", user_uuid_str)
             .execute
         )
-        current_streak = streak_res.data[0]["current_streak"] if streak_res.data else 0
+        current_streak = (
+            streak_res.data[0]["current_streak"] if streak_res.data else 0
+        )
         return DailyFocusCompleteResponse(
             success=True, current_streak=current_streak, milestone=None
         )
@@ -363,7 +368,10 @@ async def complete_daily_focus(
             "updated_at": datetime.now(UTC).isoformat(),
         }
         await asyncio.to_thread(
-            sb.table("daily_focus").update(update_payload).eq("id", record_id).execute
+            sb.table("daily_focus")
+            .update(update_payload)
+            .eq("id", record_id)
+            .execute
         )
     except Exception as err:
         raise HTTPException(
@@ -371,7 +379,7 @@ async def complete_daily_focus(
             detail=f"Failed to update task completion state: {str(err)}",
         )
 
-    # 3. Fixed: Parameter ordering updated to match structural definition
+    # 3. Parameter ordering matches structural definition
     try:
         streak_data = await increment_user_streak(sb, user_uuid_str)
     except Exception as err:

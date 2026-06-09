@@ -4,26 +4,22 @@ import asyncio
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
+from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
+from src.lib.openai_service import _chat
 from src.lib.supabase import get_supabase_user_client
 from src.types.weekly_mission import (
-    GeminiMissionOutput,
+    WeeklyMissionInsight,
     WeeklyMissionGenerateResponse,
 )
 
-# Modern Google GenAI SDK imports
-from google import genai
-from google.genai import types
-
 logger = logging.getLogger(__name__)
-router = APIRouter()
-
-# Performance Optimization: Instantiated client once at module level
-ai_client = genai.Client()
+router = APIRouter(prefix="/api/weekly_mission", tags=["Weekly Mission"])
 
 
 def get_target_monday() -> date:
@@ -39,7 +35,6 @@ def get_target_monday() -> date:
 
 def execute_fallback_generation(user_context: dict) -> dict:
     """Step 4 Fallback Engine: Explicitly builds 3 tailored actions via string
-
     formatting using pipeline metrics to ensure the client never encounters a
     processing failure.
     """
@@ -79,10 +74,9 @@ def execute_fallback_generation(user_context: dict) -> dict:
 
 @router.post("/generate", response_model=WeeklyMissionGenerateResponse)
 async def generate_weekly_mission(
-    current_user_id: CurrentUserId,
-    token: CurrentUserToken,
+    current_user_id: Annotated[UUID, Depends(CurrentUserId)],
+    token: Annotated[str, Depends(CurrentUserToken)],
 ):
-    # Resolve the client manually using the user's token for RLS stability
     supabase = get_supabase_user_client(token)
     user_id = str(current_user_id)
 
@@ -102,7 +96,6 @@ async def generate_weekly_mission(
             else {"goal": "General Placement", "stage": "Interviewing"}
         )
 
-        # Database Optimization Fix: Selecting actual column layout
         jobs_res = await asyncio.to_thread(
             supabase.table("jobs")
             .select("id, status, last_moved_at")
@@ -146,9 +139,7 @@ async def generate_weekly_mission(
         )
 
     except Exception as db_err:
-        logger.error(
-            f"Error compiling user mission parameters: {str(db_err)}"
-        )
+        logger.error(f"Error compiling user mission parameters: {str(db_err)}")
         (
             active_jobs,
             session_count,
@@ -166,7 +157,7 @@ async def generate_weekly_mission(
     }
 
     # ------------------------------------------
-    # STEP 2 — BUILD THE GEMINI PROMPT
+    # STEP 2 — BUILD THE OPENAI PROMPT
     # ------------------------------------------
     prompt = f"""
     You are an expert career performance optimization AI.
@@ -175,49 +166,50 @@ async def generate_weekly_mission(
     User Context:
     - Career Goal: {user_profile.get('goal')}
     - Application Stage: {user_profile.get('stage')}
-    - Current Active Pipeline Jobs: {json.dumps(active_jobs)}
+    - Current Active Pipeline Jobs: {json.dumps(active_jobs, indent=2)}
     - Activity Volume This Week: {session_count} completed sessions
     - Completed Targets from Last Week: {prev_completion_count}/3
 
-    Requirements:
-    - Focus heavily on pipeline gaps, performance gaps, or momentum drop-offs.
-    - Write highly concrete strings. Avoid generic platitudes.
-    - Return your response exclusively as valid JSON matching the schema.
+    Requirements and Structural Constraints:
+    1. Focus heavily on pipeline gaps, performance gaps, or momentum drop-offs.
+    2. Write highly concrete strings. Avoid generic platitudes.
+    3. You MUST output raw JSON matching this structure exactly. No markdown blocks.
+
+    {{
+      "action_1": "...",
+      "action_2": "...",
+      "action_3": "..."
+    }}
     """
 
     generated_actions = None
 
     # ------------------------------------------
-    # STEP 3 & 4 — CALL GEMINI WITH TIMEOUT
+    # STEP 3 & 4 — CALL OPENAI VIA ROUTED LOGIC
     # ------------------------------------------
     try:
-        response = await asyncio.wait_for(
+        raw_text = await asyncio.wait_for(
             asyncio.to_thread(
-                ai_client.models.generate_content,
-                model="gemini-2.5-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=GeminiMissionOutput,
-                ),
+                _chat,
+                system="You are a precise JSON targets generation engine.",
+                user=prompt,
             ),
-            timeout=4.0,
+            timeout=5.0,
         )
 
-        raw_json = json.loads(response.text.strip())
+        if raw_text is None:
+            raise ValueError("OpenAI pipeline failed to return response string.")
 
-        if (
-            raw_json.get("action_1")
-            and raw_json.get("action_2")
-            and raw_json.get("action_3")
-        ):
-            generated_actions = raw_json
-        else:
-            logger.warning("Gemini structure incomplete. Going to fallback.")
-            generated_actions = execute_fallback_generation(context_package)
+        parsed_response = json.loads(raw_text.strip())
+        validated_insight = WeeklyMissionInsight(**parsed_response)
 
+        generated_actions = {
+            "action_1": validated_insight.action_1,
+            "action_2": validated_insight.action_2,
+            "action_3": validated_insight.action_3,
+        }
     except (asyncio.TimeoutError, Exception) as gen_error:
-        logger.error(f"Gemini generation engine bypassed: {str(gen_error)}")
+        logger.error(f"OpenAI generation engine bypassed: {str(gen_error)}")
         generated_actions = execute_fallback_generation(context_package)
 
     # ------------------------------------------
@@ -322,8 +314,8 @@ class WeeklyMissionCompleteResponse(BaseModel):
     summary="Mark a specific item as completed and increment tracker counter",
 )
 async def complete_weekly_mission(
-    current_user_id: CurrentUserId,
-    token: CurrentUserToken,
+    current_user_id: Annotated[UUID, Depends(CurrentUserId)],
+    token: Annotated[str, Depends(CurrentUserToken)],
     payload: WeeklyMissionCompleteRequest,
 ):
     supabase = get_supabase_user_client(token)
@@ -336,7 +328,6 @@ async def complete_weekly_mission(
             detail="Invalid mission_item_id. Must be action_1, _2, or _3.",
         )
 
-    # 1. Fetch current week's mission row to check state existence
     existing_row = await asyncio.to_thread(
         supabase.table("weekly_mission")
         .select("*")
@@ -356,7 +347,6 @@ async def complete_weekly_mission(
 
     target_completed_field = f"{payload.mission_item_id}_completed"
 
-    # If already marked completed, return count without duplicate queries
     if record.get(target_completed_field) is True:
         return WeeklyMissionCompleteResponse(
             success=True,
@@ -364,7 +354,6 @@ async def complete_weekly_mission(
             total_items=3,
         )
 
-    # 2. Safely increment completion count and flip task boolean flag state
     new_completion_count = record.get("completion_count", 0) + 1
     if new_completion_count > 3:
         new_completion_count = 3
@@ -375,7 +364,6 @@ async def complete_weekly_mission(
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # 3. Persist modifications back to the parent table row reference
     try:
         await asyncio.to_thread(
             supabase.table("weekly_mission")
@@ -384,9 +372,7 @@ async def complete_weekly_mission(
             .execute
         )
     except Exception as save_err:
-        logger.error(
-            f"Failed writing update payload ledger: {str(save_err)}"
-        )
+        logger.error(f"Failed writing update payload ledger: {str(save_err)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not update weekly mission target completion counts.",
