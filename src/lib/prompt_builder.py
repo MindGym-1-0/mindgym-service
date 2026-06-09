@@ -88,12 +88,12 @@ def build_prompt(
 
 def derive_preparation_for(
     employment_status: str,
-    emotional_challenge: str,
+    emotional_challenge: list[str],
     job_timeline: str,
 ) -> str:
     """Derive the first session type from onboarding answers."""
 
-    if emotional_challenge in ("rejection_silence", "burnout"):
+    if any(c in ("rejection_silence", "burnout") for c in emotional_challenge):
         return "rejection_recovery"
     elif employment_status == "employed":
         return "general_reset"

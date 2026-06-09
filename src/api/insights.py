@@ -161,7 +161,8 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
     if user_data.get("employment_status"):
         ctx["employment_status"] = user_data["employment_status"]
     if user_data.get("emotional_challenge"):
-        ctx["emotional_challenge"] = user_data["emotional_challenge"]
+        raw = user_data["emotional_challenge"]
+        ctx["emotional_challenge"] = " and ".join(raw) if isinstance(raw, list) else raw
 
     if avg_morning is not None:
         ctx["avg_lift_morning_before_10am"] = round(avg_morning, 2)

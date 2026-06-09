@@ -143,7 +143,7 @@ async def onboard(
             first_round_interviews=request.first_round_interviews,
             final_round_interviews=request.final_round_interviews,
             offers=request.offers,
-            emotional_challenge=request.emotional_challenge,
+            emotional_challenge=" and ".join(request.emotional_challenge),
             baseline_anxiety=request.baseline_anxiety,
             preparation_for=preparation_for,
         )

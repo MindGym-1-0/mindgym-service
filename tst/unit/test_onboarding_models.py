@@ -10,7 +10,7 @@ _VALID = {
     "job_timeline": "asap",
     "target_role_category": "product_management",
     "company_types": ["startup"],
-    "emotional_challenge": "rejection_silence",
+    "emotional_challenge": ["rejection_silence"],
     "baseline_anxiety": 7,
 }
 
@@ -143,3 +143,37 @@ def test_activity_counters_are_optional() -> None:
     assert req.recruiter_contacts is None
     assert req.first_round_interviews is None
     assert req.offers is None
+
+
+# ---------------------------------------------------------------------------
+# emotional_challenge
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+def test_emotional_challenge_accepts_single_value() -> None:
+    req = OnboardingRequest(**{**_VALID, "emotional_challenge": ["interview_anxiety"]})
+    assert req.emotional_challenge == ["interview_anxiety"]
+
+
+@pytest.mark.unit
+def test_emotional_challenge_accepts_two_values() -> None:
+    req = OnboardingRequest(**{**_VALID, "emotional_challenge": ["burnout", "imposter_syndrome"]})
+    assert len(req.emotional_challenge) == 2
+
+
+@pytest.mark.unit
+def test_emotional_challenge_rejects_more_than_two() -> None:
+    with pytest.raises(ValidationError):
+        OnboardingRequest(**{**_VALID, "emotional_challenge": ["burnout", "imposter_syndrome", "uncertainty"]})
+
+
+@pytest.mark.unit
+def test_emotional_challenge_rejects_empty_list() -> None:
+    with pytest.raises(ValidationError):
+        OnboardingRequest(**{**_VALID, "emotional_challenge": []})
+
+
+@pytest.mark.unit
+def test_emotional_challenge_rejects_unknown_value() -> None:
+    with pytest.raises(ValidationError):
+        OnboardingRequest(**{**_VALID, "emotional_challenge": ["loneliness"]})
