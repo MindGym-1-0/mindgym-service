@@ -6,7 +6,6 @@ from src.types.subscription import (
     SubscriptionTier,
     UserSubscription,
     SubscriptionResponse,
-    SubscriptionTierFeatures,
     get_tier_features,
 )
 from src.lib.supabase_client import get_supabase_client, get_supabase_admin_client
@@ -16,10 +15,10 @@ logger = logging.getLogger(__name__)
 
 async def get_user_subscription(user_id: str) -> UserSubscription:
     """Get the current subscription tier for a user.
-    
+
     Args:
         user_id: The user's ID
-        
+
     Returns:
         UserSubscription object with current tier info
     """
@@ -58,10 +57,10 @@ async def get_user_subscription(user_id: str) -> UserSubscription:
 
 async def get_subscription_response(user_id: str) -> SubscriptionResponse:
     """Get subscription info with features and usage for a user.
-    
+
     Args:
         user_id: The user's ID
-        
+
     Returns:
         SubscriptionResponse with tier, features, and usage
     """
@@ -78,10 +77,10 @@ async def get_subscription_response(user_id: str) -> SubscriptionResponse:
 
 async def get_current_usage(user_id: str) -> dict:
     """Get current month's usage for a user.
-    
+
     Args:
         user_id: The user's ID
-        
+
     Returns:
         Dictionary with usage metrics for current billing period
     """
@@ -117,7 +116,7 @@ async def get_current_usage(user_id: str) -> dict:
 
 async def can_create_session(user_id: str) -> tuple[bool, str | None]:
     """Check if user can create another session based on tier limits.
-    
+
     Returns:
         Tuple of (allowed: bool, error_message: str | None)
     """
@@ -142,7 +141,7 @@ async def can_create_session(user_id: str) -> tuple[bool, str | None]:
 
 async def can_create_interview(user_id: str) -> tuple[bool, str | None]:
     """Check if user can create/track another interview based on tier limits.
-    
+
     Returns:
         Tuple of (allowed: bool, error_message: str | None)
     """
@@ -167,7 +166,7 @@ async def can_create_interview(user_id: str) -> tuple[bool, str | None]:
 
 async def increment_session_usage(user_id: str) -> None:
     """Increment session usage for current billing period.
-    
+
     Args:
         user_id: The user's ID
     """
@@ -200,7 +199,7 @@ async def increment_session_usage(user_id: str) -> None:
 
 async def increment_interview_usage(user_id: str) -> None:
     """Increment interview usage for current billing period.
-    
+
     Args:
         user_id: The user's ID
     """
@@ -233,11 +232,11 @@ async def increment_interview_usage(user_id: str) -> None:
 
 async def set_subscription_tier(user_id: str, tier: SubscriptionTier) -> bool:
     """Update a user's subscription tier (admin operation).
-    
+
     Args:
         user_id: The user's ID
         tier: New subscription tier
-        
+
     Returns:
         True if successful, False otherwise
     """

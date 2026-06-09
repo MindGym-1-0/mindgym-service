@@ -75,7 +75,7 @@ async def start(
 ) -> SessionStartResponse:
     """Generate a new AI session script and persist it."""
     user_id = str(current_user_id)
-    
+
     # Check subscription tier limits
     can_create, error_message = await can_create_session(user_id)
     if not can_create:
@@ -83,7 +83,7 @@ async def start(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=error_message or 'Session limit reached for your subscription tier.',
         )
-    
+
     resolved_payload = payload
 
     if (

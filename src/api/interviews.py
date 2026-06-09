@@ -76,7 +76,7 @@ async def create_interview(
 ) -> InterviewResponse:
     sb = get_supabase_user_client(token)
     user_id = str(current_user_id)
-    
+
     # Check subscription tier limits for interviews
     can_create, error_message = await can_create_interview(user_id)
     if not can_create:

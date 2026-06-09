@@ -4,11 +4,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.lib.auth_dependencies import get_current_user
-from src.lib.subscription_service import (
-    get_subscription_response,
-    get_user_subscription,
-)
-from src.types.subscription import SubscriptionResponse, TIER_FEATURES, SubscriptionTierFeatures
+from src.lib.subscription_service import get_subscription_response
+from src.types.subscription import SubscriptionResponse, TIER_FEATURES
 
 router = APIRouter(prefix='/api/subscriptions', tags=['subscriptions'])
 logger = logging.getLogger(__name__)
@@ -19,7 +16,7 @@ async def get_my_subscription(
     current_user: dict = Depends(get_current_user),
 ) -> SubscriptionResponse:
     """Get current user's subscription tier, features, and usage.
-    
+
     Returns:
         SubscriptionResponse with current tier, available features, and monthly usage
     """
@@ -37,9 +34,9 @@ async def get_my_subscription(
 @router.get('/tiers', response_model=dict, status_code=status.HTTP_200_OK)
 async def get_available_tiers() -> dict:
     """Get all available subscription tiers with features.
-    
+
     This is a public endpoint (no auth required) to show pricing and features.
-    
+
     Returns:
         Dictionary with tier information organized by tier name
     """
