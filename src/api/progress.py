@@ -4,10 +4,8 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, UTC
-from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.openai_service import _chat
@@ -48,8 +46,8 @@ def execute_fallback_logic(
     summary="Get aggregated user session metrics, trends, and insights",
 )
 async def get_progress(
-    current_user_id: Annotated[UUID, Depends(CurrentUserId)],
-    token: Annotated[str, Depends(CurrentUserToken)],
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
     period: str = "week",
 ):
     sb = get_supabase_user_client(token)
