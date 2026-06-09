@@ -4,54 +4,53 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, UTC
-from typing import Annotated, Literal
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.openai_service import _chat
 from src.lib.supabase import get_supabase_user_client
 from src.types.progress import (
-    GeminiProgressInsight,
+    ProgressInsight,
     ProgressResponse,
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["Progress"])
+router = APIRouter(prefix="/api/progress", tags=["Progress"])
 
 
 def execute_fallback_logic(
     sessions_done: int, avg_lift: float
-) -> GeminiProgressInsight:
+) -> ProgressInsight:
     """Generates a contextual fallback insight based on core anxiety lift performance."""
     logger.warning("Executing local fallback logic for progress insight.")
 
     if sessions_done == 0:
-        return GeminiProgressInsight(
+        return ProgressInsight(
             key_insight="Welcome to MindGym! Complete your first session today to kick off your progress insights."
         )
 
     if avg_lift > 0:
-        return GeminiProgressInsight(
+        return ProgressInsight(
             key_insight=f"Great job! You're reducing anxiety by an average of {avg_lift} points per session. Keep it up."
         )
 
-    return GeminiProgressInsight(
+    return ProgressInsight(
         key_insight="You're building consistency. Dedicating a few minutes to mindful breathing today can help turn things around."
     )
 
 
 @router.get(
-    "/progress",
+    "",
     response_model=ProgressResponse,
-    status_code=status.HTTP_200_OK,
     summary="Get aggregated user session metrics, trends, and insights",
 )
 async def get_progress(
     current_user_id: Annotated[UUID, Depends(CurrentUserId)],
     token: Annotated[str, Depends(CurrentUserToken)],
-    period: Literal["week", "month", "all"] = Query("week"),
+    period: str = "week",
 ):
     sb = get_supabase_user_client(token)
     user_uuid_str = str(current_user_id)
@@ -93,7 +92,7 @@ async def get_progress(
     except Exception as db_err:
         logger.error(f"Failed to fetch user progress context: {str(db_err)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail="Failed to look up user progress history.",
         )
 
@@ -151,7 +150,7 @@ async def get_progress(
             raise ValueError("OpenAI pipeline failed to return response string.")
 
         parsed_json = json.loads(raw_text.strip())
-        validated_insight = GeminiProgressInsight(**parsed_json)
+        validated_insight = ProgressInsight(**parsed_json)
     except (asyncio.TimeoutError, Exception) as err:
         logger.error(f"OpenAI progress insight calculation failed: {repr(err)}")
         validated_insight = execute_fallback_logic(sessions_done, avg_lift_per_session)
