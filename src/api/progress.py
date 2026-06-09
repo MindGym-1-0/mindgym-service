@@ -48,8 +48,8 @@ def execute_fallback_logic(
     summary="Get aggregated user session metrics, trends, and insights",
 )
 async def get_progress(
-    current_user_id: Annotated[UUID, Depends(CurrentUserId)],
-    token: Annotated[str, Depends(CurrentUserToken)],
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
     period: str = "week",
 ):
     sb = get_supabase_user_client(token)
