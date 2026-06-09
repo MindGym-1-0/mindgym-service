@@ -26,17 +26,17 @@ def execute_fallback_logic(
 ) -> GeminiProgressInsight:
     """Generates a contextual fallback insight based on core anxiety lift performance."""
     logger.warning("Executing local fallback logic for progress insight.")
-    
+
     if sessions_done == 0:
         return GeminiProgressInsight(
             key_insight="Welcome to MindGym! Complete your first session today to kick off your progress insights."
         )
-    
+
     if avg_lift > 0:
         return GeminiProgressInsight(
             key_insight=f"Great job! You're reducing anxiety by an average of {avg_lift} points per session. Keep it up."
         )
-        
+  
     return GeminiProgressInsight(
         key_insight="You're building consistency. Dedicating a few minutes to mindful breathing today can help turn things around."
     )
