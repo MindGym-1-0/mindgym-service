@@ -4,10 +4,8 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.openai_service import _chat
@@ -176,8 +174,8 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
 
 @router.get("", response_model=InsightsResponse)
 async def get_insights(
-    current_user_id: Annotated[UUID, Depends(CurrentUserId)],
-    token: Annotated[str, Depends(CurrentUserToken)],
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
 ):
     """Generates two tiers of AI metrics and funnel insights via OpenAI."""
     supabase_client = get_supabase_user_client(token)
