@@ -86,7 +86,7 @@ async def get_current_usage(user_id: str) -> dict:
     """
     supabase = get_supabase_client()
     current_period = date.today().strftime('%Y-%m')
-    
+
     try:
         response = supabase.table('subscription_usage').select(
             'sessions_used, interviews_used'
@@ -135,7 +135,7 @@ async def can_create_session(user_id: str) -> tuple[bool, str | None]:
             f"You've reached your limit of {features.sessions_per_month} sessions per month. "
             f"Upgrade to {features.tier.value.upper()} to create more sessions."
         )
-    
+
     return True, None
 
 
@@ -160,7 +160,7 @@ async def can_create_interview(user_id: str) -> tuple[bool, str | None]:
             f"You've reached your limit of {features.max_interviews_tracked} interview(s) you can track. "
             f"Upgrade to Pro to track unlimited interviews."
         )
-    
+
     return True, None
 
 
@@ -172,13 +172,13 @@ async def increment_session_usage(user_id: str) -> None:
     """
     supabase = get_supabase_client()
     current_period = date.today().strftime('%Y-%m')
-    
+
     try:
         # First, try to fetch existing record
         existing = supabase.table('subscription_usage').select('sessions_used').eq(
             'user_id', user_id
         ).eq('period', current_period).execute()
-        
+
         if existing.data:
             # Update existing record
             supabase.table('subscription_usage').update({
