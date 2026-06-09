@@ -11,7 +11,7 @@ _USER_ID = 'user-123'
 _VALID_REQUEST = SessionStartRequest(
     preparation_for='interview_tomorrow',
     current_feeling='overwhelmed',
-    desired_feeling='confident',
+    desired_feeling=['confident'],
     time_available='10 min',
     anxiety_level_before=2,
     company='Stripe',
@@ -21,7 +21,7 @@ _VALID_REQUEST = SessionStartRequest(
 _VALID_REQUEST_NO_COMPANY = SessionStartRequest(
     preparation_for='general_reset',
     current_feeling='unsure',
-    desired_feeling='calm',
+    desired_feeling=['calm'],
     time_available='5 min',
     anxiety_level_before=5,
 )

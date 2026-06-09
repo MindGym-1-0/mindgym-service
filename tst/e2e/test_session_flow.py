@@ -139,7 +139,7 @@ def api_client(e2e_app, test_user):
 _MODE1_PAYLOAD = {
     "preparation_for": "interview_tomorrow",
     "current_feeling": "overwhelmed",
-    "desired_feeling": "confident",
+    "desired_feeling": ["confident"],
     "time_available": "10 min",
     "anxiety_level_before": 3,
     "company": "Stripe",
@@ -149,7 +149,7 @@ _MODE1_PAYLOAD = {
 _MODE2_PAYLOAD = {
     "preparation_for": "general_reset",
     "current_feeling": "exhausted",
-    "desired_feeling": "calm",
+    "desired_feeling": ["calm"],
     "time_available": "5 min",
     "anxiety_level_before": 4,
 }
