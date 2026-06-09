@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import src.api.sessions as sessions_module
+from src.api.users import router as users_router
 from src.lib.auth import require_current_user_id, require_current_user_token
 from src.lib.elevenlabs_service import ElevenLabsError
 from src.lib.auth_dependencies import get_current_user
@@ -114,7 +115,7 @@ class _FakeInterviewClient:
 def _build_test_app() -> FastAPI:
     app = FastAPI()
     app.include_router(sessions_module.router)
-    app.include_router(sessions_module.users_router)
+    app.include_router(users_router)
     return app
 
 
@@ -427,7 +428,7 @@ def test_get_session_detail_returns_401_when_unauthenticated() -> None:
 @pytest.mark.unit
 def test_patch_user_me_returns_200(client) -> None:
     """PATCH /api/users/me must return 200 when update succeeds."""
-    with patch('src.api.sessions.update_user_profile', new_callable=AsyncMock, return_value=None):
+    with patch('src.api.users.update_user_profile', new_callable=AsyncMock, return_value=None):
         response = client.patch('/api/users/me', json={'goal': 'Land a senior PM role'})
 
     assert response.status_code == 200
@@ -436,7 +437,7 @@ def test_patch_user_me_returns_200(client) -> None:
 @pytest.mark.unit
 def test_patch_user_me_accepts_partial_update(client) -> None:
     """PATCH /api/users/me must accept a body with only some fields set."""
-    with patch('src.api.sessions.update_user_profile', new_callable=AsyncMock, return_value=None):
+    with patch('src.api.users.update_user_profile', new_callable=AsyncMock, return_value=None):
         response = client.patch('/api/users/me', json={'stage': 'active'})
 
     assert response.status_code == 200
