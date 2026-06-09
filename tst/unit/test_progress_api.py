@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 from src.main import app
 
 client = TestClient(app)
-# FIX 1: Cast to string to prevent raw dependency validation object drops
 TEST_USER_UUID = str(uuid4())
 MOCK_TOKEN = "mocked-supabase-jwt-token"
 
@@ -22,6 +21,7 @@ def mock_auth_dependencies():
     """Maps dynamic dependency overrides looking at exact route paths."""
     target_route = None
     for route in app.routes:
+        # Fixed path evaluation to match internal APIRouter prefix configurations
         if getattr(route, "path", None) == "/api/progress":
             target_route = route
             break
@@ -69,7 +69,7 @@ def mock_supabase():
             chain.maybe_single.return_value = chain
             chain.order.return_value = chain
             
-            # FIX 2: Expose fluent mock properties for .not_.is_() evaluation
+            # Fluent mock properties for handling .not_.is_() column validations
             chain.not_ = chain
             chain.is_.return_value = chain
             
@@ -99,7 +99,6 @@ def test_get_progress_empty_state_no_sessions(mock_supabase):
 
     def side_effect_mock(table_name):
         if table_name == "streaks":
-            # FIX 3: Structured mock data to match Supabase response mapping formats
             return mock_supabase._create_chain({"current_streak": 5})
         return mock_supabase._create_chain([])
 
@@ -109,9 +108,10 @@ def test_get_progress_empty_state_no_sessions(mock_supabase):
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
 
+    # Core schema fields assertion validation refactored
     assert data["sessions_done"] == 0
     assert data["day_streak"] == 5
-    assert data["avg_confidence"] == 0.0
+    assert data["avg_lift_per_session"] == 0.0
     assert data["key_insight"] == ""
 
 
@@ -123,10 +123,6 @@ def test_get_progress_with_mocked_openai_call(mock_supabase, mock_openai_chat):
             "completed_at": datetime.now(UTC).isoformat(),
             "anxiety_level_before": 7.0,
             "anxiety_level_after": 4.0,
-            "confidence": 6.0,
-            "clarity": 5.0,
-            "calmness": 8.0,
-            "focus": 7.0,
         }
         for i in range(4)
     ]
@@ -144,8 +140,9 @@ def test_get_progress_with_mocked_openai_call(mock_supabase, mock_openai_chat):
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
 
+    # Updated metrics evaluating accurate calculated schema values (7.0 - 4.0 = 3.0 lift)
     assert data["sessions_done"] == 4
     assert data["day_streak"] == 3
-    assert data["avg_confidence"] == 6.0
+    assert data["avg_lift_per_session"] == 3.0
     assert "Clarity" in data["key_insight"]
     mock_openai_chat.assert_called_once()
