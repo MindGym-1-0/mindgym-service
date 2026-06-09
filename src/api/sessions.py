@@ -18,6 +18,7 @@ from src.lib.session_service import (
     fetch_session_history,
     start_session,
 )
+from src.lib.subscription_service import can_create_session, increment_session_usage
 from src.types.session import (
     SessionCompleteRequest,
     SessionCompleteResponse,
@@ -74,6 +75,15 @@ async def start(
 ) -> SessionStartResponse:
     """Generate a new AI session script and persist it."""
     user_id = str(current_user_id)
+    
+    # Check subscription tier limits
+    can_create, error_message = await can_create_session(user_id)
+    if not can_create:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_message or 'Session limit reached for your subscription tier.',
+        )
+    
     resolved_payload = payload
 
     if (
@@ -88,7 +98,10 @@ async def start(
         resolved_payload = payload.model_copy(update=interview_context)
 
     try:
-        return await start_session(user_id, resolved_payload)
+        result = await start_session(user_id, resolved_payload)
+        # Increment usage counter after session is successfully created
+        await increment_session_usage(user_id)
+        return result
     except RuntimeError as exc:
         logger.error('session generation failed user_id=%s: %s', user_id, exc)
         raise HTTPException(

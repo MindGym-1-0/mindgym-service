@@ -21,6 +21,7 @@ from src.api.mood_logs import router as mood_logs_router
 from src.api.onboarding import router as onboarding_router
 from src.api.progress import router as progress_router
 from src.api.sessions import router as sessions_router
+from src.api.subscriptions import router as subscriptions_router
 from src.api.users import router as users_router
 from src.api.streaks import router as streaks_router
 from src.api.weekly_mission import router as weekly_mission_router
@@ -95,6 +96,7 @@ def create_app() -> FastAPI:
     # Session and user profile routes
     app.include_router(sessions_router)
     app.include_router(users_router)
+    app.include_router(subscriptions_router)
 
     # Progress, Analytics, and AI Insights routes (Prefixes handled inside modules)
     app.include_router(progress_router, tags=["progress"])

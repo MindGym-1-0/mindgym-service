@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Response
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.supabase import get_supabase_user_client
+from src.lib.subscription_service import can_create_interview, increment_interview_usage
 from src.types.interview import (
     InterviewCreate,
     InterviewListResponse,
@@ -75,6 +76,14 @@ async def create_interview(
 ) -> InterviewResponse:
     sb = get_supabase_user_client(token)
     user_id = str(current_user_id)
+    
+    # Check subscription tier limits for interviews
+    can_create, error_message = await can_create_interview(user_id)
+    if not can_create:
+        raise HTTPException(
+            status_code=403,
+            detail=error_message or 'Interview limit reached for your subscription tier.',
+        )
 
     insert_row: dict = {
         "user_id": user_id,
@@ -95,6 +104,8 @@ async def create_interview(
             .select(INTERVIEW_SELECT_FIELDS)
             .execute
         )
+        # Increment usage counter after interview is successfully created
+        await increment_interview_usage(user_id)
     except Exception:
         logger.exception("Failed to create interview.")
         raise HTTPException(status_code=500, detail="Unable to create interview.") from None
