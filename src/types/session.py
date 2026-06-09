@@ -1,5 +1,6 @@
 """Pydantic models for session request and response validation"""
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -34,6 +35,7 @@ class SessionStartRequest(BaseModel):
     ]
     time_available: Literal['5 min', '10 min', '15 min']
     anxiety_level_before: int = Field(..., ge=1, le=10)
+    interview_id: UUID | None = None
     company: str | None = None
     role: str | None = None
 
