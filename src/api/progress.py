@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, UTC
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.openai_service import _chat
