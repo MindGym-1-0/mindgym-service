@@ -26,7 +26,6 @@ logger = logging.getLogger("mindgym")
 
 def execute_fallback_insights(ctx: dict) -> InsightsResponse:
     """Builds structured fallback local insights if the OpenAI execution
-
     times out or encounters parsing discrepancies.
     """
     lift = ctx.get("overall_avg_lift", 0.0)
@@ -74,9 +73,10 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
         )
         user_data = user_res.data[0] if user_res.data else {}
 
+        # FIX 1: Changed "stage" to "status" to match actual column layout
         jobs_res = (
             supabase_client.table("jobs")
-            .select("id, stage")
+            .select("id, status")
             .eq("user_id", user_id)
             .execute()
         )
@@ -87,11 +87,12 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
             .execute()
         )
 
+        # FIX 2: Replaced .eq("completed", True) with timestamp presence filter
         sessions_res = (
             supabase_client.table("ai_sessions")
             .select("*")
             .eq("user_id", user_id)
-            .eq("completed", True)
+            .not_.is_("completed_at", "null")
             .execute()
         )
         sessions = sessions_res.data or []
@@ -115,13 +116,10 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
 
     morning_lifts = []
     evening_lifts = []
-    emotions = []
     type_lifts = {}
 
+    # FIX 3: Removed dead emotional_challenge loop from here as it lives on user_data
     for s in sessions:
-        if s.get("emotional_challenge"):
-            emotions.append(s["emotional_challenge"])
-
         s_type = s.get("preparation_for")
         before = s.get("anxiety_level_before")
         after = s.get("anxiety_level_after")
@@ -146,7 +144,6 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
 
     avg_morning = sum(morning_lifts) / len(morning_lifts) if morning_lifts else None
     avg_evening = sum(evening_lifts) / len(evening_lifts) if evening_lifts else None
-    freq_emotion = Counter(emotions).most_common(1)[0][0] if emotions else None
 
     highest_type = None
     highest_type_avg = float("-inf")
@@ -205,8 +202,6 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
         ctx["avg_lift_morning_before_10am"] = round(avg_morning, 2)
     if avg_evening is not None:
         ctx["avg_lift_evening_after_6pm"] = round(avg_evening, 2)
-    if freq_emotion:
-        ctx["most_frequent_pre_session_emotion"] = freq_emotion
     if highest_type:
         ctx["session_type_with_highest_avg_lift"] = highest_type
 

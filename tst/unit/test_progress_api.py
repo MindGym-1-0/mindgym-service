@@ -12,7 +12,8 @@ from fastapi.testclient import TestClient
 from src.main import app
 
 client = TestClient(app)
-TEST_USER_UUID = uuid4()
+# FIX 1: Cast to string to prevent raw dependency validation object drops
+TEST_USER_UUID = str(uuid4())
 MOCK_TOKEN = "mocked-supabase-jwt-token"
 
 
@@ -67,7 +68,12 @@ def mock_supabase():
             chain.gte.return_value = chain
             chain.maybe_single.return_value = chain
             chain.order.return_value = chain
-            chain.execute.return_value = MagicMock(data=return_data or [])
+            
+            # FIX 2: Expose fluent mock properties for .not_.is_() evaluation
+            chain.not_ = chain
+            chain.is_.return_value = chain
+            
+            chain.execute.return_value = MagicMock(data=return_data if return_data is not None else [])
             return chain
 
         mock_client._create_chain = create_mock_chain
@@ -79,7 +85,6 @@ def mock_supabase():
 def mock_openai_chat():
     """Fixture to mock the internal OpenAI _chat function to prevent network hits."""
     with patch("src.api.progress._chat") as mock_chat_fn:
-        # Returns structured text following the schema structure exactly
         mock_json_payload = """
         {
           "key_insight": "Clarity is trending up this week. Focus on morning deep-work intervals."
@@ -94,12 +99,8 @@ def test_get_progress_empty_state_no_sessions(mock_supabase):
 
     def side_effect_mock(table_name):
         if table_name == "streaks":
-            # Test helper for table dictionary checks
-            chain = mock_supabase._create_chain()
-            chain.execute.return_value = MagicMock(
-                data={"current_streak": 5}
-            )
-            return chain
+            # FIX 3: Structured mock data to match Supabase response mapping formats
+            return mock_supabase._create_chain({"current_streak": 5})
         return mock_supabase._create_chain([])
 
     mock_supabase.table.side_effect = side_effect_mock
@@ -119,7 +120,6 @@ def test_get_progress_with_mocked_openai_call(mock_supabase, mock_openai_chat):
     mock_sessions = [
         {
             "id": f"session_{i}",
-            "completed": True,
             "completed_at": datetime.now(UTC).isoformat(),
             "anxiety_level_before": 7.0,
             "anxiety_level_after": 4.0,
@@ -133,11 +133,7 @@ def test_get_progress_with_mocked_openai_call(mock_supabase, mock_openai_chat):
 
     def side_effect_mock(table_name):
         if table_name == "streaks":
-            chain = mock_supabase._create_chain()
-            chain.execute.return_value = MagicMock(
-                data={"current_streak": 3}
-            )
-            return chain
+            return mock_supabase._create_chain({"current_streak": 3})
         elif table_name == "ai_sessions":
             return mock_supabase._create_chain(mock_sessions)
         return mock_supabase._create_chain([])

@@ -20,7 +20,6 @@ from src.types.progress import (
 )
 
 logger = logging.getLogger(__name__)
-# Fixed: Router prefix removed to avoid /api/api/progress path resolution errors
 router = APIRouter(tags=["Progress"])
 
 
@@ -77,11 +76,12 @@ async def get_progress(
         elif period == "month":
             start_date = now - timedelta(days=30)
 
+        # FIX 1: Replaced non-existent boolean completed column with completed_at presence filter
         query = (
             sb.table("ai_sessions")
             .select("*")
             .eq("user_id", user_uuid_str)
-            .eq("completed", True)
+            .not_.is_("completed_at", "null")
         )
         if start_date:
             query = query.gte("completed_at", start_date.isoformat())
@@ -121,9 +121,10 @@ async def get_progress(
     }
 
     for s in sessions:
-        post_score = s.get("post_score") or s.get("anxiety_level_after") or 0.0
-        pre_score = s.get("pre_score") or s.get("anxiety_level_before") or 0.0
-        total_lift += float(post_score) - float(pre_score)
+        # FIX 2: Switched to post-migration schema column keys and corrected direction (before - after = lift)
+        pre_score = s.get("anxiety_level_before") or 0.0
+        post_score = s.get("anxiety_level_after") or 0.0
+        total_lift += float(pre_score) - float(post_score)
 
         for dimension in state_metrics.keys():
             val = s.get(dimension) or s.get(f"post_{dimension}")
@@ -203,6 +204,7 @@ async def get_progress(
     # STEP 4: Build Prompt & Execute OpenAI chat sequence
     lowest_dimension = min(final_states, key=final_states.get)
 
+    # FIX 3: Structured prompt to mandate raw JSON output matching the target schema to avoid JSONDecodeErrors
     prompt = f"""
     You are an expert, supportive AI MindGym coach analyzing user progress.
     Review the metrics below and output an actionable coaching summary sentence.
@@ -216,7 +218,12 @@ async def get_progress(
     --- STRATEGIC CONSTRAINTS ---
     1. Your answer must focus explicitly on improving: {lowest_dimension}.
     2. Suggest a real, minor actionable next target goal.
-    3. The text constraint is strict: it must be under 20 words total.
+    3. The coaching statement inside the key_insight property must be under 20 words total.
+    4. You MUST output raw JSON matching this structure exactly. No markdown blocks.
+
+    {{
+       "key_insight": "..."
+    }}
     """
 
     try:

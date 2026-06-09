@@ -12,7 +12,8 @@ from fastapi.testclient import TestClient
 from src.main import app
 
 client = TestClient(app)
-TEST_USER_UUID = uuid4()
+# FIX 1: Explicitly casting to string to prevent dynamic dependency extraction mismatches
+TEST_USER_UUID = str(uuid4())
 MOCK_TOKEN = "mocked-supabase-jwt-token"
 
 
@@ -64,6 +65,11 @@ def mock_supabase():
             chain = MagicMock()
             chain.select.return_value = chain
             chain.eq.return_value = chain
+            
+            # FIX 2: Added fluent mock properties to resolve the .not_.is_() abstraction chain
+            chain.not_ = chain
+            chain.is_.return_value = chain
+            
             chain.execute.return_value = MagicMock(data=return_data or [])
             return chain
 
@@ -104,7 +110,7 @@ def test_get_insights_empty_state_fewer_than_3_sessions(mock_supabase):
     def side_effect_mock(table_name):
         if table_name == "ai_sessions":
             return mock_supabase._create_chain(
-                [{"id": "s1", "completed": True}]
+                [{"id": "s1", "completed_at": datetime.now(UTC).isoformat()}]
             )
         return mock_supabase._create_chain([])
 
@@ -123,7 +129,6 @@ def test_get_insights_with_mocked_openai_call(mock_supabase, mock_openai_chat):
     mock_sessions = [
         {
             "id": f"s_{i}",
-            "completed": True,
             "completed_at": datetime.now(UTC).isoformat(),
             "anxiety_level_before": 5.0,
             "anxiety_level_after": 3.0,
