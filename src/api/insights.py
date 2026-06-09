@@ -72,7 +72,6 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
         )
         user_data = user_res.data[0] if user_res.data else {}
 
-        # FIX 1: Changed "stage" to "status" to match actual column layout
         jobs_res = (
             supabase_client.table("jobs")
             .select("id, status")
@@ -86,10 +85,9 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
             .execute()
         )
 
-        # FIX 2: Replaced .eq("completed", True) with timestamp presence filter
         sessions_res = (
             supabase_client.table("ai_sessions")
-            .select("*")
+            .select("anxiety_level_before", "anxiety_level_after", "completed_at", "preparation_for")
             .eq("user_id", user_id)
             .not_.is_("completed_at", "null")
             .execute()
@@ -117,7 +115,6 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
     evening_lifts = []
     type_lifts = {}
 
-    # FIX 3: Removed dead emotional_challenge loop from here as it lives on user_data
     for s in sessions:
         s_type = s.get("preparation_for")
         before = s.get("anxiety_level_before")
@@ -152,37 +149,6 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
             highest_type_avg = t_avg
             highest_type = t
 
-    now = datetime.now(UTC)
-    two_weeks_ago = now - timedelta(days=14)
-
-    def get_avg_dimensions(filtered_sessions):
-        dims = {"confidence": 0.0, "clarity": 0.0, "calmness": 0.0, "focus": 0.0}
-        counts = {"confidence": 0, "clarity": 0, "calmness": 0, "focus": 0}
-        for s in filtered_sessions:
-            for k in dims:
-                val = s.get(f"post_{k}") or s.get(k)
-                if val is not None:
-                    dims[k] += float(val)
-                    counts[k] += 1
-        return {
-            k: (dims[k] / counts[k] if counts[k] > 0 else None) for k in dims
-        }
-
-    current_dims = get_avg_dimensions(sessions)
-
-    past_sessions = []
-    for s in sessions:
-        if s.get("completed_at"):
-            try:
-                dt = datetime.fromisoformat(
-                    s["completed_at"].replace("Z", "+00:00")
-                )
-                if dt <= two_weeks_ago:
-                    past_sessions.append(s)
-            except Exception:
-                continue
-    past_dims = get_avg_dimensions(past_sessions)
-
     ctx = {
         "total_sessions": total_sessions,
         "overall_avg_lift": round(avg_lift, 2),
@@ -203,13 +169,6 @@ def calculate_insights_context(supabase_client, user_id: str) -> dict | None:
         ctx["avg_lift_evening_after_6pm"] = round(avg_evening, 2)
     if highest_type:
         ctx["session_type_with_highest_avg_lift"] = highest_type
-
-    ctx["current_metrics"] = {
-        k: round(v, 2) for k, v in current_dims.items() if v is not None
-    }
-    ctx["metrics_two_weeks_ago"] = {
-        k: round(v, 2) for k, v in past_dims.items() if v is not None
-    }
 
     return ctx
 
@@ -258,12 +217,12 @@ async def get_insights(
     }}
 
     2. RULES FOR SECTIONS:
-       - `top_insights`: Exactly 2 items. Text max 8 words. Supporting detail line
-         must contain real metrics.
-       - `secondary_insights`: Exactly 3 items. Short punchy statements.
-       - `hiring_funnel_gap.body`: 2-3 action-oriented sentences.
-       - `hiring_funnel_gap.based_on`: Must use format layout strictly:
-         "N sessions · Metric X% · Metric Y%"
+        - `top_insights`: Exactly 2 items. Text max 8 words. Supporting detail line
+          must contain real metrics.
+        - `secondary_insights`: Exactly 3 items. Short punchy statements.
+        - `hiring_funnel_gap.body`: 2-3 action-oriented sentences.
+        - `hiring_funnel_gap.based_on`: Must use format layout strictly:
+          "N sessions · Metric X · Metric Y"
 
     Do not include markdown wrappers (like ```json). Return raw JSON directly.
     """
