@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections import Counter
 from datetime import datetime, timedelta, UTC
 from typing import Annotated
 from uuid import UUID
