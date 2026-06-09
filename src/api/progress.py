@@ -36,7 +36,7 @@ def execute_fallback_logic(
         return GeminiProgressInsight(
             key_insight=f"Great job! You're reducing anxiety by an average of {avg_lift} points per session. Keep it up."
         )
-  
+
     return GeminiProgressInsight(
         key_insight="You're building consistency. Dedicating a few minutes to mindful breathing today can help turn things around."
     )
