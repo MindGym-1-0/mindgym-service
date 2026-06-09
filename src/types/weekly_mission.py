@@ -22,3 +22,9 @@ class GeminiMissionOutput(BaseModel):
     action_1: str = Field(..., description="First tailored weekly action string")
     action_2: str = Field(..., description="Second tailored weekly action string")
     action_3: str = Field(..., description="Third tailored weekly action string")
+
+
+class WeeklyMissionInsight(BaseModel):
+    action_1: str = Field(..., description="First tailored weekly action string")
+    action_2: str = Field(..., description="Second tailored weekly action string")
+    action_3: str = Field(..., description="Third tailored weekly action string")
