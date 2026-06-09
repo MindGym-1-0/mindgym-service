@@ -4,10 +4,8 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
 from src.lib.openai_service import _chat
