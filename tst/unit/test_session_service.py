@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from src.lib.session_service import complete_session, start_session
-from src.types.session import SessionCompleteRequest, SessionScript, SessionStartRequest
+from src.types.session import RecommendedAction, SessionCompleteRequest, SessionScript, SessionStartRequest
 
 
 _USER_ID = 'user-123'
@@ -36,9 +36,21 @@ _MOCK_SCRIPT = SessionScript(
 
 _MOCK_SESSION_ROW = {
     'id': 'session-abc',
+    'user_id': _USER_ID,
     'anxiety_level_before': 2,
     'completed_at': None,
+    'preparation_for': 'interview_tomorrow',
+    'current_feeling': 'overwhelmed',
+    'desired_feeling': 'confident',
+    'company': 'Stripe',
+    'role': 'PM',
 }
+
+_MOCK_ACTIONS = [
+    RecommendedAction(title='Rehearse your opener', body='Say your intro aloud.', timing='Today'),
+    RecommendedAction(title='Prepare two questions', body='Write two questions.', timing='Today'),
+    RecommendedAction(title='Protect your sleep', body='In bed by 10pm.', timing='Tonight'),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -118,13 +130,18 @@ async def test_complete_session_returns_correct_anxiety_level_delta() -> None:
     request = SessionCompleteRequest(session_id='session-abc', anxiety_level_after=7)
 
     with patch('src.lib.session_service.fetch_session', new_callable=AsyncMock, return_value=_MOCK_SESSION_ROW), \
-         patch('src.lib.session_service.update_session', new_callable=AsyncMock):
+         patch('src.lib.session_service.update_session', new_callable=AsyncMock), \
+         patch('src.lib.session_service._count_completed_sessions', new_callable=AsyncMock, return_value=1), \
+         patch('src.lib.session_service._fetch_user_context', new_callable=AsyncMock, return_value=None), \
+         patch('src.lib.session_service.generate_recommended_actions', return_value=_MOCK_ACTIONS):
 
         response = await complete_session(user_id=_USER_ID, request=request)
 
     assert response.anxiety_level_delta == 5  # 7 - 2
     assert response.anxiety_level_before == 2
     assert response.anxiety_level_after == 7
+    assert response.session_number == 1
+    assert len(response.recommended_actions) == 3
 
 
 @pytest.mark.unit
@@ -134,11 +151,16 @@ async def test_complete_session_allows_negative_anxiety_level_delta() -> None:
     request = SessionCompleteRequest(session_id='session-abc', anxiety_level_after=1)
 
     with patch('src.lib.session_service.fetch_session', new_callable=AsyncMock, return_value=_MOCK_SESSION_ROW), \
-         patch('src.lib.session_service.update_session', new_callable=AsyncMock):
+         patch('src.lib.session_service.update_session', new_callable=AsyncMock), \
+         patch('src.lib.session_service._count_completed_sessions', new_callable=AsyncMock, return_value=3), \
+         patch('src.lib.session_service._fetch_user_context', new_callable=AsyncMock, return_value=None), \
+         patch('src.lib.session_service.generate_recommended_actions', return_value=_MOCK_ACTIONS):
 
         response = await complete_session(user_id=_USER_ID, request=request)
 
     assert response.anxiety_level_delta == -1  # 1 - 2
+    assert response.session_number == 3
+    assert len(response.recommended_actions) == 3
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
-"""Hardcoded fallback scripts served when Gemini fails or times out."""
-from src.types.session import SessionScript
+"""Hardcoded fallback scripts and actions served when OpenAI fails or times out."""
+from src.types.session import RecommendedAction, SessionScript
 
 _COMPANY_DEFAULT = 'this company'
 _ROLE_DEFAULT = 'this role'
@@ -230,3 +230,48 @@ def get_fallback_script(
         raise ValueError(f'Unknown preparation_for: {preparation_for!r}')
 
     return templates[preparation_for]
+
+
+_FALLBACK_ACTIONS: dict[str, list[dict]] = {
+    'rejection_recovery': [
+        {'title': 'Name the narrative', 'body': 'Write one sentence about what this rejection taught you — not what it says about you.', 'timing': 'Today'},
+        {'title': 'Return to your evidence', 'body': "Re-read your last 3 wins — applications, interviews, kind feedback. They're still true.", 'timing': 'Ongoing'},
+        {'title': 'Reach out to one person', 'body': "Send a message to someone in your network — not to ask for a job, just to stay warm.", 'timing': 'Tomorrow'},
+    ],
+    'interview_tomorrow': [
+        {'title': 'Rehearse your opener', 'body': "Say your 'tell me about yourself' answer aloud, once, with confidence.", 'timing': 'Today'},
+        {'title': 'Prepare two questions', 'body': 'Write two thoughtful questions to ask the interviewer — it signals genuine interest.', 'timing': 'Today'},
+        {'title': 'Protect your sleep', 'body': 'Your brain consolidates preparation during sleep. Be in bed by 10pm.', 'timing': 'Tonight'},
+    ],
+    'recruiter_call': [
+        {'title': 'Confirm your narrative', 'body': "Know in one sentence why you're looking and what you're moving toward.", 'timing': 'Today'},
+        {'title': "Research the recruiter's firm", 'body': 'Five minutes on their recent placements signals you take the relationship seriously.', 'timing': 'Today'},
+        {'title': 'Follow up within 24 hours', 'body': 'Send a short thank-you and one specific detail from the call.', 'timing': 'Tomorrow'},
+    ],
+    'networking': [
+        {'title': 'Draft your opening line', 'body': "Write a two-sentence intro that explains what you're working on and what you're looking for.", 'timing': 'Today'},
+        {'title': 'Identify three people to reach', 'body': "Pick contacts you've been meaning to reconnect with. Send one message today.", 'timing': 'Ongoing'},
+        {'title': 'Follow up on warm leads', 'body': 'Reply to any unanswered messages from the last two weeks.', 'timing': 'Tomorrow'},
+    ],
+    'salary_negotiation': [
+        {'title': 'Anchor your number', 'body': "Write down the number you'll say first. Practice saying it aloud without flinching.", 'timing': 'Today'},
+        {'title': 'Know your walk-away', 'body': "Define the minimum you'd accept before you get in the room — not during.", 'timing': 'Today'},
+        {'title': 'Practice the pause', 'body': 'After you name your number, stop talking. Silence is your strongest tool.', 'timing': 'Ongoing'},
+    ],
+    'restarting_search': [
+        {'title': 'Clear the backlog', 'body': 'Archive applications more than 3 weeks old with no response. Start fresh.', 'timing': 'Today'},
+        {'title': 'Update one thing', 'body': 'Refresh your LinkedIn headline or resume summary — just one paragraph.', 'timing': 'Today'},
+        {'title': 'Set a daily minimum', 'body': 'One meaningful outreach per day is more powerful than a weekly sprint.', 'timing': 'Ongoing'},
+    ],
+    'general_reset': [
+        {'title': "Name what's weighing on you", 'body': "Write it down in one sentence. Getting it out of your head makes it manageable.", 'timing': 'Today'},
+        {'title': 'Pick one thing to move', 'body': 'Choose the single smallest action in your job search you can take today.', 'timing': 'Today'},
+        {'title': 'Build a recovery ritual', 'body': 'A 10-minute daily reset — walk, journal, breathe — compounds over weeks.', 'timing': 'Ongoing'},
+    ],
+}
+
+
+def get_fallback_actions(preparation_for: str) -> list[RecommendedAction]:
+    """Return hardcoded recommended actions when OpenAI fails or times out."""
+    rows = _FALLBACK_ACTIONS.get(preparation_for, _FALLBACK_ACTIONS['general_reset'])
+    return [RecommendedAction(**r) for r in rows]

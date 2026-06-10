@@ -4,10 +4,11 @@ import logging
 from datetime import datetime, timezone
 from fastapi import HTTPException
 
-from src.lib.fallbacks import get_fallback_script
-from src.lib.openai_service import generate_script
+from src.lib.fallbacks import get_fallback_actions, get_fallback_script
+from src.lib.openai_service import generate_recommended_actions, generate_script
 from src.lib.supabase_client import get_supabase_admin_client
 from src.types.session import (
+    RecommendedAction,
     SessionCompleteRequest,
     SessionCompleteResponse,
     SessionScript,
@@ -81,7 +82,7 @@ async def fetch_session(session_id: str) -> dict | None:
     client = get_supabase_admin_client()
     result = await asyncio.to_thread(
         lambda: client.table('ai_sessions')
-        .select('id, user_id, anxiety_level_before, completed_at')
+        .select('id, user_id, anxiety_level_before, completed_at, preparation_for, current_feeling, desired_feeling, company, role')
         .eq('id', session_id)
         .maybe_single()
         .execute()
@@ -259,6 +260,19 @@ async def update_user_profile(user_id: str, request) -> None:
     )
 
 
+async def _count_completed_sessions(user_id: str) -> int:
+    """Count completed sessions (completed_at IS NOT NULL) for a user."""
+    client = get_supabase_admin_client()
+    result = await asyncio.to_thread(
+        lambda: client.table('ai_sessions')
+        .select('id', count='exact')
+        .eq('user_id', user_id)
+        .not_.is_('completed_at', 'null')
+        .execute()
+    )
+    return getattr(result, 'count', 0) or 0
+
+
 async def complete_session(user_id: str, request: SessionCompleteRequest) -> SessionCompleteResponse:
     """Mark a session complete, compute anxiety_level_delta, and persist.
 
@@ -277,11 +291,43 @@ async def complete_session(user_id: str, request: SessionCompleteRequest) -> Ses
 
     await update_session(request.session_id, request.anxiety_level_after, anxiety_level_delta)
 
+    session_number, user_context = await asyncio.gather(
+        _count_completed_sessions(user_id),
+        _fetch_user_context(user_id),
+    )
+
+    preparation_for = session.get('preparation_for') or 'general_reset'
+
+    recommended_actions: list[RecommendedAction] | None = None
+    try:
+        recommended_actions = await asyncio.wait_for(
+            asyncio.to_thread(
+                generate_recommended_actions,
+                preparation_for=preparation_for,
+                current_feeling=session.get('current_feeling'),
+                desired_feeling=session.get('desired_feeling'),
+                anxiety_level_before=anxiety_level_before,
+                anxiety_level_after=request.anxiety_level_after,
+                anxiety_level_delta=anxiety_level_delta,
+                company=session.get('company'),
+                role=session.get('role'),
+                user_context=user_context,
+            ),
+            timeout=30.0,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("generate_recommended_actions timed out for session %r — using fallback", request.session_id)
+
+    if not recommended_actions:
+        recommended_actions = get_fallback_actions(preparation_for)
+
     return SessionCompleteResponse(
         session_id=request.session_id,
         anxiety_level_before=anxiety_level_before,
         anxiety_level_after=request.anxiety_level_after,
         anxiety_level_delta=anxiety_level_delta,
+        session_number=session_number,
+        recommended_actions=recommended_actions,
         message=f'Session complete. Anxiety shifted by {anxiety_level_delta:+d}.',
     )
 

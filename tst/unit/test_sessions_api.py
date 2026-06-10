@@ -13,6 +13,7 @@ from src.lib.auth import require_current_user_id, require_current_user_token
 from src.lib.elevenlabs_service import ElevenLabsError
 from src.lib.auth_dependencies import get_current_user
 from src.types.session import (
+    RecommendedAction,
     SessionCompleteResponse,
     SessionDetail,
     SessionHistoryItem,
@@ -40,6 +41,12 @@ _FAKE_COMPLETE_RESPONSE = SessionCompleteResponse(
     anxiety_level_before=3,
     anxiety_level_after=8,
     anxiety_level_delta=5,
+    session_number=1,
+    recommended_actions=[
+        RecommendedAction(title='Rehearse your opener', body='Say your intro aloud.', timing='Today'),
+        RecommendedAction(title='Prepare two questions', body='Write two questions.', timing='Today'),
+        RecommendedAction(title='Protect your sleep', body='In bed by 10pm.', timing='Tonight'),
+    ],
     message='Session complete. Anxiety shifted by +5.',
 )
 _FAKE_HISTORY = [
