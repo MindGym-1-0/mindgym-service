@@ -144,6 +144,9 @@ async def update_interview_outcome(
         InterviewOutcome.PENDING.value,
         InterviewOutcome.AWAITING.value,
     ):
+        if current_outcome == body.outcome.value:
+            return InterviewOutcomeResponse.model_validate(current_row)
+
         raise HTTPException(
             status_code=422,
             detail="Outcome is already finalized and cannot be updated.",
