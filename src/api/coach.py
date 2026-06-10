@@ -14,6 +14,8 @@ from src.lib.gemini import GeminiServiceError, generate_gemini_flash_json
 from src.lib.supabase import get_supabase_user_client
 from src.types.coach import (
     ChecklistRequest,
+    ChecklistItemUpdateRequest,
+    ChecklistItemUpdateResponse,
     CoachHomeResponse,
     InterviewChecklistResponse,
     CoachPrepPlanRequest,
@@ -32,6 +34,14 @@ _VALID_SESSION_TYPES = {
     "salary_negotiation",
     "rejection_recovery",
     "restarting_search",
+}
+_CHECKLIST_ITEM_IDS = {
+    "completed_coaching",
+    "breathing_last_night",
+    "grounding_tonight",
+    "interview_confirmed",
+    "questions_prepared",
+    "quiet_space",
 }
 MAX_SESSION_HISTORY_FOR_PREP = 50
 COACH_HOME_CACHE_TTL_SECONDS = 60
@@ -448,6 +458,67 @@ def _build_checklist_prompt(
     )
 
 
+async def _fetch_owned_interview_for_checklist(
+    sb: Any,
+    *,
+    interview_id: str,
+    user_id: str,
+) -> dict[str, Any]:
+    try:
+        interview_res = await asyncio.to_thread(
+            sb.table("interviews")
+            .select("id,company,role,interview_date,job_id")
+            .eq("id", interview_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute
+        )
+    except Exception:
+        logger.exception("Failed to fetch interview for checklist.")
+        raise HTTPException(status_code=500, detail="Unable to fetch interview context.") from None
+
+    interview_rows = interview_res.data or []
+    if not interview_rows:
+        raise HTTPException(status_code=404, detail="Interview not found.")
+
+    return interview_rows[0]
+
+
+async def _fetch_saved_checklist_state(
+    sb: Any,
+    *,
+    interview_id: str,
+    user_id: str,
+) -> dict[str, bool]:
+    try:
+        saved_res = await asyncio.to_thread(
+            sb.table("interview_checklist_completion")
+            .select("item_id,checked")
+            .eq("user_id", user_id)
+            .eq("interview_id", interview_id)
+            .execute
+        )
+    except Exception:
+        logger.exception("Failed to fetch saved checklist completion state.")
+        return {}
+
+    return {
+        str(row.get("item_id")): bool(row.get("checked"))
+        for row in (saved_res.data or [])
+        if str(row.get("item_id") or "") in _CHECKLIST_ITEM_IDS
+    }
+
+
+def _overlay_saved_checklist_state(
+    items: list[dict[str, Any]],
+    saved_state: dict[str, bool],
+) -> None:
+    for item in items:
+        item_id = str(item.get("id") or "")
+        if item_id in saved_state:
+            item["checked"] = saved_state[item_id]
+
+
 def _validate_checklist_gemini_payload(payload: Any) -> tuple[list[dict[str, str]], str] | None:
     if not isinstance(payload, dict):
         return None
@@ -552,24 +623,9 @@ async def get_or_create_interview_checklist(
     user_id = str(current_user_id)
     interview_id = str(body.interview_id)
 
-    try:
-        interview_res = await asyncio.to_thread(
-            sb.table("interviews")
-            .select("id,company,role,interview_date,job_id")
-            .eq("id", interview_id)
-            .eq("user_id", user_id)
-            .limit(1)
-            .execute
-        )
-    except Exception:
-        logger.exception("Failed to fetch interview for checklist.")
-        raise HTTPException(status_code=500, detail="Unable to fetch interview context.") from None
-
-    interview_rows = interview_res.data or []
-    if not interview_rows:
-        raise HTTPException(status_code=404, detail="Interview not found.")
-
-    interview = interview_rows[0]
+    interview = await _fetch_owned_interview_for_checklist(
+        sb, interview_id=interview_id, user_id=user_id
+    )
     company = str(interview.get("company") or "your target company").strip()
     role = str(interview.get("role") or "your target role").strip()
     interview_date = str(interview.get("interview_date") or "").strip()
@@ -678,6 +734,12 @@ async def get_or_create_interview_checklist(
         {"id": "quiet_space", "label": "Quiet space confirmed", "checked": False, "metadata": {}},
     ]
 
+    saved_state = await _fetch_saved_checklist_state(
+        sb, interview_id=interview_id, user_id=user_id
+    )
+    _overlay_saved_checklist_state(mental_prep, saved_state)
+    _overlay_saved_checklist_state(logistics, saved_state)
+
     total_items = len(mental_prep) + len(logistics)
     checked_count = (
         sum(1 for item in mental_prep if item["checked"])
@@ -731,6 +793,65 @@ async def get_or_create_interview_checklist(
             "logistics": logistics,
             "tonights_plan": tonights_plan,
             "quote": quote,
+        }
+    )
+
+
+@router.patch(
+    "/checklist/{interview_id}/items/{item_id}",
+    response_model=ChecklistItemUpdateResponse,
+)
+async def update_interview_checklist_item(
+    interview_id: UUID,
+    item_id: str,
+    body: ChecklistItemUpdateRequest,
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
+) -> ChecklistItemUpdateResponse:
+    if item_id not in _CHECKLIST_ITEM_IDS:
+        raise HTTPException(status_code=422, detail="Invalid checklist item id.")
+
+    try:
+        sb = get_supabase_user_client(token)
+    except Exception:
+        logger.exception("Failed to initialize Supabase client for checklist update.")
+        raise HTTPException(status_code=500, detail="Unable to initialize data client.") from None
+
+    user_id = str(current_user_id)
+    interview_id_str = str(interview_id)
+
+    await _fetch_owned_interview_for_checklist(
+        sb, interview_id=interview_id_str, user_id=user_id
+    )
+
+    payload = {
+        "user_id": user_id,
+        "interview_id": interview_id_str,
+        "item_id": item_id,
+        "checked": body.checked,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        result = await asyncio.to_thread(
+            sb.table("interview_checklist_completion")
+            .upsert(payload, on_conflict="user_id,interview_id,item_id")
+            .select("interview_id,item_id,checked")
+            .execute
+        )
+    except Exception:
+        logger.exception("Failed to persist checklist completion state.")
+        raise HTTPException(status_code=500, detail="Unable to update checklist item.") from None
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to update checklist item.")
+
+    row = result.data[0]
+    return ChecklistItemUpdateResponse.model_validate(
+        {
+            "interview_id": row.get("interview_id", interview_id_str),
+            "item_id": row.get("item_id", item_id),
+            "checked": row.get("checked", body.checked),
         }
     )
 

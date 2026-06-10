@@ -87,6 +87,12 @@ class ChecklistRequest(BaseModel):
     interview_id: UUID
 
 
+class ChecklistItemUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    checked: bool
+
+
 class ChecklistItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -121,3 +127,11 @@ class InterviewChecklistResponse(BaseModel):
     logistics: list[ChecklistItem]
     tonights_plan: list[TonightsPlanTask]
     quote: str = Field(..., min_length=1)
+
+
+class ChecklistItemUpdateResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    interview_id: UUID
+    item_id: str = Field(..., min_length=1)
+    checked: bool

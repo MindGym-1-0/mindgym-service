@@ -189,6 +189,7 @@ def _base_tables(user_id: str) -> dict[str, list[dict]]:
         "ai_sessions": [],
         "streaks": [{"user_id": user_id, "current_streak": 4}],
         "coach_prep_plans": [],
+        "interview_checklist_completion": [],
     }
 
 
@@ -868,6 +869,186 @@ def test_post_checklist_success(client, fake_user_id: UUID, monkeypatch):
     assert body["overall_readiness"]["total_items"] == (
         len(body["mental_prep"]) + len(body["logistics"])
     )
+
+
+def test_patch_checklist_item_checked_true_persists(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    interview_id = "cccccccc-cccc-cccc-cccc-ccccccccccd1"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-10T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, {"unused": True})
+
+    resp = client.patch(
+        f"/api/coach/checklist/{interview_id}/items/interview_confirmed",
+        json={"checked": True},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "interview_id": interview_id,
+        "item_id": "interview_confirmed",
+        "checked": True,
+    }
+    assert sb.last_upsert == {
+        "table": "interview_checklist_completion",
+        "payload": {
+            "user_id": uid,
+            "interview_id": interview_id,
+            "item_id": "interview_confirmed",
+            "checked": True,
+            "updated_at": sb.last_upsert["payload"]["updated_at"],
+        },
+        "on_conflict": "user_id,interview_id,item_id",
+    }
+
+
+def test_patch_checklist_item_checked_false_persists(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    interview_id = "cccccccc-cccc-cccc-cccc-ccccccccccd2"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-10T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    tables["interview_checklist_completion"] = [
+        {
+            "user_id": uid,
+            "interview_id": interview_id,
+            "item_id": "questions_prepared",
+            "checked": True,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, {"unused": True})
+
+    resp = client.patch(
+        f"/api/coach/checklist/{interview_id}/items/questions_prepared",
+        json={"checked": False},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "interview_id": interview_id,
+        "item_id": "questions_prepared",
+        "checked": False,
+    }
+
+
+def test_post_checklist_overlays_saved_checked_state(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    interview_id = "cccccccc-cccc-cccc-cccc-ccccccccccd3"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-10T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    tables["interview_checklist_completion"] = [
+        {
+            "user_id": uid,
+            "interview_id": interview_id,
+            "item_id": "interview_confirmed",
+            "checked": True,
+        },
+        {
+            "user_id": uid,
+            "interview_id": interview_id,
+            "item_id": "completed_coaching",
+            "checked": True,
+        },
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, GeminiTimeoutError("timeout"))
+
+    resp = client.post(
+        "/api/coach/checklist",
+        json={"interview_id": interview_id},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    logistics_by_id = {item["id"]: item for item in body["logistics"]}
+    mental_by_id = {item["id"]: item for item in body["mental_prep"]}
+    assert logistics_by_id["interview_confirmed"]["checked"] is True
+    assert mental_by_id["completed_coaching"]["checked"] is True
+
+
+def test_patch_checklist_item_invalid_item_id_returns_422(
+    client, fake_user_id: UUID, monkeypatch
+):
+    uid = str(fake_user_id)
+    interview_id = "cccccccc-cccc-cccc-cccc-ccccccccccd4"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": uid,
+            "company": "Acme",
+            "role": "Backend Engineer",
+            "interview_date": "2026-06-10T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, {"unused": True})
+
+    resp = client.patch(
+        f"/api/coach/checklist/{interview_id}/items/not_a_real_item",
+        json={"checked": True},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 422
+
+
+def test_patch_checklist_item_not_owned_returns_404(client, fake_user_id: UUID, monkeypatch):
+    uid = str(fake_user_id)
+    interview_id = "cccccccc-cccc-cccc-cccc-ccccccccccd5"
+    tables = _base_tables(uid)
+    tables["interviews"] = [
+        {
+            "id": interview_id,
+            "user_id": "22222222-2222-2222-2222-222222222222",
+            "company": "OtherCo",
+            "role": "Other Role",
+            "interview_date": "2026-06-10T12:00:00+00:00",
+            "job_id": None,
+        }
+    ]
+    sb = FakeSupabase(tables)
+    _mock_coach_deps(monkeypatch, sb, {"unused": True})
+
+    resp = client.patch(
+        f"/api/coach/checklist/{interview_id}/items/interview_confirmed",
+        json={"checked": True},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 404
 
 
 def test_post_checklist_skips_company_role_fallback_when_job_sessions_exist(
