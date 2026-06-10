@@ -118,11 +118,11 @@ async def get_progress(
         try:
             pre_score = s.get("anxiety_level_before")
             post_score = s.get("anxiety_level_after")
-            
+
             # Safe parsing: Guards against unexpected string formats or None values in rows
             val_pre = float(pre_score) if pre_score is not None else 0.0
             val_post = float(post_score) if post_score is not None else 0.0
-            
+
             total_lift += (val_pre - val_post)
         except (ValueError, TypeError):
             continue
