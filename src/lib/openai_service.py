@@ -7,7 +7,7 @@ import logging
 from openai import OpenAI
 
 from src.lib.config import settings
-from src.types.session import SessionScript
+from src.types.session import RecommendedAction, SessionScript
 
 logger = logging.getLogger(__name__)
 
@@ -227,4 +227,108 @@ def generate_onboarding_script(
         return SessionScript(**data)
     except Exception as exc:
         logger.exception("Failed to parse OpenAI onboarding script: %s", exc)
+        return None
+
+
+_PREP_LABELS: dict[str, str] = {
+    'interview_tomorrow': 'Interview preparation',
+    'recruiter_call': 'Recruiter call preparation',
+    'rejection_recovery': 'Rejection recovery',
+    'networking': 'Networking',
+    'salary_negotiation': 'Salary negotiation',
+    'restarting_search': 'Restarting job search',
+    'general_reset': 'General mindset reset',
+}
+
+
+def generate_recommended_actions(
+    preparation_for: str,
+    current_feeling: str | None,
+    desired_feeling: str | None,
+    anxiety_level_before: int,
+    anxiety_level_after: int,
+    anxiety_level_delta: int,
+    company: str | None = None,
+    role: str | None = None,
+    user_context: dict | None = None,
+) -> list[RecommendedAction] | None:
+    """Generate 3 personalized post-session recommended actions via GPT.
+
+    Returns None on any failure — callers should fall back to static templates.
+    """
+    from src.prompts.user_prompt import (
+        _DURATION_TEXT,
+        _EMOTIONAL_CHALLENGE_TEXT,
+        _ROLE_CATEGORY_TEXT,
+        _TIMELINE_TEXT,
+    )
+
+    prep_label = _PREP_LABELS.get(preparation_for, preparation_for)
+    delta_prefix = '+' if anxiety_level_delta > 0 else ''
+
+    session_lines = [
+        f"Session type: {prep_label}",
+        f"Came in: {current_feeling or 'unspecified'}, anxiety {anxiety_level_before}/10",
+        f"Wanted to feel: {desired_feeling or 'unspecified'}",
+        f"Left at: anxiety {anxiety_level_after}/10 (shifted {delta_prefix}{anxiety_level_delta})",
+    ]
+    if company and role:
+        session_lines.append(f"Preparing for: {role} role at {company}")
+
+    context_lines: list[str] = []
+    if user_context:
+        employment = user_context.get('employment_status')
+        duration = user_context.get('unemployed_duration')
+        timeline = user_context.get('job_timeline')
+        target_role = user_context.get('target_role_category')
+        target_note = user_context.get('target_role_note')
+        emotional_challenge = user_context.get('emotional_challenge')
+
+        if employment == 'unemployed' and duration:
+            context_lines.append(f"Between roles for {_DURATION_TEXT.get(duration, duration)}.")
+        elif employment == 'employed':
+            context_lines.append("Currently employed, exploring opportunities.")
+
+        if target_role:
+            role_text = _ROLE_CATEGORY_TEXT.get(target_role, target_role)
+            context_lines.append(f"Looking for {role_text}{f' ({target_note})' if target_note else ''}.")
+
+        if timeline:
+            timeline_text = _TIMELINE_TEXT.get(timeline, '')
+            if timeline_text:
+                context_lines.append(timeline_text)
+
+        if emotional_challenge:
+            challenge_text = _EMOTIONAL_CHALLENGE_TEXT.get(emotional_challenge, '')
+            if challenge_text:
+                context_lines.append(challenge_text)
+
+    session_summary = '\n'.join(session_lines)
+    context_block = ('\n\nContext:\n' + '\n'.join(context_lines)) if context_lines else ''
+    mode1_note = (
+        f' For at least one action, reference {company} and the {role} role specifically.'
+        if company and role else ''
+    )
+
+    user_prompt = (
+        f"{session_summary}{context_block}\n\n"
+        f"Generate exactly 3 specific, actionable next steps for this person after their session.{mode1_note} "
+        "Make each action concrete and personal — no generic advice.\n\n"
+        'Return ONLY valid JSON:\n'
+        '{"actions": [{"title": "3-7 word title", "body": "one or two specific sentences", "timing": "Today"}, ...]}\n\n'
+        'Valid timing values: Today, Tonight, Tomorrow, Ongoing'
+    )
+
+    raw = _chat(
+        "You are Maya, a mental performance coach for job seekers. Return ONLY valid JSON, no markdown.",
+        user_prompt,
+    )
+    if raw is None:
+        return None
+
+    try:
+        data = json.loads(raw)
+        return [RecommendedAction(**a) for a in data['actions'][:3]]
+    except Exception as exc:
+        logger.exception("Failed to parse recommended actions: %s", exc)
         return None

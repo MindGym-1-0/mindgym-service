@@ -79,11 +79,19 @@ class SessionCompleteRequest(BaseModel):
     anxiety_level_after: int = Field(..., ge=1, le=10)
 
 
+class RecommendedAction(BaseModel):
+    title: str
+    body: str
+    timing: str
+
+
 class SessionCompleteResponse(BaseModel):
     session_id: str
     anxiety_level_before: int
     anxiety_level_after: int
     anxiety_level_delta: int
+    session_number: int
+    recommended_actions: list['RecommendedAction']
     message: str
 
 
