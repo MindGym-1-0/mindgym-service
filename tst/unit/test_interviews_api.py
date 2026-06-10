@@ -199,6 +199,68 @@ def test_patch_interview_outcome_invalid_outcome_returns_422(
     qb.execute.assert_not_called()
 
 
+@pytest.mark.parametrize("outcome", ["offer", "no_offer"])
+def test_patch_interview_outcome_same_finalized_outcome_is_idempotent(
+    api_client, sample_interview_row: dict[str, object], outcome: str
+):
+    client, qb, _sb = api_client
+
+    existing_row = {
+        "id": sample_interview_row["id"],
+        "outcome": outcome,
+        "check_in_attempts": sample_interview_row["check_in_attempts"],
+        "next_check_in_at": sample_interview_row["next_check_in_at"],
+    }
+    qb.execute.return_value = SimpleNamespace(data=[existing_row])
+
+    resp = client.patch(
+        f"/api/interviews/{sample_interview_row['id']}/outcome",
+        json={"outcome": outcome},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["outcome"] == outcome
+    assert body["check_in_attempts"] == existing_row["check_in_attempts"]
+    assert body["next_check_in_at"] == existing_row["next_check_in_at"]
+    qb.update.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("current_outcome", "requested_outcome"),
+    [("offer", "no_offer"), ("no_offer", "offer")],
+)
+def test_patch_interview_outcome_rejects_different_finalized_outcome(
+    api_client,
+    sample_interview_row: dict[str, object],
+    current_outcome: str,
+    requested_outcome: str,
+):
+    client, qb, _sb = api_client
+
+    existing_row = {
+        "id": sample_interview_row["id"],
+        "outcome": current_outcome,
+        "check_in_attempts": sample_interview_row["check_in_attempts"],
+        "next_check_in_at": sample_interview_row["next_check_in_at"],
+    }
+    qb.execute.return_value = SimpleNamespace(data=[existing_row])
+
+    resp = client.patch(
+        f"/api/interviews/{sample_interview_row['id']}/outcome",
+        json={"outcome": requested_outcome},
+        headers={"Authorization": "Bearer fake-token"},
+    )
+
+    assert resp.status_code == 422
+    assert (
+        resp.json()["detail"]
+        == "Outcome is already finalized and cannot be updated."
+    )
+    qb.update.assert_not_called()
+
+
 def test_patch_interview_outcome_from_not_ready_requires_no_offer(
     api_client, sample_interview_row: dict[str, object]
 ):
