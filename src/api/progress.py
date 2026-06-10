@@ -91,7 +91,7 @@ async def get_progress(
         # Cleaned up execution evaluation inside the thread runner
         ordered_query = query.order("completed_at", ascending=True)
         sessions_res = await asyncio.to_thread(ordered_query.execute)
-        
+
         if sessions_res and hasattr(sessions_res, "data") and isinstance(sessions_res.data, list):
             sessions = sessions_res.data
     except Exception as db_err:
@@ -120,10 +120,10 @@ async def get_progress(
         try:
             pre_score = s.get("anxiety_level_before")
             post_score = s.get("anxiety_level_after")
-            
+
             val_pre = float(pre_score) if pre_score is not None else 0.0
             val_post = float(post_score) if post_score is not None else 0.0
-            
+
             total_lift += (val_pre - val_post)
         except (ValueError, TypeError):
             continue
