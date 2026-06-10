@@ -128,7 +128,7 @@ async def get_progress(
             continue
 
     # Division-by-zero protection guard
-    avg_lift_per_session = round(total_lift / sessions_done, 1) if sessions_done > 0 else 0.0
+    avg_lift_per_session = float(round(total_lift / sessions_done, 1)) if sessions_done > 0 else 0.0
 
     # --- STEP 5: Run AI Inference Pipeline with Format Guards ---
     prompt = f"""
