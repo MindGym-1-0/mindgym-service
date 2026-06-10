@@ -23,8 +23,6 @@ class SubscriptionTierFeatures(BaseModel):
     max_interviews_tracked: int | None = None  # None = unlimited
     full_insights_trends: bool = False
     coach_notes_history: bool = False
-    human_coach_calls: bool = False
-    custom_session_packs: bool = False
     basic_mood_tracking: bool = False
 
 
@@ -57,8 +55,6 @@ TIER_FEATURES: dict[SubscriptionTier, SubscriptionTierFeatures] = {
         full_insights_trends=True,
         coach_notes_history=True,
         basic_mood_tracking=True,
-        human_coach_calls=True,
-        custom_session_packs=True,
     ),
 }
 
@@ -68,7 +64,7 @@ class UserSubscription(BaseModel):
 
     user_id: str
     tier: SubscriptionTier
-    started_at: datetime
+    started_at: datetime | None = None  # When paid subscription started (None for free tier users)
     renewal_at: datetime | None = None  # When the current billing period ends
     canceled_at: datetime | None = None  # When subscription was canceled
 

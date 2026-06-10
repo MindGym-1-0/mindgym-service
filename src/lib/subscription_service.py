@@ -34,24 +34,22 @@ async def get_user_subscription(user_id: str) -> UserSubscription:
             return UserSubscription(
                 user_id=user_id,
                 tier=SubscriptionTier.FREE,
-                started_at=datetime.now(),
             )
 
         data = response.data
         return UserSubscription(
             user_id=user_id,
             tier=SubscriptionTier(data.get('subscription_tier', 'free')),
-            started_at=datetime.fromisoformat(data['subscription_started_at']),
+            started_at=datetime.fromisoformat(data['subscription_started_at']) if data.get('subscription_started_at') else None,
             renewal_at=datetime.fromisoformat(data['subscription_renewal_at']) if data.get('subscription_renewal_at') else None,
             canceled_at=datetime.fromisoformat(data['subscription_canceled_at']) if data.get('subscription_canceled_at') else None,
         )
     except Exception as e:
-        logger.error(f"Error fetching subscription for user {user_id}: {e}")
+        logger.error("Error fetching subscription for user %s: %s", user_id, e)
         # Default to free tier on error
         return UserSubscription(
             user_id=user_id,
             tier=SubscriptionTier.FREE,
-            started_at=datetime.now(),
         )
 
 
@@ -106,7 +104,7 @@ async def get_current_usage(user_id: str) -> dict:
             'billing_period': current_period,
         }
     except Exception as e:
-        logger.warning(f"Could not fetch usage for user {user_id}, period {current_period}: {e}")
+        logger.warning("Could not fetch usage for user %s, period %s: %s", user_id, current_period, e)
         return {
             'sessions_used_this_month': 0,
             'interviews_used_this_month': 0,
@@ -133,7 +131,7 @@ async def can_create_session(user_id: str) -> tuple[bool, str | None]:
     if sessions_used >= features.sessions_per_month:
         return False, (
             f"You've reached your limit of {features.sessions_per_month} sessions per month. "
-            f"Upgrade to {features.tier.value.upper()} to create more sessions."
+            "Upgrade to Pro to get unlimited sessions."
         )
 
     return True, None
@@ -167,6 +165,8 @@ async def can_create_interview(user_id: str) -> tuple[bool, str | None]:
 async def increment_session_usage(user_id: str) -> None:
     """Increment session usage for current billing period.
 
+    Uses PostgreSQL stored procedure for atomic, race-condition-safe increment.
+
     Args:
         user_id: The user's ID
     """
@@ -174,32 +174,19 @@ async def increment_session_usage(user_id: str) -> None:
     current_period = date.today().strftime('%Y-%m')
 
     try:
-        # First, try to fetch existing record
-        existing = supabase.table('subscription_usage').select('sessions_used').eq(
-            'user_id', user_id
-        ).eq('period', current_period).execute()
-
-        if existing.data:
-            # Update existing record
-            supabase.table('subscription_usage').update({
-                'sessions_used': existing.data[0]['sessions_used'] + 1,
-                'updated_at': datetime.now().isoformat(),
-            }).eq('user_id', user_id).eq('period', current_period).execute()
-        else:
-            # Create new record
-            supabase.table('subscription_usage').insert({
-                'user_id': user_id,
-                'period': current_period,
-                'sessions_used': 1,
-                'interviews_used': 0,
-            }).execute()
+        supabase.rpc('increment_session_usage', {
+            'p_user_id': user_id,
+            'p_period': current_period,
+        }).execute()
     except Exception as e:
-        logger.error(f"Error incrementing session usage for user {user_id}: {e}")
+        logger.error("Error incrementing session usage for user %s: %s", user_id, e)
 
 
 async def increment_interview_usage(user_id: str) -> None:
     """Increment interview usage for current billing period.
 
+    Uses PostgreSQL stored procedure for atomic, race-condition-safe increment.
+
     Args:
         user_id: The user's ID
     """
@@ -207,27 +194,12 @@ async def increment_interview_usage(user_id: str) -> None:
     current_period = date.today().strftime('%Y-%m')
 
     try:
-        # First, try to fetch existing record
-        existing = supabase.table('subscription_usage').select('interviews_used').eq(
-            'user_id', user_id
-        ).eq('period', current_period).execute()
-
-        if existing.data:
-            # Update existing record
-            supabase.table('subscription_usage').update({
-                'interviews_used': existing.data[0]['interviews_used'] + 1,
-                'updated_at': datetime.now().isoformat(),
-            }).eq('user_id', user_id).eq('period', current_period).execute()
-        else:
-            # Create new record
-            supabase.table('subscription_usage').insert({
-                'user_id': user_id,
-                'period': current_period,
-                'sessions_used': 0,
-                'interviews_used': 1,
-            }).execute()
+        supabase.rpc('increment_interview_usage', {
+            'p_user_id': user_id,
+            'p_period': current_period,
+        }).execute()
     except Exception as e:
-        logger.error(f"Error incrementing interview usage for user {user_id}: {e}")
+        logger.error("Error incrementing interview usage for user %s: %s", user_id, e)
 
 
 async def set_subscription_tier(user_id: str, tier: SubscriptionTier) -> bool:
@@ -247,13 +219,16 @@ async def set_subscription_tier(user_id: str, tier: SubscriptionTier) -> bool:
 
     try:
         now = datetime.now().isoformat()
-        supabase.table('users').update({
+        update_data = {
             'subscription_tier': tier.value,
-            'subscription_started_at': now,
             'subscription_renewal_at': None,  # Will be set by payment processor
             'subscription_canceled_at': None,
-        }).eq('id', user_id).execute()
+        }
+        # Only set started_at when upgrading to a paid tier
+        if tier != SubscriptionTier.FREE:
+            update_data['subscription_started_at'] = now
+        supabase.table('users').update(update_data).eq('id', user_id).execute()
         return True
     except Exception as e:
-        logger.error(f"Error updating subscription tier for user {user_id}: {e}")
+        logger.error("Error updating subscription tier for user %s: %s", user_id, e)
         return False

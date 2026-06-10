@@ -104,14 +104,15 @@ async def create_interview(
             .select(INTERVIEW_SELECT_FIELDS)
             .execute
         )
-        # Increment usage counter after interview is successfully created
-        await increment_interview_usage(user_id)
     except Exception:
         logger.exception("Failed to create interview.")
         raise HTTPException(status_code=500, detail="Unable to create interview.") from None
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create interview.")
+
+    # Increment usage counter only after interview is successfully created and validated
+    await increment_interview_usage(user_id)
 
     return InterviewResponse.model_validate(result.data[0])
 

@@ -5,7 +5,7 @@
 -- Add subscription columns to users table
 alter table public.users
 add column if not exists subscription_tier text not null default 'free' check (subscription_tier in ('free', 'pro', 'premium')),
-add column if not exists subscription_started_at timestamptz not null default now(),
+add column if not exists subscription_started_at timestamptz,
 add column if not exists subscription_renewal_at timestamptz,
 add column if not exists subscription_canceled_at timestamptz;
 
