@@ -79,7 +79,6 @@ async def get_progress(
         elif period == "month":
             start_date = now - timedelta(days=30)
 
-        # FIXED SYNTAX: Passing explicit query arguments inside .not_() to resolve the AttributeError
         query = (
             sb.table("ai_sessions")
             .select("anxiety_level_before", "anxiety_level_after", "completed_at")
@@ -89,10 +88,11 @@ async def get_progress(
         if start_date:
             query = query.gte("completed_at", start_date.isoformat())
 
-        sessions_res = await asyncio.to_thread(
-            query.order("completed_at", ascending=True).execute
-        )
-        if sessions_res and sessions_res.data:
+        # Cleaned up execution evaluation inside the thread runner
+        ordered_query = query.order("completed_at", ascending=True)
+        sessions_res = await asyncio.to_thread(ordered_query.execute)
+        
+        if sessions_res and hasattr(sessions_res, "data") and isinstance(sessions_res.data, list):
             sessions = sessions_res.data
     except Exception as db_err:
         logger.error(f"Failed to fetch user progress context: {str(db_err)}")
@@ -115,19 +115,19 @@ async def get_progress(
     total_lift = 0.0
 
     for s in sessions:
+        if not isinstance(s, dict):
+            continue
         try:
             pre_score = s.get("anxiety_level_before")
             post_score = s.get("anxiety_level_after")
-
-            # Safe parsing: Guards against unexpected string formats or None values in rows
+            
             val_pre = float(pre_score) if pre_score is not None else 0.0
             val_post = float(post_score) if post_score is not None else 0.0
-
+            
             total_lift += (val_pre - val_post)
         except (ValueError, TypeError):
             continue
 
-    # Division-by-zero protection guard
     avg_lift_per_session = float(round(total_lift / sessions_done, 1)) if sessions_done > 0 else 0.0
 
     # --- STEP 5: Run AI Inference Pipeline with Format Guards ---
@@ -165,7 +165,6 @@ async def get_progress(
 
         if raw_text:
             cleaned_text = raw_text.strip()
-            # Intercept and clean accidental markdown wrappers if returned by the LLM
             if cleaned_text.startswith("```"):
                 lines = cleaned_text.splitlines()
                 if lines[0].startswith("```json") or lines[0].startswith("```"):
@@ -173,15 +172,18 @@ async def get_progress(
                 cleaned_text = "\n".join(lines).strip()
 
             parsed_json = json.loads(cleaned_text)
-            validated_insight = ProgressInsight(**parsed_json)
+            if isinstance(parsed_json, dict) and "key_insight" in parsed_json:
+                validated_insight = ProgressInsight(**parsed_json)
     except (asyncio.TimeoutError, Exception) as err:
         logger.error(f"OpenAI progress insight calculation failed: {repr(err)}")
 
-    # Strict Fallback Check: Enforce local backup generation if AI fails or returns empty fields
+    # Guard fallback assignment explicitly
     if not validated_insight or not getattr(validated_insight, "key_insight", None):
         validated_insight = execute_fallback_logic(sessions_done, avg_lift_per_session)
 
-    clean_insight_str = " ".join(validated_insight.key_insight.split()[:20])
+    # Defensive string splitting check to prevent AttributeError
+    raw_insight_str = getattr(validated_insight, "key_insight", "") or ""
+    clean_insight_str = " ".join(raw_insight_str.split()[:20])
 
     # --- STEP 6: Package Safe Payload Response ---
     return ProgressResponse(
