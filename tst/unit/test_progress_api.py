@@ -68,11 +68,8 @@ def mock_supabase():
             chain.gte.return_value = chain
             chain.maybe_single.return_value = chain
             chain.order.return_value = chain
-            
-            # Fluent mock properties for handling .not_.is_() column validations
-            chain.not_ = chain
-            chain.is_.return_value = chain
-            
+            chain.not_.return_value = chain
+            chain.not_.is_.return_value = chain
             chain.execute.return_value = MagicMock(data=return_data if return_data is not None else [])
             return chain
 

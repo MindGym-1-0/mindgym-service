@@ -58,11 +58,11 @@ async def get_progress(
     day_streak = 0
     try:
         streak_res = await asyncio.to_thread(
-            sb.table("streaks")
+            lambda: sb.table("streaks")
             .select("current_streak")
             .eq("user_id", user_uuid_str)
             .maybe_single()
-            .execute
+            .execute()
         )
         if streak_res and streak_res.data:
             day_streak = streak_res.data.get("current_streak", 0)
@@ -79,19 +79,17 @@ async def get_progress(
         elif period == "month":
             start_date = now - timedelta(days=30)
 
-        # FIXED SYNTAX: Passing explicit query arguments inside .not_() to resolve the AttributeError
-        query = (
+        base_query = (
             sb.table("ai_sessions")
-            .select("anxiety_level_before", "anxiety_level_after", "completed_at")
+            .select("anxiety_level_before, anxiety_level_after, completed_at")
             .eq("user_id", user_uuid_str)
-            .not_("completed_at", "is", "null")
+            .not_.is_("completed_at", "null")
         )
         if start_date:
-            query = query.gte("completed_at", start_date.isoformat())
+            base_query = base_query.gte("completed_at", start_date.isoformat())
 
-        sessions_res = await asyncio.to_thread(
-            query.order("completed_at", ascending=True).execute
-        )
+        final_query = base_query.order("completed_at", desc=False)
+        sessions_res = await asyncio.to_thread(lambda: final_query.execute())
         if sessions_res and sessions_res.data:
             sessions = sessions_res.data
     except Exception as db_err:
