@@ -162,6 +162,15 @@ async def onboard(
         if onboarding_session is None:
             onboarding_session = get_fallback_script(preparation_for)
 
+        await asyncio.to_thread(
+            lambda: client.table("users").update({
+                "mindset_gap": gap_analysis["mindset_gap"],
+                "mindset_gap_detail": gap_analysis["mindset_gap_detail"],
+                "hunting_gap": gap_analysis.get("hunting_gap"),
+                "hunting_gap_detail": gap_analysis.get("hunting_gap_detail"),
+            }).eq("id", user_id).execute()
+        )
+
         session_id = await insert_onboarding_session(
             user_id=user_id,
             preparation_for=preparation_for,
