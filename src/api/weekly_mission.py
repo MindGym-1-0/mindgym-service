@@ -4,10 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated
-from uuid import UUID
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
@@ -74,8 +71,8 @@ def execute_fallback_generation(user_context: dict) -> dict:
 
 @router.post("/generate", response_model=WeeklyMissionGenerateResponse)
 async def generate_weekly_mission(
-    current_user_id: Annotated[UUID, Depends(CurrentUserId)],
-    token: Annotated[str, Depends(CurrentUserToken)],
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
 ):
     supabase = get_supabase_user_client(token)
     user_id = str(current_user_id)
@@ -314,8 +311,8 @@ class WeeklyMissionCompleteResponse(BaseModel):
     summary="Mark a specific item as completed and increment tracker counter",
 )
 async def complete_weekly_mission(
-    current_user_id: Annotated[UUID, Depends(CurrentUserId)],
-    token: Annotated[str, Depends(CurrentUserToken)],
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
     payload: WeeklyMissionCompleteRequest,
 ):
     supabase = get_supabase_user_client(token)
