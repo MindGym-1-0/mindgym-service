@@ -223,33 +223,40 @@ async def generate_weekly_mission(
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    existing_row = await asyncio.to_thread(
-        supabase.table("weekly_mission")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("week_start_date", target_monday.isoformat())
-        .execute
-    )
-
-    if existing_row.data:
-        res = await asyncio.to_thread(
+    try:
+        existing_row = await asyncio.to_thread(
             supabase.table("weekly_mission")
-            .update(upsert_payload)
-            .eq("id", existing_row.data[0]["id"])
             .select("*")
+            .eq("user_id", user_id)
+            .eq("week_start_date", target_monday.isoformat())
             .execute
         )
-    else:
-        upsert_payload["generated_at"] = datetime.now(timezone.utc).isoformat()
-        upsert_payload["action_1_completed"] = False
-        upsert_payload["action_2_completed"] = False
-        upsert_payload["action_3_completed"] = False
-        upsert_payload["completion_count"] = 0
-        res = await asyncio.to_thread(
-            supabase.table("weekly_mission")
-            .insert(upsert_payload)
-            .select("*")
-            .execute
+
+        if existing_row.data:
+            res = await asyncio.to_thread(
+                supabase.table("weekly_mission")
+                .update(upsert_payload)
+                .eq("id", existing_row.data[0]["id"])
+                .select("*")
+                .execute
+            )
+        else:
+            upsert_payload["generated_at"] = datetime.now(timezone.utc).isoformat()
+            upsert_payload["action_1_completed"] = False
+            upsert_payload["action_2_completed"] = False
+            upsert_payload["action_3_completed"] = False
+            upsert_payload["completion_count"] = 0
+            res = await asyncio.to_thread(
+                supabase.table("weekly_mission")
+                .insert(upsert_payload)
+                .select("*")
+                .execute
+            )
+    except Exception as save_err:
+        logger.error(f"Failed to persist weekly mission record: {str(save_err)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save weekly mission.",
         )
 
     # ------------------------------------------
