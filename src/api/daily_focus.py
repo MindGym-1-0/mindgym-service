@@ -131,7 +131,7 @@ async def generate_daily_focus(
             .select("company, role, status, last_moved_at")
             .eq("user_id", user_uuid_str)
             .is_("outcome", "null")
-            .order("last_moved_at", descending=True)
+            .order("last_moved_at", desc=True)
             .execute
         )
         active_jobs = jobs_res.data or []
@@ -141,7 +141,7 @@ async def generate_daily_focus(
             .select("company, role, interview_date")
             .eq("user_id", user_uuid_str)
             .gte("interview_date", today_str)
-            .order("interview_date", ascending=True)
+            .order("interview_date")
             .limit(2)
             .execute
         )
@@ -152,7 +152,7 @@ async def generate_daily_focus(
             .select("preparation_for, anxiety_level_delta, completed_at")
             .eq("user_id", user_uuid_str)
             .is_("completed_at", "not.null")
-            .order("completed_at", descending=True)
+            .order("completed_at", desc=True)
             .limit(3)
             .execute
         )

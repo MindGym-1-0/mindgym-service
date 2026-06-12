@@ -126,7 +126,7 @@ async def generate_weekly_mission(
             supabase.table("weekly_mission")
             .select("completion_count")
             .eq("user_id", user_id)
-            .order("week_start_date", descending=True)
+            .order("week_start_date", desc=True)
             .limit(1)
             .execute
         )
