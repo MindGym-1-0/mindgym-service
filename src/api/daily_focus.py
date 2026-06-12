@@ -151,7 +151,7 @@ async def generate_daily_focus(
             sb.table("ai_sessions")
             .select("preparation_for, anxiety_level_delta, completed_at")
             .eq("user_id", user_uuid_str)
-            .is_("completed_at", "not.null")
+            .not_.is_("completed_at", "null")
             .order("completed_at", desc=True)
             .limit(3)
             .execute
