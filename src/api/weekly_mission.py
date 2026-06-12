@@ -4,10 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated
-from uuid import UUID
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from src.lib.auth import CurrentUserId, CurrentUserToken
@@ -74,8 +71,8 @@ def execute_fallback_generation(user_context: dict) -> dict:
 
 @router.post("/generate", response_model=WeeklyMissionGenerateResponse)
 async def generate_weekly_mission(
-    current_user_id: Annotated[UUID, Depends(CurrentUserId)],
-    token: Annotated[str, Depends(CurrentUserToken)],
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
 ):
     supabase = get_supabase_user_client(token)
     user_id = str(current_user_id)
@@ -129,7 +126,7 @@ async def generate_weekly_mission(
             supabase.table("weekly_mission")
             .select("completion_count")
             .eq("user_id", user_id)
-            .order("week_start_date", descending=True)
+            .order("week_start_date", desc=True)
             .limit(1)
             .execute
         )
@@ -226,33 +223,40 @@ async def generate_weekly_mission(
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    existing_row = await asyncio.to_thread(
-        supabase.table("weekly_mission")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("week_start_date", target_monday.isoformat())
-        .execute
-    )
-
-    if existing_row.data:
-        res = await asyncio.to_thread(
+    try:
+        existing_row = await asyncio.to_thread(
             supabase.table("weekly_mission")
-            .update(upsert_payload)
-            .eq("id", existing_row.data[0]["id"])
             .select("*")
+            .eq("user_id", user_id)
+            .eq("week_start_date", target_monday.isoformat())
             .execute
         )
-    else:
-        upsert_payload["generated_at"] = datetime.now(timezone.utc).isoformat()
-        upsert_payload["action_1_completed"] = False
-        upsert_payload["action_2_completed"] = False
-        upsert_payload["action_3_completed"] = False
-        upsert_payload["completion_count"] = 0
-        res = await asyncio.to_thread(
-            supabase.table("weekly_mission")
-            .insert(upsert_payload)
-            .select("*")
-            .execute
+
+        if existing_row.data:
+            res = await asyncio.to_thread(
+                supabase.table("weekly_mission")
+                .update(upsert_payload)
+                .eq("id", existing_row.data[0]["id"])
+                .select("*")
+                .execute
+            )
+        else:
+            upsert_payload["generated_at"] = datetime.now(timezone.utc).isoformat()
+            upsert_payload["action_1_completed"] = False
+            upsert_payload["action_2_completed"] = False
+            upsert_payload["action_3_completed"] = False
+            upsert_payload["completion_count"] = 0
+            res = await asyncio.to_thread(
+                supabase.table("weekly_mission")
+                .insert(upsert_payload)
+                .select("*")
+                .execute
+            )
+    except Exception as save_err:
+        logger.error(f"Failed to persist weekly mission record: {str(save_err)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save weekly mission.",
         )
 
     # ------------------------------------------
@@ -314,8 +318,8 @@ class WeeklyMissionCompleteResponse(BaseModel):
     summary="Mark a specific item as completed and increment tracker counter",
 )
 async def complete_weekly_mission(
-    current_user_id: Annotated[UUID, Depends(CurrentUserId)],
-    token: Annotated[str, Depends(CurrentUserToken)],
+    current_user_id: CurrentUserId,
+    token: CurrentUserToken,
     payload: WeeklyMissionCompleteRequest,
 ):
     supabase = get_supabase_user_client(token)

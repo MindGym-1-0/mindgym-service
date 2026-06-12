@@ -131,7 +131,7 @@ async def generate_daily_focus(
             .select("company, role, status, last_moved_at")
             .eq("user_id", user_uuid_str)
             .is_("outcome", "null")
-            .order("last_moved_at", descending=True)
+            .order("last_moved_at", desc=True)
             .execute
         )
         active_jobs = jobs_res.data or []
@@ -141,7 +141,7 @@ async def generate_daily_focus(
             .select("company, role, interview_date")
             .eq("user_id", user_uuid_str)
             .gte("interview_date", today_str)
-            .order("interview_date", ascending=True)
+            .order("interview_date")
             .limit(2)
             .execute
         )
@@ -151,8 +151,8 @@ async def generate_daily_focus(
             sb.table("ai_sessions")
             .select("preparation_for, anxiety_level_delta, completed_at")
             .eq("user_id", user_uuid_str)
-            .is_("completed_at", "not.null")
-            .order("completed_at", descending=True)
+            .not_.is_("completed_at", "null")
+            .order("completed_at", desc=True)
             .limit(3)
             .execute
         )
@@ -273,7 +273,6 @@ async def generate_daily_focus(
                 .execute
             )
         else:
-            focus_payload["created_at"] = datetime.now(UTC).isoformat()
             db_result = await asyncio.to_thread(
                 sb.table("daily_focus")
                 .insert(focus_payload)

@@ -31,7 +31,7 @@ class DailyFocusResponse(BaseModel):
     action_1_type: ActionType
     action_2_text: Optional[str] = None
     action_2_type: Optional[ActionType] = None
-    created_at: str
+    generated_at: str
     updated_at: str
 
     model_config = ConfigDict(from_attributes=True)

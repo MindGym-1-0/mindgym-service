@@ -37,6 +37,11 @@ async def fetch_supabase_user_id(access_token: str) -> UUID:
         raise HTTPException(status_code=401, detail="Unauthorized") from None
 
     if resp.status_code != 200:
+        logger.warning(
+            "Supabase /auth/v1/user rejected token: status=%s body=%s",
+            resp.status_code,
+            resp.text[:200],
+        )
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
