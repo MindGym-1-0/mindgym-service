@@ -273,7 +273,6 @@ async def generate_daily_focus(
                 .execute
             )
         else:
-            focus_payload["created_at"] = datetime.now(UTC).isoformat()
             db_result = await asyncio.to_thread(
                 sb.table("daily_focus")
                 .insert(focus_payload)
