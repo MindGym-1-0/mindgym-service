@@ -128,7 +128,7 @@ async def generate_daily_focus(
         if existing_check.data:
             logger.info(f"Focus already exists for {user_uuid_str} on {today_str}. Returning cached row.")
             return existing_check.data[0]
-  
+
     except Exception as db_err:
         logger.error(f"Failed checking today's existing daily focus: {str(db_err)}")
 
@@ -168,7 +168,7 @@ async def generate_daily_focus(
                     "created_at": datetime.now(UTC).isoformat(),
                     "updated_at": datetime.now(UTC).isoformat(),
                 }
-    
+
                 db_result = await asyncio.to_thread(
                     sb.table("daily_focus").insert(recycled_payload).select("*").execute
                 )
