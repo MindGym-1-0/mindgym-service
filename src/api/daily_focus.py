@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from src.api.streaks import increment_user_streak
 from src.lib.auth import CurrentUserId, CurrentUserToken
-# Fixed: Swapped out genai for the standardized openai helper from PR #64
+# Swapped out genai for the standardized openai helper from PR #64
 from src.lib.openai_service import _chat
 from src.lib.supabase import get_supabase_user_client
 from src.types.daily_focus import (
@@ -29,7 +29,6 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
     logger.warning("Executing local fallback logic for daily focus.")
     today = date.today()
 
-    # 1. Check for urgent interview in the next 2 days
     upcoming_interviews = context.get("interviews", [])
     for iv in upcoming_interviews:
         try:
@@ -53,7 +52,6 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
             logger.warning(f"Skipping row due to interview parse error: {e}")
             continue
 
-    # 2. Check for stagnant applications (> 14 days)
     active_jobs = context.get("jobs", [])
     for job in active_jobs:
         try:
@@ -78,7 +76,6 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
             logger.warning(f"Skipping row due to job status parse error: {e}")
             continue
 
-    # 3. Check for low pipeline numbers (Schema holds lowercase status column)
     applied_count = sum(1 for j in active_jobs if j.get("status") == "applied")
     if applied_count < 3:
         return GeminiDailyFocusOutput(
@@ -91,7 +88,6 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
             action_2_type=None,
         )
 
-    # 4. Total safe default
     return GeminiDailyFocusOutput(
         action_1_text=(
             "Review your open applications and plan out outreach "
@@ -116,13 +112,78 @@ async def generate_daily_focus(
     sb = get_supabase_user_client(token)
     user_uuid_str = str(current_user_id)
 
-    # STEP 1: Fetch multi-table context from Supabase
+    # -------------------------------------------------------------------------
+    # CHECK 1 (CLAIRE'S RULE): Has a task already been generated TODAY?
+    # -------------------------------------------------------------------------
+    try:
+        existing_check = await asyncio.to_thread(
+            sb.table("daily_focus")
+            .select("*")
+            .eq("user_id", user_uuid_str)
+            .eq("date", today_str)
+            .execute
+        )
+        
+        # If the row exists, return it instantly. Stops multiple OpenAI generations per day.
+        if existing_check.data:
+            logger.info(f"Focus already exists for {user_uuid_str} on {today_str}. Returning cached row.")
+            return existing_check.data[0]
+            
+    except Exception as db_err:
+        logger.error(f"Failed checking today's existing daily focus: {str(db_err)}")
+
+    # -------------------------------------------------------------------------
+    # CHECK 2 (RECYCLE RULE): Did they log in recently but leave the tasks untouched?
+    # -------------------------------------------------------------------------
+    try:
+        last_focus_res = await asyncio.to_thread(
+            sb.table("daily_focus")
+            .select("*")
+            .eq("user_id", user_uuid_str)
+            .order("date", descending=True)
+            .limit(1)
+            .execute
+        )
+        
+        if last_focus_res.data:
+            last_record = last_focus_res.data[0]
+            
+            # Read the completion status columns from the historical row
+            is_action_1_untouched = not last_record.get("action_1_completed", False)
+            is_action_2_untouched = not last_record.get("action_2_completed", False)
+            
+            # If BOTH tasks are incomplete, copy them to a new row for today and exit early
+            if is_action_1_untouched and is_action_2_untouched:
+                logger.info(f"Recycling untouched focus tasks from date {last_record.get('date')} for today.")
+                
+                recycled_payload = {
+                    "user_id": user_uuid_str,
+                    "date": today_str,
+                    "action_1_text": last_record.get("action_1_text"),
+                    "action_1_type": last_record.get("action_1_type"),
+                    "action_2_text": last_record.get("action_2_text"),
+                    "action_2_type": last_record.get("action_2_type"),
+                    "action_1_completed": False,
+                    "action_2_completed": False,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+                
+                db_result = await asyncio.to_thread(
+                    sb.table("daily_focus").insert(recycled_payload).select("*").execute
+                )
+                return db_result.data[0]
+                
+    except Exception as recycle_err:
+        logger.error(f"Error executing historical task recycling optimization: {str(recycle_err)}")
+        # If optimization fails due to db changes, fall through to create a fresh generation safely
+
+    # -------------------------------------------------------------------------
+    # NEW GENERATION PATH: Runs ONLY if no tasks exist today AND old tasks were completed
+    # -------------------------------------------------------------------------
     try:
         user_res = await asyncio.to_thread(
-            sb.table("users")
-            .select("goal, stage, anxiety_level")
-            .eq("id", user_uuid_str)
-            .execute
+            sb.table("users").select("goal, stage, anxiety_level").eq("id", user_uuid_str).execute
         )
         user_profile = user_res.data[0] if user_res.data else {}
 
@@ -131,7 +192,7 @@ async def generate_daily_focus(
             .select("company, role, status, last_moved_at")
             .eq("user_id", user_uuid_str)
             .is_("outcome", "null")
-            .order("last_moved_at", desc=True)
+            .order("last_moved_at", descending=True)
             .execute
         )
         active_jobs = jobs_res.data or []
@@ -141,7 +202,7 @@ async def generate_daily_focus(
             .select("company, role, interview_date")
             .eq("user_id", user_uuid_str)
             .gte("interview_date", today_str)
-            .order("interview_date")
+            .order("interview_date", ascending=True)
             .limit(2)
             .execute
         )
@@ -151,24 +212,17 @@ async def generate_daily_focus(
             sb.table("ai_sessions")
             .select("preparation_for, anxiety_level_delta, completed_at")
             .eq("user_id", user_uuid_str)
-            .not_.is_("completed_at", "null")
-            .order("completed_at", desc=True)
+            .is_("completed_at", "not.null")
+            .order("completed_at", descending=True)
             .limit(3)
             .execute
         )
         recent_sessions = sessions_res.data or []
 
         streak_res = await asyncio.to_thread(
-            sb.table("streaks")
-            .select("current_streak")
-            .eq("user_id", user_uuid_str)
-            .execute
+            sb.table("streaks").select("current_streak").eq("user_id", user_uuid_str).execute
         )
-        current_streak = (
-            streak_res.data[0].get("current_streak", 0)
-            if streak_res.data
-            else 0
-        )
+        current_streak = streak_res.data[0].get("current_streak", 0) if streak_res.data else 0
     except Exception as db_err:
         logger.error(f"Failed to fetch user context tables: {str(db_err)}")
         raise HTTPException(
@@ -184,7 +238,6 @@ async def generate_daily_focus(
         "streak": current_streak,
     }
 
-    # STEP 2: Build the prompt
     prompt = f"""
     You are an expert, highly personalized AI Job Assistant for an engineer.
     Analyze the user's specific application pipeline below and return targets.
@@ -207,7 +260,6 @@ async def generate_daily_focus(
     4. Feedback Loops: If stage moved but no debrief logged, prompt for debrief.
     """
 
-    # STEP 3 & 4: Call OpenAI chat service with formatting validation
     validated_output: Optional[GeminiDailyFocusOutput] = None
     try:
         raw_text = await asyncio.wait_for(
@@ -234,7 +286,6 @@ async def generate_daily_focus(
     if not validated_output or not validated_output.action_1_text:
         validated_output = execute_fallback_logic(context)
 
-    # STEP 5 & 6: Save/Upsert and Return Data Parameters
     try:
         focus_payload = {
             "user_id": user_uuid_str,
@@ -252,33 +303,15 @@ async def generate_daily_focus(
                 and hasattr(validated_output.action_2_type, "value")
                 else validated_output.action_2_type
             ),
+            "action_1_completed": False,
+            "action_2_completed": False,
+            "created_at": datetime.now(UTC).isoformat(),
             "updated_at": datetime.now(UTC).isoformat(),
         }
 
-        existing_check = await asyncio.to_thread(
-            sb.table("daily_focus")
-            .select("id")
-            .eq("user_id", user_uuid_str)
-            .eq("date", today_str)
-            .execute
+        db_result = await asyncio.to_thread(
+            sb.table("daily_focus").insert(focus_payload).select("*").execute
         )
-
-        if existing_check.data:
-            record_id = existing_check.data[0]["id"]
-            db_result = await asyncio.to_thread(
-                sb.table("daily_focus")
-                .update(focus_payload)
-                .eq("id", record_id)
-                .select("*")
-                .execute
-            )
-        else:
-            db_result = await asyncio.to_thread(
-                sb.table("daily_focus")
-                .insert(focus_payload)
-                .select("*")
-                .execute
-            )
 
         return db_result.data[0]
     except Exception as save_err:
@@ -320,7 +353,6 @@ async def complete_daily_focus(
             detail="Invalid action_id. Must be 'action_1' or 'action_2'.",
         )
 
-    # 1. Fetch today's focus row to check state existence
     try:
         existing_check = await asyncio.to_thread(
             sb.table("daily_focus")
@@ -344,7 +376,6 @@ async def complete_daily_focus(
     record = existing_check.data[0]
     record_id = record["id"]
 
-    # Check if target action field is already marked true
     target_field = f"{payload.action_id}_completed"
     if record.get(target_field) is True:
         streak_res = await asyncio.to_thread(
@@ -360,7 +391,6 @@ async def complete_daily_focus(
             success=True, current_streak=current_streak, milestone=None
         )
 
-    # 2. Update the target column inside daily_focus table structure
     try:
         update_payload = {
             target_field: True,
@@ -378,7 +408,6 @@ async def complete_daily_focus(
             detail=f"Failed to update task completion state: {str(err)}",
         )
 
-    # 3. Parameter ordering matches structural definition
     try:
         streak_data = await increment_user_streak(sb, user_uuid_str)
     except Exception as err:
