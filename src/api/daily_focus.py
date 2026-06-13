@@ -123,12 +123,12 @@ async def generate_daily_focus(
             .eq("date", today_str)
             .execute
         )
-        
+
         # If the row exists, return it instantly. Stops multiple OpenAI generations per day.
         if existing_check.data:
             logger.info(f"Focus already exists for {user_uuid_str} on {today_str}. Returning cached row.")
             return existing_check.data[0]
-            
+  
     except Exception as db_err:
         logger.error(f"Failed checking today's existing daily focus: {str(db_err)}")
 
@@ -144,18 +144,18 @@ async def generate_daily_focus(
             .limit(1)
             .execute
         )
-        
+
         if last_focus_res.data:
             last_record = last_focus_res.data[0]
-            
+
             # Read the completion status columns from the historical row
             is_action_1_untouched = not last_record.get("action_1_completed", False)
             is_action_2_untouched = not last_record.get("action_2_completed", False)
-            
+
             # If BOTH tasks are incomplete, copy them to a new row for today and exit early
             if is_action_1_untouched and is_action_2_untouched:
                 logger.info(f"Recycling untouched focus tasks from date {last_record.get('date')} for today.")
-                
+
                 recycled_payload = {
                     "user_id": user_uuid_str,
                     "date": today_str,
@@ -168,12 +168,12 @@ async def generate_daily_focus(
                     "created_at": datetime.now(UTC).isoformat(),
                     "updated_at": datetime.now(UTC).isoformat(),
                 }
-                
+    
                 db_result = await asyncio.to_thread(
                     sb.table("daily_focus").insert(recycled_payload).select("*").execute
                 )
                 return db_result.data[0]
-                
+
     except Exception as recycle_err:
         logger.error(f"Error executing historical task recycling optimization: {str(recycle_err)}")
         # If optimization fails due to db changes, fall through to create a fresh generation safely
