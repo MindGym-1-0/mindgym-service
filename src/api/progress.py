@@ -30,9 +30,9 @@ def execute_fallback_logic(
             key_insight="Welcome to MindGym! Complete your first session today to kick off your progress insights."
         )
 
-    if avg_lift > 0:
+    if avg_lift < 0:  
         return ProgressInsight(
-            key_insight=f"Great job! You're reducing anxiety by an average of {avg_lift} points per session. Keep it up."
+            key_insight=f"Great job! You're reducing anxiety by an average of {abs(avg_lift)} points per session. Keep it up."
         )
 
     return ProgressInsight(
@@ -121,7 +121,7 @@ async def get_progress(
             val_pre = float(pre_score) if pre_score is not None else 0.0
             val_post = float(post_score) if post_score is not None else 0.0
 
-            total_lift += (val_pre - val_post)
+            total_lift += (val_post - val_pre) 
         except (ValueError, TypeError):
             continue
 
