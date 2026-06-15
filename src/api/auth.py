@@ -311,11 +311,20 @@ async def google_callback(code: str | None = None, error: str | None = None) -> 
     session = auth_result.get("session") or {}
     access_token = session.get("access_token", "")
     refresh_token = session.get("refresh_token", "")
+    is_new_user = auth_result.get("is_new_user", False)
 
     frontend_url = get_settings().frontend_url
-    redirect_url = f"{frontend_url}/auth/callback?access_token={access_token}&refresh_token={refresh_token}"
+    redirect_url = (
+        f"{frontend_url}/auth/callback"
+        f"?access_token={access_token}"
+        f"&refresh_token={refresh_token}"
+        f"&is_new_user={'true' if is_new_user else 'false'}"
+    )
 
-    logger.info("Google OAuth login successful, redirecting to frontend")
+    logger.info(
+        "Google OAuth login successful, redirecting to frontend (is_new_user=%s)",
+        is_new_user,
+    )
     return RedirectResponse(url=redirect_url)
 
 
