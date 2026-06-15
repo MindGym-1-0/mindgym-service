@@ -11,21 +11,20 @@ from pydantic import BaseModel
 
 from src.api.streaks import increment_user_streak
 from src.lib.auth import CurrentUserId, CurrentUserToken
-# Swapped out genai for the standardized openai helper from PR #64
 from src.lib.openai_service import _chat
 from src.lib.supabase import get_supabase_user_client
 from src.types.daily_focus import (
     ActionType,
+    DailyFocusOutput,
     DailyFocusResponse,
-    GeminiDailyFocusOutput,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
-    """Generates a highly contextual fallback response if OpenAI fails."""
+def execute_fallback_logic(context: Dict[str, Any]) -> DailyFocusOutput:
+    """Generates a contextual fallback response if OpenAI fails or times out."""
     logger.warning("Executing local fallback logic for daily focus.")
     today = date.today()
 
@@ -36,15 +35,14 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
                 iv["interview_date"].split("T")[0], "%Y-%m-%d"
             ).date()
             if today <= iv_date <= (today + timedelta(days=2)):
-                return GeminiDailyFocusOutput(
+                return DailyFocusOutput(
                     action_1_text=(
                         f"Prepare for your upcoming interview with "
                         f"{iv.get('company')} for the {iv.get('role')} role."
                     ),
                     action_1_type=ActionType.PREPARE_INTERVIEW,
                     action_2_text=(
-                        "Review your application details and core "
-                        "engineering projects."
+                        "Review your application details and core engineering projects."
                     ),
                     action_2_type=ActionType.GENERIC_PIPELINE,
                 )
@@ -59,7 +57,7 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
                 job["last_moved_at"].split("T")[0], "%Y-%m-%d"
             ).date()
             if (today - last_moved).days > 14:
-                return GeminiDailyFocusOutput(
+                return DailyFocusOutput(
                     action_1_text=(
                         f"Follow up with the hiring team or recruiter at "
                         f"{job.get('company')} regarding your "
@@ -67,8 +65,7 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
                     ),
                     action_1_type=ActionType.FOLLOW_UP,
                     action_2_text=(
-                        "Keep looking for new technical opportunities "
-                        "to fill your pipeline."
+                        "Keep looking for new technical opportunities to fill your pipeline."
                     ),
                     action_2_type=ActionType.ADD_APPLICATIONS,
                 )
@@ -78,7 +75,7 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
 
     applied_count = sum(1 for j in active_jobs if j.get("status") == "applied")
     if applied_count < 3:
-        return GeminiDailyFocusOutput(
+        return DailyFocusOutput(
             action_1_text=(
                 "Find and apply to at least 2 new jobs today to keep "
                 "your application pipeline healthy."
@@ -88,10 +85,9 @@ def execute_fallback_logic(context: Dict[str, Any]) -> GeminiDailyFocusOutput:
             action_2_type=None,
         )
 
-    return GeminiDailyFocusOutput(
+    return DailyFocusOutput(
         action_1_text=(
-            "Review your open applications and plan out outreach "
-            "targets for the week."
+            "Review your open applications and plan out outreach targets for the week."
         ),
         action_1_type=ActionType.GENERIC_PIPELINE,
         action_2_text=None,
@@ -113,7 +109,7 @@ async def generate_daily_focus(
     user_uuid_str = str(current_user_id)
 
     # -------------------------------------------------------------------------
-    # CHECK 1 (CLAIRE'S RULE): Has a task already been generated TODAY?
+    # CHECK 1: Has a task already been generated TODAY? Return it immediately.
     # -------------------------------------------------------------------------
     try:
         existing_check = await asyncio.to_thread(
@@ -123,17 +119,14 @@ async def generate_daily_focus(
             .eq("date", today_str)
             .execute
         )
-
-        # If the row exists, return it instantly. Stops multiple OpenAI generations per day.
         if existing_check.data:
             logger.info(f"Focus already exists for {user_uuid_str} on {today_str}. Returning cached row.")
             return existing_check.data[0]
-
     except Exception as db_err:
         logger.error(f"Failed checking today's existing daily focus: {str(db_err)}")
 
     # -------------------------------------------------------------------------
-    # CHECK 2 (RECYCLE RULE): Did they log in recently but leave the tasks untouched?
+    # CHECK 2: Did they leave yesterday's tasks untouched? Recycle them.
     # -------------------------------------------------------------------------
     try:
         last_focus_res = await asyncio.to_thread(
@@ -147,15 +140,11 @@ async def generate_daily_focus(
 
         if last_focus_res.data:
             last_record = last_focus_res.data[0]
-
-            # Read the completion status columns from the historical row
             is_action_1_untouched = not last_record.get("action_1_completed", False)
             is_action_2_untouched = not last_record.get("action_2_completed", False)
 
-            # If BOTH tasks are incomplete, copy them to a new row for today and exit early
             if is_action_1_untouched and is_action_2_untouched:
-                logger.info(f"Recycling untouched focus tasks from date {last_record.get('date')} for today.")
-
+                logger.info(f"Recycling untouched focus tasks from {last_record.get('date')} for today.")
                 recycled_payload = {
                     "user_id": user_uuid_str,
                     "date": today_str,
@@ -168,35 +157,42 @@ async def generate_daily_focus(
                     "created_at": datetime.now(UTC).isoformat(),
                     "updated_at": datetime.now(UTC).isoformat(),
                 }
-
                 db_result = await asyncio.to_thread(
                     sb.table("daily_focus").insert(recycled_payload).select("*").execute
                 )
                 return db_result.data[0]
 
     except Exception as recycle_err:
-        logger.error(f"Error executing historical task recycling optimization: {str(recycle_err)}")
-        # If optimization fails due to db changes, fall through to create a fresh generation safely
+        logger.error(f"Error executing historical task recycling: {str(recycle_err)}")
+        # Fall through to fresh generation
 
     # -------------------------------------------------------------------------
-    # NEW GENERATION PATH: Runs ONLY if no tasks exist today AND old tasks were completed
+    # NEW GENERATION: Fetch user context then call OpenAI
     # -------------------------------------------------------------------------
+
+    # Fetch each table independently so one failure doesn't block the whole request
     try:
         user_res = await asyncio.to_thread(
             sb.table("users").select("goal, stage, anxiety_level").eq("id", user_uuid_str).execute
         )
         user_profile = user_res.data[0] if user_res.data else {}
+    except Exception:
+        user_profile = {}
 
+    try:
         jobs_res = await asyncio.to_thread(
             sb.table("jobs")
             .select("company, role, status, last_moved_at")
             .eq("user_id", user_uuid_str)
-            .is_("outcome", "null")
+            .is_("outcome", None)  # Fixed: was "null" string, must be None
             .order("last_moved_at", descending=True)
             .execute
         )
         active_jobs = jobs_res.data or []
+    except Exception:
+        active_jobs = []
 
+    try:
         interviews_res = await asyncio.to_thread(
             sb.table("interviews")
             .select("company, role, interview_date")
@@ -207,28 +203,30 @@ async def generate_daily_focus(
             .execute
         )
         upcoming_interviews = interviews_res.data or []
+    except Exception:
+        upcoming_interviews = []
 
+    try:
         sessions_res = await asyncio.to_thread(
             sb.table("ai_sessions")
             .select("preparation_for, anxiety_level_delta, completed_at")
             .eq("user_id", user_uuid_str)
-            .is_("completed_at", "not.null")
+            .not_.is_("completed_at", None)  # Fixed: was .is_("completed_at", "not.null") which is invalid
             .order("completed_at", descending=True)
             .limit(3)
             .execute
         )
         recent_sessions = sessions_res.data or []
+    except Exception:
+        recent_sessions = []
 
+    try:
         streak_res = await asyncio.to_thread(
             sb.table("streaks").select("current_streak").eq("user_id", user_uuid_str).execute
         )
         current_streak = streak_res.data[0].get("current_streak", 0) if streak_res.data else 0
-    except Exception as db_err:
-        logger.error(f"Failed to fetch user context tables: {str(db_err)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to look up user metadata context.",
-        )
+    except Exception:
+        current_streak = 0
 
     context = {
         "profile": user_profile,
@@ -245,6 +243,14 @@ async def generate_daily_focus(
     CRITICAL REQUIREMENT: Generic output like "apply to more jobs" is a defect.
     You MUST reference specific companies, roles, or raw data context.
 
+    Return ONLY valid JSON with these exact keys:
+    {{
+        "action_1_text": "...",
+        "action_1_type": "one of: prepare_questions | add_applications | follow_up | log_debrief | review_week",
+        "action_2_text": "..." or null,
+        "action_2_type": "one of the above" or null
+    }}
+
     --- USER PIPELINE CONTEXT ---
     User Profile: {json.dumps(user_profile)}
     Active Applications: {json.dumps(active_jobs)}
@@ -254,32 +260,35 @@ async def generate_daily_focus(
     Current Date: {today_str}
 
     --- BUSINESS RULE PRIORITY HEURISTICS ---
-    1. Urgent Interview Focus: If interview is in next 2 days, action_1 targets.
+    1. Urgent Interview Focus: If interview is in next 2 days, action_1 targets it.
     2. Stagnant Applications: If open items sat > 14 days, prioritize outreach.
     3. Low Pipeline Volume: If < 3 items are in 'applied' status, add new jobs.
     4. Feedback Loops: If stage moved but no debrief logged, prompt for debrief.
     """
 
-    validated_output: Optional[GeminiDailyFocusOutput] = None
+    validated_output: Optional[DailyFocusOutput] = None
     try:
         raw_text = await asyncio.wait_for(
             asyncio.to_thread(
                 _chat,
                 system=(
-                    "You are a precise JSON career tracking metrics assistant. "
-                    "You must output valid JSON matching the requested keys."
+                    "You are a precise JSON career assistant. "
+                    "Output ONLY valid JSON with no markdown fences, no preamble, nothing else."
                 ),
                 user=prompt,
             ),
-            timeout=4.0,
+            timeout=10.0,  # Increased from 4s — OpenAI is slower than Gemini was
         )
 
-        if raw_text is None:
-            raise ValueError("OpenAI pipeline returned a null response string.")
+        if not raw_text:
+            raise ValueError("OpenAI returned an empty response.")
 
-        parsed_json = json.loads(raw_text.strip())
-        validated_output = GeminiDailyFocusOutput(**parsed_json)
-    except (asyncio.TimeoutError, Exception) as err:
+        # Strip markdown fences in case the model wraps output anyway
+        cleaned = raw_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed_json = json.loads(cleaned)
+        validated_output = DailyFocusOutput(**parsed_json)
+
+    except Exception as err:
         logger.error(f"OpenAI daily focus generation failed: {repr(err)}")
         validated_output = execute_fallback_logic(context)
 
@@ -299,8 +308,7 @@ async def generate_daily_focus(
             "action_2_text": validated_output.action_2_text,
             "action_2_type": (
                 validated_output.action_2_type.value
-                if validated_output.action_2_type
-                and hasattr(validated_output.action_2_type, "value")
+                if validated_output.action_2_type and hasattr(validated_output.action_2_type, "value")
                 else validated_output.action_2_type
             ),
             "action_1_completed": False,
@@ -312,10 +320,10 @@ async def generate_daily_focus(
         db_result = await asyncio.to_thread(
             sb.table("daily_focus").insert(focus_payload).select("*").execute
         )
-
         return db_result.data[0]
+
     except Exception as save_err:
-        logger.error(f"Error saving daily focus mapping record: {str(save_err)}")
+        logger.error(f"Error saving daily focus record: {str(save_err)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to persist generated focus plan record.",
@@ -375,30 +383,23 @@ async def complete_daily_focus(
 
     record = existing_check.data[0]
     record_id = record["id"]
-
     target_field = f"{payload.action_id}_completed"
+
+    # Already completed — just return current streak, no double increment
     if record.get(target_field) is True:
-        streak_res = await asyncio.to_thread(
-            sb.table("streaks")
-            .select("current_streak")
-            .eq("user_id", user_uuid_str)
-            .execute
-        )
-        current_streak = (
-            streak_res.data[0]["current_streak"] if streak_res.data else 0
-        )
-        return DailyFocusCompleteResponse(
-            success=True, current_streak=current_streak, milestone=None
-        )
+        try:
+            streak_res = await asyncio.to_thread(
+                sb.table("streaks").select("current_streak").eq("user_id", user_uuid_str).execute
+            )
+            current_streak = streak_res.data[0]["current_streak"] if streak_res.data else 0
+        except Exception:
+            current_streak = 0
+        return DailyFocusCompleteResponse(success=True, current_streak=current_streak, milestone=None)
 
     try:
-        update_payload = {
-            target_field: True,
-            "updated_at": datetime.now(UTC).isoformat(),
-        }
         await asyncio.to_thread(
             sb.table("daily_focus")
-            .update(update_payload)
+            .update({target_field: True, "updated_at": datetime.now(UTC).isoformat()})
             .eq("id", record_id)
             .execute
         )
@@ -413,7 +414,7 @@ async def complete_daily_focus(
     except Exception as err:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Action finished, but streak update failed: {str(err)}",
+            detail=f"Action completed but streak update failed: {str(err)}",
         )
 
     return DailyFocusCompleteResponse(
