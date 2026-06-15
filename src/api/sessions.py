@@ -1,6 +1,7 @@
 """Session route handlers — thin wrappers around session_service."""
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,6 +12,7 @@ from src.lib.auth_dependencies import get_current_user
 from src.lib.config import get_settings
 from src.lib.elevenlabs_service import ElevenLabsError, prepare_tts_text, stream_phase_audio
 from src.lib.supabase import get_supabase_user_client
+from src.lib.supabase_client import get_supabase_admin_client
 from src.lib.session_service import (
     complete_session,
     fetch_phase_text,
@@ -119,17 +121,36 @@ async def history(
     return await fetch_session_history(user_id)
 
 
+@router.get('/weekly-count')
+async def weekly_session_count(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Return the number of completed meditation sessions this week (Monday to now)."""
+    user_id: str = current_user['id']
+
+    today = datetime.now(timezone.utc)
+    week_start = today - timedelta(days=today.weekday())
+    week_start_str = week_start.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    client = get_supabase_admin_client()
+    result = await asyncio.to_thread(
+        lambda: client.table('ai_sessions')
+        .select('id', count='exact')
+        .eq('user_id', user_id)
+        .not_.is_('completed_at', None)
+        .gte('completed_at', week_start_str)
+        .execute()
+    )
+    return {"sessions_this_week": getattr(result, 'count', 0) or 0}
+
+
 @router.get('/{session_id}/audio/{phase}')
 async def get_phase_audio(
     session_id: str,
     phase: int,
     current_user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
-    """Stream ElevenLabs TTS audio for one phase of a session.
-
-    Eagerly starts the generator before committing to a 200 so ElevenLabs
-    failures return a proper 503 rather than a truncated stream.
-    """
+    """Stream ElevenLabs TTS audio for one phase of a session."""
     if phase < 1 or phase > 5:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
