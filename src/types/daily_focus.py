@@ -16,7 +16,7 @@ class ActionType(str, Enum):
     GENERIC_PIPELINE = "review_week"
 
 
-class GeminiDailyFocusOutput(BaseModel):
+class DailyFocusOutput(BaseModel):
     action_1_text: str = Field(..., min_length=1)
     action_1_type: ActionType
     action_2_text: Optional[str] = None
@@ -26,16 +26,15 @@ class GeminiDailyFocusOutput(BaseModel):
 class DailyFocusResponse(BaseModel):
     id: UUID
     user_id: UUID
-    date: str  # Kept as str to match your API payload routing cleanly
+    date: str
     action_1_text: str
     action_1_type: ActionType
     action_2_text: Optional[str] = None
     action_2_type: Optional[ActionType] = None
-    generated_at: str
+    created_at: str  # Fixed: was generated_at which didn't match the DB column
     updated_at: str
-
     model_config = ConfigDict(from_attributes=True)
 
 
 DailyFocusResponse.model_rebuild()
-GeminiDailyFocusOutput.model_rebuild()
+DailyFocusOutput.model_rebuild()
