@@ -54,18 +54,28 @@ async def get_progress(
     user_uuid_str = str(current_user_id)
     now = datetime.now(UTC)
 
-    # --- STEP 1: Fetch Streak Data Safely ---
+   # --- STEP 1: Fetch Streak Data Safely ---
     day_streak = 0
     try:
         streak_res = await asyncio.to_thread(
             lambda: sb.table("streaks")
-            .select("current_streak")
+            .select("current_streak, last_active")
             .eq("user_id", user_uuid_str)
-            .maybe_single()
             .execute()
         )
         if streak_res and streak_res.data:
-            day_streak = streak_res.data.get("current_streak", 0)
+            record = streak_res.data[0]
+            db_current_streak = record.get("current_streak", 0)
+            last_active_str = record.get("last_active")
+    
+            day_streak = db_current_streak
+            if last_active_str:
+                today = datetime.now(UTC).date()
+                yesterday = today - timedelta(days=1)
+                last_active = datetime.fromisoformat(last_active_str).date()
+    
+                if last_active != today and last_active != yesterday:
+                    day_streak = 0
     except Exception as streak_err:
         logger.warning(f"Failed to fetch streaks (defaulting to 0): {str(streak_err)}")
         day_streak = 0
