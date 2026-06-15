@@ -157,7 +157,14 @@ async def login_with_email_password(email: str, password: str) -> dict[str, Any]
 
 
 async def login_with_google_id_token(id_token: str) -> dict[str, Any]:
-    """Authenticate a Google ID token with Supabase and normalize the session payload."""
+    """Authenticate a Google ID token with Supabase and normalize the session payload.
+
+    On a user's first Google sign-in, no row exists yet in the `users` profile
+    table (unlike email/password signup, which creates one immediately). We
+    detect that case here, create the profile row the same way signup does,
+    and flag the result as `is_new_user` so the caller can route the person
+    through onboarding.
+    """
 
     client = get_supabase_client()
 
@@ -171,7 +178,41 @@ async def login_with_google_id_token(id_token: str) -> dict[str, Any]:
         raise UpstreamAuthServiceError("Google authentication failed") from exc
 
     _validate_login_response(response, "google_oauth")
-    return _build_auth_payload(response)
+
+    user = getattr(response, "user", None)
+    is_new_user = False
+
+    if user is not None:
+        admin_client = get_supabase_admin_client()
+        if admin_client:
+            try:
+                existing = await asyncio.to_thread(
+                    lambda: admin_client.table("users")
+                    .select("id")
+                    .eq("id", str(user.id))
+                    .execute()
+                )
+                if not existing.data:
+                    is_new_user = True
+                    await asyncio.to_thread(
+                        lambda: admin_client.table("users").upsert({
+                            "id": str(user.id),
+                            "goal": "",
+                            "stage": "exploring",
+                            "anxiety_level": 5,
+                        }).execute()
+                    )
+                    logger.info("Created profile for Google user_id=%s", user.id)
+            except Exception:
+                logger.warning(
+                    "Failed to check/create profile for Google user_id=%s — "
+                    "onboarding status may be incorrect",
+                    user.id,
+                )
+
+    payload = _build_auth_payload(response)
+    payload["is_new_user"] = is_new_user
+    return payload
 
 
 async def signup_with_email_password(
